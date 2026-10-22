@@ -1,5 +1,5 @@
 local name, Addon = ...
-Addon.version = "0.1.0-alpha.3"
+Addon.version = "0.1.0-alpha.4"
 
 local driver = CreateFrame("Frame")
 local ready, queued, lastMode
@@ -55,6 +55,7 @@ local function Initialize()
     ready = true
     Addon.HUD:Observe()
     Addon.Layout:Observe()
+    Addon.MenuHints:Observe()
     local native = GamepadMainActionBarFrame
     if native then
         native:HookScript("OnShow", function() Addon:QueueRefresh() end)
@@ -71,7 +72,10 @@ local function Initialize()
         end
     end
     if InputDeviceIconSetManager and InputDeviceIconSetManager.UpdateActiveInputDeviceIconSet then
-        hooksecurefunc(InputDeviceIconSetManager, "UpdateActiveInputDeviceIconSet", function() Addon:QueueRefresh() end)
+        hooksecurefunc(InputDeviceIconSetManager, "UpdateActiveInputDeviceIconSet", function()
+            Addon:QueueRefresh()
+            Addon.MenuHints:Refresh()
+        end)
     end
     Addon:QueueRefresh(true)
 end
@@ -92,6 +96,8 @@ driver:SetScript("OnEvent", function(_, event)
         Addon.Layout.dirty = true
     end
     if event == "PLAYER_LOGIN" then Initialize() else Addon:QueueRefresh(true) end
+    if ready and (event == "UPDATE_BINDINGS" or event == "GAME_PAD_ACTIVE_CHANGED"
+        or event == "INPUT_DEVICE_INTERFACE_TRANSITION") then Addon.MenuHints:Refresh() end
 end)
 
 SLASH_CLASSICGAMEPAD1 = "/classicgamepad"
@@ -113,4 +119,5 @@ SlashCmdList.CLASSICGAMEPAD = function(input)
         return
     end
     Addon:QueueRefresh(true)
+    Addon.MenuHints:Refresh()
 end

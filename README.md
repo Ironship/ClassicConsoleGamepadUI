@@ -1,7 +1,7 @@
 # ClassicGamepad
 
 ClassicGamepad brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.3**, interface **16001**.
+Version **0.1.0-alpha.4**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -12,6 +12,9 @@ alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse
   Slot backgrounds, borders, masks, end caps and page arrows are copied directly from
   the client's keyboard/mouse UI, with their actual dimensions and positions.
 - The real Blizzard micro menu, bags and full-width experience/reputation bars.
+- Micro-menu tooltips include controller glyphs: the current direct binding, or the
+  native radial-menu route (menu button, page shoulder button if needed, and right-stick
+  direction). Panels without either route are shown as unbound. Existing keyboard hints remain.
 - Native no-trigger, LT, RT and LT+RT actions fill those slots; the active layer's
   slots light up with the stock button highlight. Four remaining slots show the
   native class actions and shoulder indicators.

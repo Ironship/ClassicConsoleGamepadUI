@@ -37,6 +37,14 @@ matching the exported source commit's build **1.60.1 (70450)**.
   buttons follow the same native storage validation as standard actions.
 - `Blizzard_SharedXML/Shared/InputIcons/InputIconTexture.lua`: controller glyphs
   live in the native prompt's Normal/Pressed/Active/Hover/Disabled textures.
+- `Blizzard_MicroMenu/Mainline/MainMenuBarMicroButtons.lua`: add controller hints
+  after native tooltip construction without overwriting the button's tooltip text.
+  Read the button's `commandName` and current gamepad bindings first. For panels without
+  a direct shortcut, read `GamepadRadial.mainMenuPages` and `segmentOptions`, matching
+  each handler's native micro button. The radial opens on page 2, shoulder buttons
+  change pages, and the right stick selects a segment counter-clockwise from east;
+  returning the stick to center activates it. Glyphs come from the active input icon
+  set. No input bindings or radial handler tables are changed.
 - `Blizzard_APIDocumentationGenerated/ActionBarFrameDocumentation.lua`:
   `C_ActionBar.GetActionCooldownDuration` returns a duration object. Forward it to
   the display's own cooldown widget without inspecting or computing its contents.
