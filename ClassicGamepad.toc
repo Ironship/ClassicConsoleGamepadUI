@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: ClassicGamepad
+## Notes: Familiar classic HUD with Forever's native gamepad controls.
+## Author: Oleg
+## Version: 0.1.0-alpha.1
+## Dependencies: Blizzard_GamepadActionBars
+## OptionalDeps: Blizzard_EditMode, Blizzard_UnitFrame
+## SavedVariables: ClassicGamepadDB
+
+Display.lua
+HUD.lua
+Core.lua
