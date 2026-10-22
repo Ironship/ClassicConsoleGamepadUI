@@ -6,6 +6,13 @@ local function Readable(value)
     return not issecretvalue or not issecretvalue(value)
 end
 
+local function AllReadable(...)
+    for i = 1, select("#", ...) do
+        if not Readable(select(i, ...)) then return false end
+    end
+    return true
+end
+
 local function Texture(parent, layer, path)
     local texture = parent:CreateTexture(nil, layer)
     if path then texture:SetTexture(path) end
@@ -243,7 +250,7 @@ function Display:ReceiveSlot(slot)
     Addon:QueueRefresh()
 end
 
-function Display:HookSource(source)
+function Display:HookSource(source, bar)
     if self.hooked[source] then return end
     self.hooked[source] = true
     local cooldown = source.cooldown or source.Cooldown
@@ -251,9 +258,16 @@ function Display:HookSource(source)
         for _, method in ipairs({ "SetCooldown", "SetCooldownFromDurationObject", "SetCooldownFromExpirationTime", "Clear" }) do
             if cooldown[method] then
                 hooksecurefunc(cooldown, method, function(_, ...)
-                    -- Forward seconds/duration objects unchanged; cooldowns may be secret.
                     local slot = self.slotBySource and self.slotBySource[source]
-                    if slot then slot.Cooldown[method](slot.Cooldown, ...) end
+                    if not slot then return end
+                    -- Secret times cannot cross into addon execution through
+                    -- SetCooldown/SetCooldownFromExpirationTime. Re-read the
+                    -- cooldown through the duration object API instead.
+                    if not AllReadable(...) then
+                        self:MirrorCooldown(slot, source, bar)
+                        return
+                    end
+                    slot.Cooldown[method](slot.Cooldown, ...)
                 end)
             end
         end
@@ -277,15 +291,24 @@ function Display:HookSource(source)
     end
 end
 
-function Display:BootstrapCooldown(slot, source, bar)
-    local action = source:GetID()
+function Display:MirrorCooldown(slot, source, bar)
+    local action = source.GetID and source:GetID()
     if not Readable(action) or type(action) ~= "number" or action <= 0 then
         slot.Cooldown:Clear()
     elseif bar and bar.isGamepadPossessBar then
-        local start, duration = GetPetActionCooldown(source:GetID())
-        slot.Cooldown:SetCooldown(start, duration)
+        local start, duration = GetPetActionCooldown(action)
+        if Readable(start) and Readable(duration) then
+            slot.Cooldown:SetCooldown(start, duration)
+        else
+            slot.Cooldown:Clear()
+        end
     elseif C_ActionBar and C_ActionBar.GetActionCooldownDuration then
-        slot.Cooldown:SetCooldownFromDurationObject(C_ActionBar.GetActionCooldownDuration(action))
+        local durationObject = C_ActionBar.GetActionCooldownDuration(action)
+        if durationObject then
+            slot.Cooldown:SetCooldownFromDurationObject(durationObject)
+        else
+            slot.Cooldown:Clear()
+        end
     else
         slot.Cooldown:Clear()
     end
@@ -309,8 +332,8 @@ function Display:UpdateSlot(slot, source, bar, active)
     local action = source.GetID and source:GetID()
     if slot.source ~= source or (Readable(action) and slot.action ~= action) then
         slot.source, slot.action = source, Readable(action) and action or nil
-        self:HookSource(source)
-        self:BootstrapCooldown(slot, source, bar)
+        self:HookSource(source, bar)
+        self:MirrorCooldown(slot, source, bar)
     end
     self.slotBySource[source] = slot
     local icon = source.icon or source.Icon
