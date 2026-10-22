@@ -2,11 +2,6 @@ local _, Addon = ...
 local Display = {}
 Addon.Display = Display
 
-local SIZE, GAP, GROUP_GAP = 42, 3, 20
-local GROUP_WIDTH = 8 * (SIZE + GAP) - GAP
-local WIDTH = GROUP_WIDTH * 2 + GROUP_GAP
-local HEIGHT = 152
-
 local function Readable(value)
     return not issecretvalue or not issecretvalue(value)
 end
@@ -24,11 +19,12 @@ local function CopyTexture(target, source)
         target:SetAtlas(atlas)
     else
         target:SetTexture(source:GetTexture())
-        target:SetTexCoord(source:GetTexCoord())
     end
-    target:SetVertexColor(source:GetVertexColor())
+    target:SetTexCoord(source:GetTexCoord())
+    if target.SetVertexColor and source.GetVertexColor then target:SetVertexColor(source:GetVertexColor()) end
     target:SetAlpha(source:GetAlpha())
-    if source.GetDesaturation then target:SetDesaturation(source:GetDesaturation()) end
+    if target.SetBlendMode and source.GetBlendMode then target:SetBlendMode(source:GetBlendMode()) end
+    if target.SetDesaturation and source.GetDesaturation then target:SetDesaturation(source:GetDesaturation()) end
     target:Show()
 end
 
@@ -42,27 +38,32 @@ local function CopyGlyph(target, prompt)
     CopyTexture(target, source)
 end
 
-local function Edge(parent, r, g, b)
-    local edge = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    edge:SetPoint("TOPLEFT", -2, 2)
-    edge:SetPoint("BOTTOMRIGHT", 2, -2)
-    edge:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12 })
-    edge:SetBackdropBorderColor(r, g, b, 1)
-    return edge
+local function StockTexture(parent, source, owner, layer)
+    local texture = Texture(parent, layer or "ARTWORK")
+    CopyTexture(texture, source)
+    Addon.Layout:Place(texture, source, owner, owner)
+    return texture
 end
 
-local function CreateSlot(parent, x, y)
+local function CreateSlot(parent, template)
     -- These are display frames, never substitute action buttons or binding owners.
     local slot = CreateFrame("Frame", nil, parent)
-    slot:SetSize(SIZE, SIZE)
-    slot:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x, y)
-    slot.Icon = Texture(slot, "BACKGROUND", "Interface\\Buttons\\UI-Quickslot")
-    slot.Icon:SetPoint("TOPLEFT", 3, -3)
-    slot.Icon:SetPoint("BOTTOMRIGHT", -3, 3)
-    slot.Border = Texture(slot, "OVERLAY", "Interface\\Buttons\\UI-Quickslot2")
-    slot.Border:SetAllPoints()
+    slot.template = template
+    Addon.Layout:Place(slot, template)
+    slot.Background = StockTexture(slot, template.SlotBackground, template, "BACKGROUND")
+    slot.SlotArt = StockTexture(slot, template.SlotArt, template, "BACKGROUND")
+    slot.Background:SetShown(template.SlotBackground and template.SlotBackground:IsShown() or false)
+    slot.SlotArt:SetShown(template.SlotArt and template.SlotArt:IsShown() or false)
+    slot.Icon = StockTexture(slot, template.icon, template, "ARTWORK")
+    slot.Border = StockTexture(slot, template:GetNormalTexture(), template, "OVERLAY")
+    if template.IconMask then
+        slot.Mask = slot:CreateMaskTexture(nil, "ARTWORK")
+        CopyTexture(slot.Mask, template.IconMask)
+        Addon.Layout:Place(slot.Mask, template.IconMask, template, template)
+        slot.Icon:AddMaskTexture(slot.Mask)
+    end
     slot.Cooldown = CreateFrame("Cooldown", nil, slot, "CooldownFrameTemplate")
-    slot.Cooldown:SetAllPoints(slot.Icon)
+    Addon.Layout:Place(slot.Cooldown, template.cooldown, template, template)
     slot.Cooldown:SetDrawEdge(false)
     slot.Cooldown:SetHideCountdownNumbers(false)
     slot.Cooldown:SetFrameLevel(slot:GetFrameLevel() + 1)
@@ -71,80 +72,92 @@ local function CreateSlot(parent, x, y)
     labels:SetFrameLevel(slot:GetFrameLevel() + 3)
     slot.Labels = labels
     slot.Prompt = Texture(labels, "OVERLAY")
-    slot.Prompt:SetSize(18, 18)
-    slot.Prompt:SetPoint("TOPRIGHT", 2, 3)
+    slot.Prompt:SetSize(28, 28)
+    slot.Prompt:SetPoint("TOPRIGHT", 4, 4)
     slot.Modifiers = {}
     for i = 1, 2 do
         local glyph = Texture(labels, "OVERLAY")
-        glyph:SetSize(13, 13)
-        glyph:SetPoint("TOPLEFT", (i - 1) * 12 - 1, 1)
+        glyph:SetSize(20, 20)
+        glyph:SetPoint("TOPLEFT", (i - 1) * 13 - 4, 3)
         slot.Modifiers[i] = glyph
     end
-    slot.Count = labels:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
-    slot.Count:SetPoint("BOTTOMRIGHT", -3, 3)
-    slot.Checked = Texture(labels, "ARTWORK", "Interface\\Buttons\\CheckButtonHilight")
-    slot.Checked:SetAllPoints()
-    slot.Checked:SetBlendMode("ADD")
-    slot.Pushed = Texture(labels, "ARTWORK", "Interface\\Buttons\\UI-Quickslot-Depress")
-    slot.Pushed:SetAllPoints()
-    slot.Glow = Edge(labels, 1, 0.78, 0.2)
+    slot.Count = labels:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    if template.Count then slot.Count:SetFont(template.Count:GetFont()) end
+    slot.Count:SetPoint("BOTTOMRIGHT", -5, 5)
+    slot.Checked = StockTexture(labels, template:GetCheckedTexture(), template)
+    slot.Pushed = StockTexture(labels, template:GetPushedTexture(), template)
+    slot.Glow = StockTexture(labels, template.SpellHighlightTexture or template:GetHighlightTexture(), template, "OVERLAY")
+    slot.Glow:SetVertexColor(1, 0.8, 0.25)
     slot.Glow:Hide()
     return slot
 end
 
 function Display:Create()
     if self.root then return end
-    local root = CreateFrame("Frame", "ClassicGamepadBar", UIParent, "BackdropTemplate")
-    root:SetSize(WIDTH + 28, HEIGHT)
-    root:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 28)
+    local root = CreateFrame("Frame", "ClassicGamepadBar", UIParent)
+    root:SetAllPoints(UIParent)
     root:SetFrameStrata("LOW")
-    root:SetFrameLevel(55)
-    root:SetClampedToScreen(true)
-    root:SetBackdrop({
-        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 20,
-        insets = { left = 6, right = 6, top = 6, bottom = 6 },
-    })
-    root:SetBackdropColor(0.10, 0.075, 0.045, 0.96)
-    local left = Texture(root, "OVERLAY")
-    left:SetAtlas("ui-hud-actionbar-gryphon-left")
-    left:SetSize(154, 95)
-    left:SetPoint("BOTTOMRIGHT", root, "BOTTOMLEFT", 30, -10)
-    local right = Texture(root, "OVERLAY")
-    right:SetAtlas("ui-hud-actionbar-gryphon-right")
-    right:SetSize(154, 95)
-    right:SetPoint("BOTTOMLEFT", root, "BOTTOMRIGHT", -30, -10)
-    self.root, self.groups, self.hooked, self.pressed = root, {}, {}, {}
-    -- No trigger / LT below, RT / LT+RT above: two familiar horizontal bars.
-    for i = 1, 4 do
-        local group = CreateFrame("Frame", nil, root)
-        group:SetSize(GROUP_WIDTH, SIZE)
-        group:SetPoint("BOTTOMLEFT", 14 + ((i - 1) % 2) * (GROUP_WIDTH + GROUP_GAP),
-            i <= 2 and 25 or 91)
-        group.Title = group:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        group.Title:SetPoint("BOTTOMLEFT", group, "TOPLEFT", 2, 3)
-        group.Title:SetText(({ GAMEPAD_LABEL or "Gamepad", "LT", "RT", "LT + RT" })[i])
-        group.Active = Edge(group, 1, 0.72, 0.15)
-        group.Active:Hide()
-        group.slots = {}
-        for j = 1, 8 do group.slots[j] = CreateSlot(group, (j - 1) * (SIZE + GAP), 0) end
-        self.groups[i] = group
+    root:SetFrameLevel(MainActionBar:GetFrameLevel())
+    self.root, self.slots, self.hooked, self.pressed = root, {}, {}, {}
+    for _, button in ipairs(Addon.Layout:GetButtons()) do
+        self.slots[#self.slots + 1] = CreateSlot(root, button)
     end
-    self.pageLabel = root:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    self.pageLabel:SetPoint("BOTTOM", 0, 8)
-    self.shoulders = {}
-    for i = 1, 2 do
-        local glyph = Texture(root, "OVERLAY")
-        glyph:SetSize(24, 24)
-        glyph:SetPoint("BOTTOM", i == 1 and -84 or 84, 2)
-        self.shoulders[i] = glyph
+    self.art = {}
+    local caps = MainActionBar.EndCaps
+    for _, source in ipairs({ MainActionBar.BorderArt, caps.LeftEndCap.Texture, caps.RightEndCap.Texture }) do
+        local holder = CreateFrame("Frame", nil, root)
+        holder:SetAllPoints(root)
+        holder:SetFrameLevel(source:GetParent():GetFrameLevel())
+        self.art[#self.art + 1] = { source = source, texture = StockTexture(holder, source, nil, "BACKGROUND") }
     end
-    self.extra = {}
-    for i = 1, 2 do
-        self.extra[i] = CreateSlot(root, i == 1 and -56 or WIDTH + 42, 50)
-        self.extra[i]:Hide()
+    local page = MainActionBar.ActionBarPageNumber
+    local pageHolder = CreateFrame("Frame", nil, root)
+    pageHolder:SetAllPoints(root)
+    pageHolder:SetFrameLevel(page:GetFrameLevel())
+    self.pageLabel = pageHolder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    self.pageLabel:SetFont(page.Text:GetFont())
+    self.pageLabel:SetTextColor(page.Text:GetTextColor())
+    self.pageSource = page.Text
+    for _, button in ipairs({ page.UpButton, page.DownButton }) do
+        self.art[#self.art + 1] = { source = button:GetNormalTexture(),
+            texture = StockTexture(pageHolder, button:GetNormalTexture(), nil) }
     end
     root:Hide()
+end
+
+function Display:RefreshGeometry()
+    if self.layoutRevision == Addon.Layout.revision then return true end
+    for _, slot in ipairs(self.slots) do
+        local template = slot.template
+        if not Addon.Layout:Place(slot, template) then return false end
+        for _, entry in ipairs({
+            { slot.Background, template.SlotBackground }, { slot.SlotArt, template.SlotArt },
+            { slot.Border, template:GetNormalTexture() }, { slot.Checked, template:GetCheckedTexture() },
+            { slot.Pushed, template:GetPushedTexture() },
+            { slot.Glow, template.SpellHighlightTexture or template:GetHighlightTexture() },
+        }) do
+            CopyTexture(entry[1], entry[2])
+            Addon.Layout:Place(entry[1], entry[2], template, template)
+        end
+        slot.Background:SetShown(template.SlotBackground and template.SlotBackground:IsShown() or false)
+        slot.SlotArt:SetShown(template.SlotArt and template.SlotArt:IsShown() or false)
+        Addon.Layout:Place(slot.Icon, template.icon, template, template)
+        Addon.Layout:Place(slot.Cooldown, template.cooldown, template, template)
+        if slot.Mask then
+            CopyTexture(slot.Mask, template.IconMask)
+            Addon.Layout:Place(slot.Mask, template.IconMask, template, template)
+        end
+        if template.Count then slot.Count:SetFont(template.Count:GetFont()) end
+        slot.Glow:SetVertexColor(1, 0.8, 0.25)
+    end
+    for _, entry in ipairs(self.art) do
+        CopyTexture(entry.texture, entry.source)
+        if not Addon.Layout:Place(entry.texture, entry.source) then return false end
+    end
+    Addon.Layout:Place(self.pageLabel, self.pageSource, nil, MainActionBar.ActionBarPageNumber)
+    self.pageLabel:SetFont(self.pageSource:GetFont())
+    self.layoutRevision = Addon.Layout.revision
+    return true
 end
 
 function Display:GetBars()
@@ -231,8 +244,20 @@ function Display:BootstrapCooldown(slot, source, bar)
 end
 
 function Display:UpdateSlot(slot, source, bar, active)
-    if not source then slot:Hide(); return end
     slot:Show()
+    if not source then
+        slot.source, slot.action = nil, nil
+        slot.Icon:Hide()
+        slot.Count:SetText("")
+        slot.Prompt:Hide()
+        slot.Checked:Hide()
+        slot.Pushed:Hide()
+        slot.Glow:Hide()
+        slot.Cooldown:Clear()
+        if slot.Overlay then slot.Overlay:Hide() end
+        for _, glyph in ipairs(slot.Modifiers) do glyph:Hide() end
+        return
+    end
     local action = source.GetID and source:GetID()
     if slot.source ~= source or (Readable(action) and slot.action ~= action) then
         slot.source, slot.action = source, Readable(action) and action or nil
@@ -261,7 +286,7 @@ function Display:UpdateSlot(slot, source, bar, active)
     elseif slot.Overlay then slot.Overlay:Hide() end
 end
 
-function Display:Update(unit, bars)
+function Display:Update(unit)
     self.slotBySource = {}
     local base = unit.actionBars
     local page = unit:GetCurrentPage()
@@ -280,32 +305,34 @@ function Display:Update(unit, bars)
         if bar and bar:IsShown() then selected[1] = bar end
     end
     local activeBar = unit:GetActiveBar()
-    for i, group in ipairs(self.groups) do
+    for i = 1, 4 do
         local bar = selected[i]
         local active = bar ~= nil and bar == activeBar
         -- Target/shortcut bars temporarily replace the no-trigger bar.
         if i == 1 and bar ~= base.topBar and bar ~= base.possessBar and bar ~= base.stanceBar then active = true end
         if not bar or (bar.IsActionBarUsable and not bar:IsActionBarUsable()) then active = false end
-        group.Active:SetShown(active)
-        group.Title:SetTextColor(active and 1 or 0.7, active and 0.82 or 0.65, active and 0.3 or 0.52)
-        for j, slot in ipairs(group.slots) do
-            -- Show all four layers even when native Compact Mode hides the inactive ones.
+        for j = 1, 8 do
+            local slot = self.slots[(i - 1) * 8 + j]
             self:UpdateSlot(slot, bar and bar.actionButtons[j], bar, active)
             CopyGlyph(slot.Modifiers[1], (i == 2 or i == 4) and unit.LeftIcon or (i == 3 and unit.RightIcon or nil))
             CopyGlyph(slot.Modifiers[2], i == 4 and unit.RightIcon or nil)
         end
     end
-    self.pageLabel:SetText((PAGE or "Page") .. " " .. page)
-    CopyTexture(self.shoulders[1], unit.LeftShoulderIcon)
-    CopyTexture(self.shoulders[2], unit.RightShoulderIcon)
+    self.pageLabel:SetText(page)
     for i, key in ipairs({ "LeftClassAction", "RightClassAction" }) do
         local source = unit[key]
-        self:UpdateSlot(self.extra[i], source and source:IsShown() and source or nil, nil, false)
+        local slot = self.slots[32 + i]
+        self:UpdateSlot(slot, source and source:IsShown() and source or nil, nil, false)
         local prompt = i == 1 and unit.LeftInputPrompt or unit.RightInputPrompt
         local icons = prompt and prompt.InputIcons
-        CopyGlyph(self.extra[i].Modifiers[1], icons and icons[1])
-        CopyGlyph(self.extra[i].Prompt, icons and icons[2])
-        self.extra[i].Modifiers[2]:Hide()
+        CopyGlyph(slot.Modifiers[1], icons and icons[1])
+        CopyGlyph(slot.Prompt, icons and icons[2])
+        slot.Modifiers[2]:Hide()
+    end
+    for i, key in ipairs({ "LeftShoulderIcon", "RightShoulderIcon" }) do
+        local slot = self.slots[34 + i]
+        self:UpdateSlot(slot, nil)
+        CopyTexture(slot.Icon, unit[key])
     end
 end
 
@@ -352,9 +379,10 @@ function Display:Refresh(wanted)
     end
     -- Initial setup waits for combat to end; no protected frame is moved or rebound.
     if InCombatLockdown() and not self.native and not self.mouseState then return false end
+    if not Addon.Layout:Prepare() then return false end
     self:Create()
-    self.root:SetScale(math.min(Addon.db.scale, (UIParent:GetWidth() - 32) / (WIDTH + 250)))
-    self:Update(unit, bars)
+    if not self:RefreshGeometry() then self:RestoreNative(); return false end
+    self:Update(unit)
     self:SuppressNative(native)
     self.root:Show()
     return true

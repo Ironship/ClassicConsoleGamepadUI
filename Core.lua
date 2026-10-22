@@ -1,5 +1,5 @@
 local name, Addon = ...
-Addon.version = "0.1.0-alpha.1"
+Addon.version = "0.1.0-alpha.2"
 
 local driver = CreateFrame("Frame")
 local ready, queued, lastMode
@@ -24,9 +24,11 @@ function Addon:Refresh()
     local changed = lastMode ~= nil and lastMode ~= gamepad
     lastMode = gamepad
     local wanted = gamepad and self.db.enabled and not self.nativeView and not self.conflict
-    self.classicVisible = self.Display:Refresh(wanted)
+    if changed then self.Layout:Restore(true) end
     self.HUD:Refresh(wanted and not self.Display:IsEditing(), changed)
-    if not gamepad then self.HUD:CaptureKeyboardLayout() end
+    self.classicVisible = self.Display:Refresh(wanted)
+    if not self.classicVisible then self.Layout:Restore(false) end
+    if not gamepad then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
     -- Keep observing while flyouts/cursor/editor temporarily expose the native HUD.
     driver:SetScript("OnUpdate", wanted and Poll or nil)
 end
@@ -42,9 +44,8 @@ local function Initialize()
     ClassicGamepadDB = type(ClassicGamepadDB) == "table" and ClassicGamepadDB or {}
     Addon.db = ClassicGamepadDB
     if type(Addon.db.enabled) ~= "boolean" then Addon.db.enabled = true end
-    local scale = tonumber(Addon.db.scale)
-    Addon.db.scale = scale and math.max(0.5, math.min(1.5, scale)) or 1
     if type(Addon.db.keyboardHUD) ~= "table" then Addon.db.keyboardHUD = {} end
+    if type(Addon.db.keyboardBars) ~= "table" then Addon.db.keyboardBars = {} end
     for _, other in ipairs({ "ControllerForever", "ConsolePort" }) do
         if C_AddOns.IsAddOnLoaded(other) then
             Addon.conflict = other
@@ -53,6 +54,7 @@ local function Initialize()
     end
     ready = true
     Addon.HUD:Observe()
+    Addon.Layout:Observe()
     local native = GamepadMainActionBarFrame
     if native then
         native:HookScript("OnShow", function() Addon:QueueRefresh() end)
@@ -83,7 +85,12 @@ driver:RegisterEvent("GAME_PAD_ACTIVE_CHANGED")
 driver:RegisterEvent("CURSOR_CHANGED")
 driver:RegisterEvent("DISPLAY_SIZE_CHANGED")
 driver:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+driver:RegisterEvent("NEUTRAL_FACTION_SELECT_RESULT")
 driver:SetScript("OnEvent", function(_, event)
+    if event == "DISPLAY_SIZE_CHANGED" or event == "EDIT_MODE_LAYOUTS_UPDATED"
+        or event == "NEUTRAL_FACTION_SELECT_RESULT" or event == "PLAYER_REGEN_ENABLED" then
+        Addon.Layout.dirty = true
+    end
     if event == "PLAYER_LOGIN" then Initialize() else Addon:QueueRefresh(true) end
 end)
 
@@ -91,19 +98,18 @@ SLASH_CLASSICGAMEPAD1 = "/classicgamepad"
 SLASH_CLASSICGAMEPAD2 = "/cgp"
 SlashCmdList.CLASSICGAMEPAD = function(input)
     if not ready then return end
-    local command, arg = input:lower():match("^%s*(%S*)%s*(.-)%s*$")
+    local command = input:lower():match("^%s*(%S*)")
     if command == "on" or command == "off" then
         Addon.db.enabled = command == "on"
     elseif command == "native" or command == "classic" then
         Addon.nativeView = command == "native"
     elseif command == "scale" then
-        local scale = tonumber(arg)
-        if not scale or scale < 0.5 or scale > 1.5 then Addon:Print("/cgp scale 0.5-1.5"); return end
-        Addon.db.scale = scale
+        Addon:Print("Use the game's UI scale and Edit Mode; ClassicGamepad follows the original frames.")
+        return
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp on | off | native | classic | scale 0.5-1.5")
+        Addon:Print("/cgp on | off | native | classic")
         return
     end
     Addon:QueueRefresh(true)

@@ -7,8 +7,12 @@ local function Snapshot(frame, named)
     for i = 1, frame:GetNumPoints() do
         local point, relative, relativePoint, x, y = frame:GetPoint(i)
         if named then
-            relative = relative and relative:GetName() or "UIParent"
-            if not relative then return end
+            if relative then
+                relative = relative:GetName()
+                if not relative then return end
+            else
+                relative = "UIParent"
+            end
         end
         points[#points + 1] = { point, relative, relativePoint, x, y }
     end
@@ -20,11 +24,11 @@ local function Apply(frame, layout)
     for _, point in ipairs(layout.points) do
         if type(point[2]) == "string" and not _G[point[2]] then return end
     end
-    frame:ClearAllPoints()
+    (frame.ClearAllPointsBase or frame.ClearAllPoints)(frame)
     for _, point in ipairs(layout.points) do
-        frame:SetPoint(point[1], type(point[2]) == "string" and _G[point[2]] or point[2], point[3], point[4], point[5])
+        (frame.SetPointBase or frame.SetPoint)(frame, point[1], type(point[2]) == "string" and _G[point[2]] or point[2], point[3], point[4], point[5])
     end
-    frame:SetScale(layout.scale or 1)
+    (frame.SetScaleBase or frame.SetScale)(frame, layout.scale or 1)
 end
 
 function HUD:GetFrames()

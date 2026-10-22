@@ -33,7 +33,27 @@ matching the exported source commit's build **1.60.1 (70450)**.
   arguments (including opaque values) are forwarded unchanged to the visible widget.
   No shared native callback table is modified.
 - `Blizzard_EditMode/Mainline/EditModePresetLayouts.lua`: the classic unit-frame
-  anchors supply a fallback before a keyboard/mouse layout has been captured.
+  and bar anchors supply a fallback before a keyboard/mouse layout has been captured.
+- `Blizzard_ActionBar/Mainline/ActionButtonTemplate.xml` and
+  `Blizzard_ActionBar/Mainline/ActionButtonOverrides.lua`: stock button regions
+  provide the slot artwork, normal/pushed/checked/highlight textures and icon mask.
+  ClassicGamepad copies those live regions and their rectangles rather than selecting
+  replacement assets. Display geometry is converted to UIParent coordinates without
+  anchoring mirror frames to protected buttons.
+- `Blizzard_ActionBar/Camelot/MainMenuBarEndCaps.xml` and
+  `Blizzard_ActionBar/Mainline/MainActionBar.xml`: copy the actual end-cap textures,
+  bar artwork, page font and arrows, including their native dimensions and positions.
+- `Blizzard_EditMode/Camelot/EditModeUtil.lua` and
+  `Blizzard_EditMode/Camelot/EditModePresetLayoutConstants.lua`: Gamepad Mode skips
+  the keyboard bottom-bar stack. Outside combat, restore its native anchors using
+  captured keyboard positions or the client's preset. The 36 original slot rectangles
+  hold 32 controller actions, two class actions and two shoulder indicators.
+- `Blizzard_StatusTrackingBar/Camelot/StatusTrackingBarConstants.lua`: restore the
+  real status containers to their stock 1192-point width and 20 segments above the
+  main bar. Native mode restores the previous width and gamepad segment count.
+- `Blizzard_EditMode/Shared/EditModeSystemTemplates.lua`: use original C geometry
+  setters (`SetPointBase`, `ClearAllPointsBase`, `SetScaleBase`) where supplied, avoiding
+  Edit Mode's Lua snapping wrappers and writes into its saved layout state.
 
 Native action HUD changes: temporarily set its root alpha to zero and disable
 invisible mouse hitboxes outside combat, recording click/motion flags separately.
@@ -42,8 +62,8 @@ mirror is intentionally not an extra set of spell-casting buttons.
 
 All addon state is stored in its private table or `ClassicGamepadDB`. Native page
 callback lists, frame methods and keybindings are never replaced or extended directly.
-Protected unit-frame geometry is changed outside combat and restored without writing
-the game's saved Edit Mode layouts. Returning to keyboard/mouse mode must never
+Protected unit-frame and keyboard-bar geometry is changed outside combat and restored
+without writing the game's saved Edit Mode layouts. Returning to keyboard/mouse mode must never
 restore a snapshot of the old gamepad layout over the newly applied keyboard layout.
 
 The single active-mode observer polls at 10 Hz, with event/post-hook refreshes coalesced

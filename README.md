@@ -1,20 +1,29 @@
 # ClassicGamepad
 
 ClassicGamepad brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.1**, interface **16001**.
+Version **0.1.0-alpha.2**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
 
 ## What it does
 
-- Two horizontal action rows, classic square frames and Blizzard's gryphon artwork.
-- Four visible groups: no trigger, LT, RT, and LT+RT. The active native layer gets a gold outline.
+- The stock 12-slot main bar and two 12-slot bottom multibars in their original positions.
+  Slot backgrounds, borders, masks, end caps and page arrows are copied directly from
+  the client's keyboard/mouse UI, with their actual dimensions and positions.
+- The real Blizzard micro menu, bags and full-width experience/reputation bars.
+- Native no-trigger, LT, RT and LT+RT actions fill those slots; the active layer's
+  slots light up with the stock button highlight. Four remaining slots show the
+  native class actions and shoulder indicators.
 - Controller glyphs copied from the native prompts, including the modifier glyphs on each slot.
 - Native action icons, counts, cooldowns, range/usability colors and press feedback.
 - Native pages, stance/form overrides, pet actions and contextual targeting/shortcut actions.
 - Player, target and focus frames use the last keyboard/mouse positions captured by the addon.
   On a first login directly into Gamepad Mode, it uses Blizzard's classic preset positions instead.
+
+Alpha.2 replaces alpha.1's custom panel, hand-picked artwork and four-group layout.
+The action order follows the controller layers rather than the keyboard's spell assignments.
+UI scale and captured bar scale come from the original frames.
 
 ## How native gamepad support is preserved
 
@@ -47,7 +56,6 @@ Commands:
 - `/cgp` — version, current state and command help.
 - `/cgp on` / `/cgp off` — enable/disable the visual changes.
 - `/cgp native` / `/cgp classic` — temporarily switch the action HUD in this session.
-- `/cgp scale 0.9` — scale the action HUD (0.5–1.5, clamped to screen width).
 
 ## Current limits
 
@@ -59,8 +67,9 @@ For the first in-game check: toggle Gamepad Mode on/off, hold each trigger combi
 change pages, edit a binding, open/close a flyout, and repeat in combat. Check the pet
 or stance/form override on a class that has one. Verify the ordinary HUD returns.
 For a quick rollback, use `/cgp off`; disabling the addon and restarting restores a
-fully native session. No native keybindings, action slots or Edit Mode layouts are saved
-or overwritten by this addon.
+fully native session. The addon stores copies of keyboard/mouse frame anchors in its
+own saved variables. It does not overwrite native keybindings, action slots or saved
+Edit Mode layouts.
 
 ## Development
 
