@@ -46,9 +46,16 @@ local function StockTexture(parent, source, owner, layer)
 end
 
 local function CreateSlot(parent, template)
-    -- These are display frames, never substitute action buttons or binding owners.
-    local slot = CreateFrame("Frame", nil, parent)
+    -- Mouse handlers edit native storage outside combat; casting and bindings remain native.
+    local slot = CreateFrame("Button", nil, parent)
     slot.template = template
+    slot:RegisterForDrag("LeftButton")
+    slot:RegisterForClicks("LeftButtonUp")
+    slot:SetScript("OnDragStart", function() Display:PickupSlot(slot) end)
+    slot:SetScript("OnReceiveDrag", function() Display:ReceiveSlot(slot) end)
+    slot:SetScript("OnClick", function()
+        if GetCursorInfo() then Display:ReceiveSlot(slot) end
+    end)
     Addon.Layout:Place(slot, template)
     slot.Background = StockTexture(slot, template.SlotBackground, template, "BACKGROUND")
     slot.SlotArt = StockTexture(slot, template.SlotArt, template, "BACKGROUND")
@@ -189,10 +196,51 @@ function Display:NeedsNativeView(bars, unit)
         local source = unit[key]
         if source and source.IsPopupOpen and source:IsPopupOpen() then return true end
     end
-    -- Picking up an action with the mouse must expose the actual drop targets.
-    if GetCursorInfo and GetCursorInfo() then return true end
-    if IsGamePadCursorControlEnabled and IsGamePadCursorControlEnabled() then return true end
     return false
+end
+
+function Display:GetDragAction(slot)
+    if InCombatLockdown() then return end
+    -- Resolve the current page/override before a hardware-driven edit.
+    Addon:Refresh()
+    if not Addon.classicVisible then return end
+    local source = slot.source
+    if not source or not source.GetID then return end
+    local action = source:GetID()
+    if not Readable(action) or type(action) ~= "number" or action <= 0 then return end
+    if source.isGamepadPossessBarButton then
+        if not UnitIsCharmed("pet") and C_GamepadUI.IsValidGamepadPossessBarStorageSlotIndex(action) then
+            return action, true
+        end
+    elseif source.GetGamepadPageUnitSlotID and C_GamepadUI.IsValidGamepadActionStorageSlotIndex(action) then
+        return action, false
+    end
+end
+
+function Display:PickupSlot(slot)
+    if Settings.GetValue("lockActionBars") and not IsModifiedClick("PICKUPACTION") then return end
+    local action, pet = self:GetDragAction(slot)
+    if not action then return end
+    if pet then
+        PickupPetAction(action)
+    else
+        PickupAction(action, IsAnyIconSelectorPopupFrameShown())
+    end
+    Addon:QueueRefresh()
+end
+
+function Display:ReceiveSlot(slot)
+    if not GetCursorInfo() then return end
+    local action, pet = self:GetDragAction(slot)
+    if not action then return end
+    if pet then
+        if GetCursorInfo() ~= "petaction" then return end
+        PickupPetAction(action)
+    else
+        PlaceAction(action)
+    end
+    -- Leave any displaced action on the cursor so it can be placed elsewhere.
+    Addon:QueueRefresh()
 end
 
 function Display:HookSource(source)

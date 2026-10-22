@@ -1,5 +1,5 @@
 local name, Addon = ...
-Addon.version = "0.1.0-alpha.2"
+Addon.version = "0.1.0-alpha.3"
 
 local driver = CreateFrame("Frame")
 local ready, queued, lastMode

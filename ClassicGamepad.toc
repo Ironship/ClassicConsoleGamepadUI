@@ -2,7 +2,7 @@
 ## Title: ClassicGamepad
 ## Notes: Familiar classic HUD with Forever's native gamepad controls.
 ## Author: Oleg
-## Version: 0.1.0-alpha.2
+## Version: 0.1.0-alpha.3
 ## Dependencies: Blizzard_GamepadActionBars
 ## OptionalDeps: Blizzard_EditMode, Blizzard_UnitFrame
 ## SavedVariables: ClassicGamepadDB

@@ -24,6 +24,17 @@ matching the exported source commit's build **1.60.1 (70450)**.
   matter independently of the normal action texture.
 - `Blizzard_GamepadActionBars/ActionBarButton.lua`: gamepad presses can use
   `ApplyPressedStyle` independently of the generic button's pressed state.
+- `Blizzard_GamepadActionBars/ActionBindingUtil.lua` and
+  `Blizzard_ActionBar/Shared/ActionButton.lua`: mouse drag/drop uses `PickupAction`
+  and `PlaceAction` with native gamepad storage IDs. Visible slots resolve their
+  current native source at the hardware event, reject combat and IDs not accepted by
+  `C_GamepadUI.IsValidGamepadActionStorageSlotIndex`, and respect the action-bar lock
+  when picking up an action. Cursor contents and controller cursor mode never select
+  the native view. Replacing an action retains the displaced action on the cursor.
+- `Blizzard_ActionBar/Shared/PetActionBar.lua`: pet drag/drop uses `PickupPetAction`,
+  accepts only `petaction` cursor contents and rejects charmed-pet edits. Reserved
+  and contextual controls without valid storage IDs cannot be edited. Stance-bar
+  buttons follow the same native storage validation as standard actions.
 - `Blizzard_SharedXML/Shared/InputIcons/InputIconTexture.lua`: controller glyphs
   live in the native prompt's Normal/Pressed/Active/Hover/Disabled textures.
 - `Blizzard_APIDocumentationGenerated/ActionBarFrameDocumentation.lua`:

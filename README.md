@@ -1,7 +1,7 @@
 # ClassicGamepad
 
 ClassicGamepad brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.2**, interface **16001**.
+Version **0.1.0-alpha.3**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -18,6 +18,8 @@ alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse
 - Controller glyphs copied from the native prompts, including the modifier glyphs on each slot.
 - Native action icons, counts, cooldowns, range/usability colors and press feedback.
 - Native pages, stance/form overrides, pet actions and contextual targeting/shortcut actions.
+- Drag actions onto or off the classic slots outside combat, including item shortcuts
+  from bags. Dragging and the controller cursor keep the classic HUD visible.
 - Player, target and focus frames use the last keyboard/mouse positions captured by the addon.
   On a first login directly into Gamepad Mode, it uses Blizzard's classic preset positions instead.
 
@@ -28,17 +30,22 @@ UI scale and captured bar scale come from the original frames.
 ## How native gamepad support is preserved
 
 The classic action rows **display the existing native buttons**. They do not take
-ownership of bindings, cast spells, move protected action buttons or copy spells
-between keyboard and gamepad slots. All actual controller actions remain native.
+ownership of bindings, cast spells, move protected action buttons or synchronize
+keyboard and gamepad assignments. Mouse drag/drop edits the native gamepad storage
+slot represented by the visible icon. All actual controller actions remain native.
 
-The native action HUD is exposed automatically while editing bindings, dragging an
-action, or using a native action flyout. The classic view returns when that interaction
+The native action HUD is exposed automatically while editing bindings or using a
+native action flyout. The classic view returns when that interaction
 ends. Other windows keep their native gamepad navigation and prompts; this alpha does
 not undo their controller-specific layouts.
 
-The classic action slots are display-only for mouse use. Use **`/cgp native`** to get
-the real clickable native action HUD, and **`/cgp classic`** to return. Native gamepad
-controls continue working in either view. If protected mouse state cannot be changed
+Classic slots accept mouse drag/drop outside combat. Pickup follows the game's
+action-bar lock setting and its pickup modifier (normally Shift). Dropping onto an
+occupied slot leaves its previous action on the cursor. Reserved controller controls
+and contextual actions without editable storage cannot be reassigned this way; pet
+slots accept pet actions. Mouse spell casting still uses **`/cgp native`**; use
+**`/cgp classic`** to return. Native gamepad controls continue working in either view.
+If protected mouse state cannot be changed
 during combat, its restoration waits until combat ends. A first activation in combat
 also waits for combat to end.
 
