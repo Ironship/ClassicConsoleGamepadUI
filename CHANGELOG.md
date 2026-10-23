@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.38
+
+- Fix: `Layout.lua` failed to load in the game's Lua 5.1 ("ambiguous syntax"),
+  so the classic HUD never appeared and `Core.lua` reported `Layout` as nil.
+  Alpha.37 should not be used.
+
 ## 0.1.0-alpha.37
 
 First release as **ClassicConsoleGamepadUI** (previously ClassicGamepad).

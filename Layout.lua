@@ -121,8 +121,10 @@ function Layout:Prepare()
     self:ApplyStockAnchor("MicroMenuContainer", MicroMenuContainer)
     self:ApplyStockAnchor("BagsBar", BagsBar)
     self:ApplyStockAnchor("MainActionBar", MainActionBar)
-    (MicroMenu.ShowBase or MicroMenu.Show)(MicroMenu);
-    (BagsBar.ShowBase or BagsBar.Show)(BagsBar)
+    for _, frame in ipairs({ MicroMenu, BagsBar }) do
+        local show = frame.ShowBase or frame.Show
+        show(frame)
+    end
 
     -- The same bottom-stack order and offsets as Camelot/EditModeUtil.lua.
     local y = MainActionBar:GetHeight() + BOTTOM_ACTION_BARS_SPACER_Y
