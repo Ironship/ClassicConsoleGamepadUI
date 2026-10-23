@@ -2,9 +2,9 @@
 ## Title: ClassicConsoleGamepadUI
 ## Notes: Classic-style WoW Forever HUD with native gamepad and controller support (Xbox, PlayStation, Steam Deck).
 ## Author: Oleg
-## X-License: MIT
+## X-License: All Rights Reserved
 ## X-Website: https://github.com/Ironship/ClassicConsoleGamepadUI
-## Version: 0.1.0-alpha.46
+## Version: 0.1.0-alpha.47
 ## Dependencies: Blizzard_GamepadActionBars
 ## OptionalDeps: Blizzard_EditMode, Blizzard_UnitFrame, Blizzard_StaticPopup_Game
 ## SavedVariables: ClassicConsoleGamepadUIDB

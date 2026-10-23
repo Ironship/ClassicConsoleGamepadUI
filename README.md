@@ -5,7 +5,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own
 controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.46. Alpha: expect bugs.
+Version 0.1.0-alpha.47. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -62,4 +62,4 @@ which helps with "action blocked" errors.
 AI agents: see [AGENTS.md](AGENTS.md); do not write tests unless asked. Build the ZIP with
 `python -P tools/package.py`. Details of how it works are in `docs/implementation.md`.
 
-License: MIT.
+License: All Rights Reserved, see LICENSE.
