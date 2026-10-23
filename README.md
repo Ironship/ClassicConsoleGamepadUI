@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.38**, interface **16001**.
+Version **0.1.0-alpha.39**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.

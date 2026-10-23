@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.39
+
+- Fix: after switching to 12 slots, the extra upper slots (buttons 9-12 of each
+  bar) showed no keyboard labels while Settings stayed open. Labels now follow the
+  visible slots immediately, also when a slot appears without a layout change.
+
 ## 0.1.0-alpha.38
 
 - Fix: `Layout.lua` failed to load in the game's Lua 5.1 ("ambiguous syntax"),

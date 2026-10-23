@@ -336,6 +336,47 @@ function Input:SetBindingMode(active)
     end)
 end
 
+-- Collect the keyboard keys of every visible slot's classic bar position.
+-- The secure header applies them only while the click layer is enabled.
+function Input:UpdateBindings()
+    local header, count = self.header, 0
+    self.labelShown = {}
+    for i, button in pairs(self.buttons) do
+        local slot = Addon.Display.slots[i]
+        slot.Key:SetText("")
+        self.labelShown[i] = slot:IsShown()
+        if slot:IsShown() then
+            local label
+            pcall(function()
+                local action = slot.bindingAction
+                if not action then return end
+                local context = C_KeyBindings.GetBindingContextForAction(action)
+                for _, key in ipairs({ GetBindingKey(action, nil, context) }) do
+                    if not IsBindingForGamePad(key) then
+                        count = count + 1
+                        header:SetAttribute("key" .. count, key)
+                        header:SetAttribute("button" .. count, button:GetName())
+                        label = label or GetBindingText(key, 1)
+                    end
+                end
+            end)
+            slot.Key:SetText(label or "")
+        end
+    end
+    header:SetAttribute("bindingcount", count)
+    self.dirty, self.bindingsPending = false, true
+    self.labelRevision = Addon.Layout.revision
+end
+
+-- True when a slot appeared or disappeared since the labels were collected.
+function Input:SlotsChanged()
+    if not self.labelShown then return true end
+    for i in pairs(self.buttons) do
+        if self.labelShown[i] ~= Addon.Display.slots[i]:IsShown() then return true end
+    end
+    return false
+end
+
 function Input:Refresh(wanted, native, unit, bars)
     if self.disabled then return false end
     if InCombatLockdown() then return self:IsEnabled() end
@@ -351,6 +392,12 @@ function Input:Refresh(wanted, native, unit, bars)
         self.state = "off"
         return false
     end
+    -- Labels follow the visible slots even while Settings or a flyout pauses
+    -- the click layer, e.g. right after switching between 8 and 12 slots.
+    local bindingsDirty = self.dirty
+    if bindingsDirty or self.labelRevision ~= Addon.Layout.revision or self:SlotsChanged() then
+        self:UpdateBindings()
+    end
     if self.bindingMode then
         -- Keep the slot hitboxes shown so they can be hovered, but drop the
         -- temporary key overrides so the pressed key reaches the binder.
@@ -360,7 +407,7 @@ function Input:Refresh(wanted, native, unit, bars)
         return false
     end
     local geometryChanged = self.layoutRevision ~= Addon.Layout.revision
-    if self.dirty or geometryChanged then self:ObserveBlockers(bars, unit) end
+    if bindingsDirty or geometryChanged then self:ObserveBlockers(bars, unit) end
     if self:IsBlocked() then
         header:SetAttribute("enabled", false)
         header:Hide()
@@ -393,36 +440,10 @@ function Input:Refresh(wanted, native, unit, bars)
             end
         end
     end
-    local bindingsChanged = self.dirty or geometryChanged
-    if bindingsChanged then
-        local count = 0
-        for i, button in pairs(self.buttons) do
-            local slot = Addon.Display.slots[i]
-            slot.Key:SetText("")
-            if slot:IsShown() then
-                local label
-                pcall(function()
-                    local action = slot.bindingAction
-                    if not action then return end
-                    local context = C_KeyBindings.GetBindingContextForAction(action)
-                    for _, key in ipairs({ GetBindingKey(action, nil, context) }) do
-                        if not IsBindingForGamePad(key) then
-                            count = count + 1
-                            header:SetAttribute("key" .. count, key)
-                            header:SetAttribute("button" .. count, button:GetName())
-                            label = label or GetBindingText(key, 1)
-                        end
-                    end
-                end)
-                slot.Key:SetText(label or "")
-            end
-        end
-        header:SetAttribute("bindingcount", count)
-        self.dirty = false
-    end
     header:SetAttribute("enabled", true)
     if not header:IsShown() then header:Show()
-    elseif bindingsChanged then header:Execute(APPLY_BINDINGS) end
+    elseif self.bindingsPending then header:Execute(APPLY_BINDINGS) end
+    self.bindingsPending = nil
     self:SyncNativeMouse(false)
     if self.disabled then return false end
     self:RefreshTooltip()
