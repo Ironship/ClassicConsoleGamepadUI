@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.47
+
+- License changed to All Rights Reserved (earlier versions stay under the MIT License they were released with).
+- No code changes.
+
 ## 0.1.0-alpha.46
 
 - Shorter README. The repository is now called ClassicConsoleGamepadUI; the TOC website points to it.
