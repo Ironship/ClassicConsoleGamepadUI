@@ -4,7 +4,7 @@
 ## Author: Oleg
 ## X-License: MIT
 ## X-Website: https://github.com/Ironship/ClassicGamepad
-## Version: 0.1.0-alpha.43
+## Version: 0.1.0-alpha.44
 ## Dependencies: Blizzard_GamepadActionBars
 ## OptionalDeps: Blizzard_EditMode, Blizzard_UnitFrame, Blizzard_StaticPopup_Game
 ## SavedVariables: ClassicConsoleGamepadUIDB

@@ -45,7 +45,15 @@ local PRE_CLICK = [[
         local group, index = self:GetAttribute("group"), self:GetAttribute("index")
         if group == 0 then
             source, kind = control:GetFrameRef("class" .. index), "delegate"
-            if not source or not source:IsShown() then return false end
+            if not source or not source:IsShown() then
+                -- No class action: the keyboard bar's button at this position (9 or 10).
+                source = control:GetFrameRef("kbd" .. (index + 8))
+                if not source then return false end
+            end
+        elseif group == 5 then
+            -- Spare main-row slots: the keyboard bar's button at the same position.
+            source, kind = control:GetFrameRef("kbd" .. index), "delegate"
+            if not source then return false end
         else
             if group == 1 and control:GetAttribute("compact") then
                 local combined = control:RunAttribute("pickbar", 4)
@@ -146,6 +154,7 @@ end
 local function SlotAction(i)
     if i <= 8 then return 1, RowIndex(i) end
     if i <= 10 then return 0, i - 8 end
+    if i <= 12 then return 5, i end
     if i >= 13 and i <= 20 then return 2, RowIndex(i - 12) end
     if i >= 21 and i <= 24 then return 4, i - 16 end
     if i >= 25 and i <= 32 then return 3, RowIndex(i - 24) end
@@ -258,6 +267,10 @@ function Input:Create(native, unit, bars)
     end
     SetRef(header, "class1", unit.LeftClassAction)
     SetRef(header, "class2", unit.RightClassAction)
+    -- The keyboard bar's buttons 9-12 serve the main-row positions without a gamepad action.
+    for position = 9, 12 do
+        SetRef(header, "kbd" .. position, MainActionBar and MainActionBar.actionButtons[position])
+    end
     header:Execute(SETUP)
     for i, slot in ipairs(Addon.Display.slots) do
         local group, index = SlotAction(i)

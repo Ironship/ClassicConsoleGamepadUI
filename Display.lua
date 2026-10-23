@@ -13,6 +13,16 @@ local function AllReadable(...)
     return true
 end
 
+-- Keyboard bar buttons carry the page-adjusted action slot in .action; GetID is only their position.
+local function ActionOf(slot, source)
+    if not source or not source.GetID then return end
+    if slot and slot.keyboardSlot and source == slot.template then
+        local action = source.action
+        if Readable(action) and type(action) == "number" and action > 0 then return action end
+    end
+    return source:GetID()
+end
+
 local function Texture(parent, layer, path)
     local texture = parent:CreateTexture(nil, layer)
     if path then texture:SetTexture(path) end
@@ -434,6 +444,12 @@ function Display:GetDragAction(slot)
     -- Resolve the current page/override before a hardware-driven edit.
     Addon:Refresh()
     if not Addon.classicVisible then return end
+    if slot.keyboardSlot then
+        -- A spare slot mirroring the keyboard bar: plain action-bar storage, even when empty.
+        local action = ActionOf(slot, slot.template)
+        if type(action) == "number" and action > 0 then return action, false end
+        return
+    end
     local source = slot.source
     if not source or not source.GetID then return end
     local action = source:GetID()
@@ -515,7 +531,7 @@ function Display:HookSource(source, bar)
 end
 
 function Display:MirrorCooldown(slot, source, bar)
-    local action = source.GetID and source:GetID()
+    local action = ActionOf(slot, source)
     if not Readable(action) or type(action) ~= "number" or action <= 0 then
         slot.Cooldown:Clear()
     elseif bar and bar.isGamepadPossessBar then
@@ -568,7 +584,21 @@ end
 function Display:ShowPlaceholder(slot)
     self:UpdateSlot(slot, nil)
     slot.Background:Show()
-    if slot.Key then slot.Key:Hide() end
+end
+
+-- Extended layout: a main-row position without a native gamepad action (the second
+-- class action, and the two spare slots) shows the keyboard bar's button at the same
+-- position. Its key (9, 0, -, =) uses that action, so the key works on the classic bar.
+function Display:ShowKeyboardSlot(slot)
+    local source = slot.template
+    local action = ActionOf(slot, source)
+    if source and type(action) == "number" and action > 0 and C_ActionBar.HasAction(action) then
+        self:UpdateSlot(slot, source, nil, false)
+        slot.Prompt:Hide()
+        for _, glyph in ipairs(slot.Modifiers) do glyph:Hide() end
+    else
+        self:ShowPlaceholder(slot)
+    end
 end
 
 function Display:UpdateSlot(slot, source, bar, active)
@@ -591,7 +621,7 @@ function Display:UpdateSlot(slot, source, bar, active)
         return
     end
     slot:SetAlpha(source:GetAlpha())
-    local action = source.GetID and source:GetID()
+    local action = ActionOf(slot, source)
     if slot.source ~= source or (Readable(action) and slot.action ~= action) then
         slot.source, slot.action = source, Readable(action) and action or nil
         self:HookSource(source, bar)
@@ -694,7 +724,9 @@ function Display:Update(unit)
         PaintGroup(4, 33, 1, 4)
     end
     for i = 11, 12 do
-        if compact then self.slots[i]:Hide() else self:ShowPlaceholder(self.slots[i]) end
+        local slot = self.slots[i]
+        slot.keyboardSlot = not compact
+        if compact then slot:Hide() else self:ShowKeyboardSlot(slot) end
     end
     self.pageLabel:SetText(page)
     for i, key in ipairs({ "LeftClassAction", "RightClassAction" }) do
@@ -702,10 +734,11 @@ function Display:Update(unit)
         local slot = self.slots[8 + i]
         local usable = source and source:IsShown() and source or nil
         self:UpdateSlot(slot, usable, nil, false)
+        slot.keyboardSlot = not usable and not compact
         if not usable then
             -- Compact class slots float above the row, so an empty one is hidden.
-            -- In the 12-slot row it keeps the empty plate, without its "9"/"10" label.
-            if compact then slot:Hide() else self:ShowPlaceholder(slot) end
+            -- In the 12-slot row it mirrors the keyboard bar's button at that position.
+            if compact then slot:Hide() else self:ShowKeyboardSlot(slot) end
         else
             local prompt = i == 1 and unit.LeftInputPrompt or unit.RightInputPrompt
             local icons = prompt and prompt.InputIcons

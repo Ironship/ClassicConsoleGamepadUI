@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.44
+
+- 12-slot layout: the last main-row positions (keys `0`, `-`, `=`, and `9` when the character has no
+  class action) now show their keyboard labels and mirror the keyboard bar's button at that position.
+  The key, or a mouse click, triggers that action; you can drag an action onto the slot with the mouse.
+  Empty positions keep the empty-slot plate with the key label.
+
 ## 0.1.0-alpha.43
 
 - Diagnostics for blocked protected actions such as `SetOverrideBindingClick()` (seen when the

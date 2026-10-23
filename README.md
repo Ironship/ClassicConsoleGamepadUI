@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.43**, interface **16001**.
+Version **0.1.0-alpha.44**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -58,8 +58,12 @@ anchors are rebuilt once; input-mode changes retain the new layout applied by th
   A class action is shown above the upper row only while its native button is visible. An empty class slot is hidden, so it does not show a leftover keyboard number.
   Shoulder and class-action glyphs follow current controller bindings and native press feedback.
 - Extended layout: disable **Compact bars (8 slots)** in `/cgp` for three 12-slot
-  bars. The main bar adds two class actions and two empty slots. Empty positions keep
-  the stock empty-slot plate (without a keyboard number), so the row has no gaps. Each upper section
+  bars. The main bar adds two class actions and two spare slots. A position without a
+  native gamepad action (the second class action, and the two spare slots, i.e. keys `0`, `-` and `=`)
+  mirrors the keyboard bar's button at the same position: it shows that action's icon and cooldown, its
+  key triggers it, and you can click it or drop an action onto it with the mouse. Place those actions
+  in keyboard mode, or drag them from the spellbook or bags. An empty position shows the stock
+  empty-slot plate with its key label, so the row has no gaps. Each upper section
   adds four L2+R2 actions, so all 32 native gamepad actions are visible at once.
   It uses the same native action storage and bindings; the layout does not add
   extra actions to a native eight-action trigger layer.
