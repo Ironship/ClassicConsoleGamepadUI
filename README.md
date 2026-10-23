@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.42**, interface **16001**.
+Version **0.1.0-alpha.43**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -171,7 +171,8 @@ Commands:
 - `/cgp edit` — show how to open the native gamepad action editor: its bound button,
   or `/click GamepadActionBarEditFrameEnterEditMode` typed in chat.
 - `/cgp debug` — toggle the diagnostic text line shown while the classic HUD is inactive.
-- `/cgp status` — version, state and the last layout/input diagnostic. It also reports whether a blocked-action snapshot was saved.
+- `/cgp status` — version, state and the last layout/input diagnostic. It also reports how many blocked actions were saved this session.
+- `/cgp taint` — list the native gamepad, navigation, binding, chat and action-bar fields this addon has tainted (read-only), with the other addons' counts, and save the result. Run it after each step of a reproduction to find the step that introduces the taint.
 - `/cgp on` / `/cgp off` — enable/disable the visual changes.
 - `/cgp native` / `/cgp classic` — temporarily switch the action HUD in this session.
 
@@ -195,12 +196,15 @@ The first observed ClassicConsoleGamepadUI-owned taint on selected native focus,
 and binding fields is recorded with its observation stage and call stack in
 `ClassicConsoleGamepadUIDB.diagnostics.firstTaint`. A secure post-hook observes native button
 selection before the next refresh tick. The observer stops after that first record.
-The first such block attributed to ClassicConsoleGamepadUI in each session saves a read-only
-snapshot and call stack of tainted fields on the native focus, navigation, binding and action-bar
-tables in `ClassicConsoleGamepadUIDB.diagnostics.blockedAction`. This does not change native
-tables or bypass the protected function. Tainted fields can be legitimate addon
-data; their presence alone does not identify the cause. Snapshot versions and times
-belong to the session that captured them, even when the main diagnostic is newer.
+Every block attributed to ClassicConsoleGamepadUI (`ADDON_ACTION_BLOCKED` in combat or
+`ADDON_ACTION_FORBIDDEN` out of combat, for any protected function; up to six per session) is saved in
+`ClassicConsoleGamepadUIDB.diagnostics.blocked` with the protected function, whether the player
+was in combat, the call stack, and a trace of the last operations this addon performed on Blizzard
+frames (relative seconds). The first block of a session also lists the tainted native fields, found
+by a read-only scan two levels deep. The first-taint record carries the same trace and scan.
+This does not change native tables or bypass the protected function. Tainted fields can be
+legitimate addon data; their presence alone does not identify the cause. Records belong to the
+session and version that captured them.
 A `taint.log` from
 `/console taintLog 2` is needed to trace the first tainted execution. Turn logging
 off with `/console taintLog 0` after reproducing the problem.

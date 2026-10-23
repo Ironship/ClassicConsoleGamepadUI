@@ -96,6 +96,7 @@ function Layout:Prepare()
     if self.active and not self.dirty then return true end
     if InCombatLockdown() then return self.active end
     if not MainActionBar or not MicroMenu or not BagsBar then return false end
+    Addon:Trace("Layout:Prepare")
     local compact, cutWidth = Addon.db.compact, 0
     if compact then
         local buttons = MainActionBar.actionButtons
@@ -194,6 +195,7 @@ function Layout:Prepare()
 end
 
 function Layout:Restore(changedMode)
+    if self.active then Addon:Trace("Layout:Restore") end
     if changedMode then
         -- The client has already switched layouts; discard snapshots of the old mode.
         self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true

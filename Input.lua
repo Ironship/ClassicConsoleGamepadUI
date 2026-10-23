@@ -159,6 +159,7 @@ function Input:SyncNativeMouse(restore)
     -- Skip repeat walks; refresh runs several times a second.
     local want = restore and true or false
     if self.mouseRestored == want then return end
+    Addon:Trace("Input:SyncNativeMouse " .. tostring(want))
     header:SetAttribute("mouserestore", want)
     local ok, err = pcall(function() header:Execute(SUPPRESS_MOUSE) end)
     if ok then
@@ -386,6 +387,7 @@ function Input:Refresh(wanted, native, unit, bars)
     end
     local header = self.header
     if not wanted then
+        if header:IsShown() then Addon:Trace("Input off") end
         self:SyncNativeMouse(true)
         header:SetAttribute("enabled", false)
         header:Hide()
@@ -441,7 +443,7 @@ function Input:Refresh(wanted, native, unit, bars)
         end
     end
     header:SetAttribute("enabled", true)
-    if not header:IsShown() then header:Show()
+    if not header:IsShown() then Addon:Trace("Input on"); header:Show()
     elseif self.bindingsPending then header:Execute(APPLY_BINDINGS) end
     self.bindingsPending = nil
     self:SyncNativeMouse(false)

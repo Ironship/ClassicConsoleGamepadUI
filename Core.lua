@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.42"
+Addon.version = "0.1.0-alpha.43"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -19,6 +19,80 @@ end
 
 function Addon:Print(message)
     print("|cffffcf70ClassicConsoleGamepadUI:|r " .. message)
+end
+
+-- The last operations this addon performed on Blizzard frames, newest last.
+-- Saved with every taint report so the report shows what ran just before it.
+local TRACE_SIZE = 16
+local trace, traceHead = {}, 0
+function Addon:Trace(label)
+    traceHead = traceHead % TRACE_SIZE + 1
+    trace[traceHead] = { GetTime(), label }
+end
+
+local function TraceSnapshot()
+    local now, out = GetTime(), {}
+    for i = 1, #trace do
+        local entry = trace[(traceHead + i - 1) % #trace + 1]
+        out[#out + 1] = string.format("%+.2fs %s", entry[1] - now, entry[2])
+    end
+    return out
+end
+
+-- Native objects whose fields gamepad navigation and input binding read.
+local function ScanRoots()
+    local native = GamepadMainActionBarFrame
+    local unit = native and native.PageUnit
+    local bindings = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
+    return {
+        { "FrameControlsManager", GamepadMode and GamepadMode.FrameControlsManager },
+        { "SmartNavigation", SmartNavigation },
+        { "InputBindingManager", bindings },
+        { "GamepadMainActionBarFrame", native },
+        { "PageUnit", unit },
+        { "PopupHandler", GamepadMode and GamepadMode.PopupHandler },
+        { "GameTooltip", GameTooltip },
+        { "ChatFrame1", ChatFrame1 },
+        { "ChatFrame1EditBox", ChatFrame1EditBox },
+        { "SettingsPanel", SettingsPanel },
+        { "EditModeManagerFrame", EditModeManagerFrame },
+        { "MainActionBar", MainActionBar },
+        { "GamepadActionBarEditFrame", GamepadActionBarEditFrame },
+        { "EventRegistry", EventRegistry },
+    }
+end
+
+-- Reads field ownership only (issecurevariable never writes). Returns the fields
+-- tainted by this addon, and a count of the fields tainted by every other addon.
+function Addon:ScanTaint(maxDepth)
+    local ours, others, seen, budget = {}, {}, {}, 30000
+    if not issecurevariable then return ours, others end
+    local function Walk(label, object, depth)
+        if type(object) ~= "table" or seen[object] or budget <= 0 then return end
+        seen[object] = true
+        for key, value in pairs(object) do
+            budget = budget - 1
+            local keyType = type(key)
+            if keyType == "string" or keyType == "number" then
+                local ok, secure, owner = pcall(issecurevariable, object, key)
+                if ok and secure == false then
+                    if owner == name then
+                        ours[#ours + 1] = label .. "." .. tostring(key)
+                    else
+                        owner = tostring(owner)
+                        others[owner] = (others[owner] or 0) + 1
+                    end
+                end
+                if depth < maxDepth and type(value) == "table" and keyType == "string" then
+                    Walk(label .. "." .. key, value, depth + 1)
+                end
+            end
+            if budget <= 0 then return end
+        end
+    end
+    for _, root in ipairs(ScanRoots()) do Walk(root[1], root[2], 0) end
+    table.sort(ours)
+    return ours, others
 end
 
 function Addon:CheckNativeTaint(stage)
@@ -42,68 +116,32 @@ function Addon:CheckNativeTaint(stage)
     Check("PageUnit", unit, { "activeBar" })
     if #fields == 0 then return end
     firstTaintCaptured = true
+    local deep = self:ScanTaint(2)
     self.diagnostics.firstTaint = { version = self.version, time = date("%Y-%m-%d %H:%M:%S"),
-        stage = stage, fields = fields, stack = debugstack(2, 20, 0) }
+        stage = stage, fields = fields, deepFields = deep, trace = TraceSnapshot(),
+        stack = debugstack(2, 20, 0) }
 end
 
+-- Every blocked or forbidden call attributed to this addon, up to six per session:
+-- which protected function, the stack, and what this addon had done just before.
 function Addon:CaptureBlockedAction(event, addon, action)
-    if capturedBlock or not self.diagnostics or addon ~= name
-        or type(action) ~= "string" or not action:find("SetPreferredGamepadInteractTarget", 1, true) then return end
-    capturedBlock = true
-    local report = { version = self.version, time = date("%Y-%m-%d %H:%M:%S"), event = event,
-        action = action, fields = {}, stack = debugstack(2, 24, 0) }
-    report.clientVersion, report.clientBuild = GetBuildInfo()
-    self.diagnostics.blockedAction = report
-    local seen = {}
-    local function Capture(label, object)
-        if type(object) ~= "table" or seen[object] or not issecurevariable then return end
-        seen[object] = true
-        for key in pairs(object) do
-            if type(key) == "string" or type(key) == "number" then
-                local ok, secure, owner = pcall(issecurevariable, object, key)
-                if ok and secure == false then
-                    report.fields[#report.fields + 1] = label .. "." .. tostring(key) .. " = " .. tostring(owner)
-                end
-            end
-        end
+    if not self.diagnostics or addon ~= name or type(action) ~= "string" then return end
+    local list = self.diagnostics.blocked
+    if type(list) ~= "table" or list.version ~= self.version then
+        list = { version = self.version }
+        self.diagnostics.blocked = list
     end
-    -- Read ownership only: never write to the focus or binding tables being inspected.
-    local focus = GamepadMode and GamepadMode.FrameControlsManager
-    Capture("FrameControlsManager", focus)
-    if focus then
-        Capture("FrameControlsManager.shownFrames", focus.shownFrames)
-        Capture("FrameControlsManager.isPopupFrame", focus.isPopupFrame)
-        Capture("FrameControlsManager.focusedFrame", focus.focusedFrame)
+    if #list >= 6 then return end
+    local report = { time = date("%Y-%m-%d %H:%M:%S"), event = event, action = action,
+        combat = InCombatLockdown() and true or false, trace = TraceSnapshot(),
+        stack = debugstack(2, 24, 0) }
+    if not capturedBlock then
+        -- Ownership of native fields is read once, on the first block of the session.
+        capturedBlock = true
+        report.fields = self:ScanTaint(2)
+        report.clientVersion, report.clientBuild = GetBuildInfo()
     end
-    Capture("SmartNavigation", SmartNavigation)
-    if SmartNavigation then
-        Capture("SmartNavigation.activeInfo", SmartNavigation.activeInfo)
-        Capture("SmartNavigation.activePanels", SmartNavigation.activePanels)
-        Capture("SmartNavigation.currentButton", SmartNavigation.currentButton)
-    end
-    local bindings = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
-    Capture("InputBindingManager", bindings)
-    if bindings then
-        Capture("InputBindingManager.bindingSetStack", bindings.bindingSetStack)
-        Capture("InputBindingManager.coreBindingListenerFunctions", bindings.coreBindingListenerFunctions)
-        Capture("InputBindingManager.activeBindings", bindings.activeBindings)
-    end
-    local native = GamepadMainActionBarFrame
-    Capture("GamepadMainActionBarFrame", native)
-    local unit = native and native.PageUnit
-    Capture("PageUnit", unit)
-    if unit and unit.actionBars then
-        Capture("PageUnit.actionBars", unit.actionBars)
-        for key, bar in pairs(unit.actionBars) do
-            local label = "PageUnit.actionBars." .. tostring(key)
-            Capture(label, bar)
-            for index, button in ipairs(bar.actionButtons or {}) do
-                Capture(label .. ".button" .. index, button)
-            end
-        end
-    end
-    Capture("GameTooltip", GameTooltip)
-    table.sort(report.fields)
+    list[#list + 1] = report
     C_Timer.After(0, function()
         if C_AddOns and C_AddOns.SaveAddOns then pcall(C_AddOns.SaveAddOns) end
     end)
@@ -234,6 +272,7 @@ local function Initialize()
     -- Snapshots from older builds describe code that is no longer loaded.
     if Addon.diagnostics.version ~= Addon.version then
         Addon.diagnostics.firstTaint, Addon.diagnostics.blockedAction = nil, nil
+        Addon.diagnostics.blocked, Addon.diagnostics.lastScan = nil, nil
     end
     for _, other in ipairs({ "ControllerForever", "ConsolePort", "ClassicGamepad" }) do
         if C_AddOns.IsAddOnLoaded(other) then
@@ -331,6 +370,22 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "scale" then
         Addon:Print("Use the game's UI scale and Edit Mode; ClassicConsoleGamepadUI follows the original frames.")
         return
+    elseif command == "taint" then
+        local ours, others = Addon:ScanTaint(2)
+        local summary = {}
+        for owner, count in pairs(others) do summary[#summary + 1] = owner .. " " .. count end
+        table.sort(summary)
+        Addon.diagnostics.lastScan = { time = date("%Y-%m-%d %H:%M:%S"), fields = ours, others = summary,
+            trace = TraceSnapshot() }
+        Addon:Print(#ours .. " native fields tainted by this addon"
+            .. (#ours > 0 and ":" or " (none)."))
+        for i = 1, math.min(#ours, 20) do print("  " .. ours[i]) end
+        if #ours > 20 then print("  ... " .. (#ours - 20) .. " more in the saved variables") end
+        if #summary > 0 then Addon:Print("Other addons: " .. table.concat(summary, ", ")) end
+        C_Timer.After(0, function()
+            if C_AddOns and C_AddOns.SaveAddOns then pcall(C_AddOns.SaveAddOns) end
+        end)
+        return
     elseif command == "debug" then
         Addon.db.debug = not Addon.db.debug or nil
         Addon:Print("Debug overlay " .. (Addon.db.debug and "on" or "off"))
@@ -354,10 +409,10 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         Addon:Print("last=" .. tostring(diag and diag.stage) .. " error=" .. tostring(diag and diag.error)
             .. " input=" .. tostring(diag and diag.input) .. " blockedBy=" .. tostring(diag and diag.blockedBy)
             .. " inputError=" .. tostring(diag and diag.inputError) .. " at " .. tostring(diag and diag.time))
-        local blocked = diag and diag.blockedAction
-        if blocked then
-            Addon:Print("Blocked action snapshot: " .. blocked.version .. " at " .. blocked.time
-                .. " | " .. #blocked.fields .. " tainted fields recorded (ownership alone does not prove the cause).")
+        local blocked = diag and diag.blocked
+        if type(blocked) == "table" and #blocked > 0 then
+            Addon:Print("Blocked actions this session: " .. #blocked .. " (first: " .. blocked[1].action
+                .. " at " .. blocked[1].time .. "). Details are saved with the diagnostics.")
         end
         local first = diag and diag.firstTaint
         if first then Addon:Print("First observed native taint: " .. first.stage .. " at " .. first.time) end
@@ -366,7 +421,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | bindings | edit | on | off | native | classic | status | debug")
+        Addon:Print("/cgp settings | bindings | edit | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)

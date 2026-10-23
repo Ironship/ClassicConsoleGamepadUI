@@ -163,6 +163,7 @@ function HUD:RefreshChat(wanted, changedMode)
     end
     targetY = math.max(bottomInset, math.min(targetY, UIParent:GetHeight() - (top - frameBottom)))
     if math.abs(frameLeft - targetX) <= 0.5 and math.abs(frameBottom - targetY) <= 0.5 then return end
+    Addon:Trace("HUD:RefreshChat move")
     Apply(chat, { points = { { "BOTTOMLEFT", UIParent, "BOTTOMLEFT", targetX / scale, targetY / scale } }, scale = chat:GetScale() })
 end
 
@@ -175,6 +176,7 @@ function HUD:Refresh(wanted, changedMode)
     end
     if InCombatLockdown() then self.pending = true; return end
     self.pending = false
+    if wanted ~= self.applied then Addon:Trace("HUD:Refresh " .. tostring(wanted)) end
     for _, frame in ipairs(self:GetFrames()) do
         if frame then
             if wanted then

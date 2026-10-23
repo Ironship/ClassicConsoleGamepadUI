@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.43
+
+- Diagnostics for blocked protected actions such as `SetOverrideBindingClick()` (seen when the
+  death popup opens in combat) and `SetPreferredGamepadInteractTarget()`. Every block attributed
+  to this addon is now saved, for any protected function, with the stack and a trace of the last
+  operations the addon performed on Blizzard frames. The first block also lists the tainted
+  native fields.
+- `/cgp taint` lists the native fields this addon has tainted so far, so the step that introduces
+  the taint can be found by running it after each step of a reproduction.
+- No change in behaviour; this release only adds diagnostics.
+
 ## 0.1.0-alpha.42
 
 - The action editor ("Bind to Action Bar", "Edit Action Bar") now shows the classic

@@ -719,6 +719,7 @@ end
 -- Fade native frames instead of hiding them: their own code keeps running and
 -- no protected visibility is changed from addon code.
 function Display:SuppressNative(frames)
+    if not self.suppressed then Addon:Trace("Display:SuppressNative") end
     self.suppressed = self.suppressed or {}
     local keep = {}
     for _, frame in ipairs(frames) do
@@ -733,6 +734,7 @@ function Display:SuppressNative(frames)
 end
 
 function Display:RestoreNative()
+    if self.suppressed then Addon:Trace("Display:RestoreNative") end
     self:HideTemplates()
     pcall(Addon.Input.Refresh, Addon.Input, false)
     for frame, alpha in pairs(self.suppressed or {}) do frame:SetAlpha(alpha) end
@@ -771,6 +773,7 @@ end
 
 function Display:RevealTemplates()
     if InCombatLockdown() or self.revealed then return end
+    Addon:Trace("Display:RevealTemplates")
     local store = {}
     self.revealed = store
     Reveal(store, MainActionBar)

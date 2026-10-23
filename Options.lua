@@ -414,6 +414,7 @@ end
 
 function Options:StartBarBind()
     if self.binding then return end
+    Addon:Trace("Options:StartBarBind")
     self:WatchBindTargets()
     self.binding = {}
     Addon.Input:SetBindingMode(true)
@@ -424,6 +425,7 @@ end
 
 function Options:StopBarBind()
     if not self.binding then return end
+    Addon:Trace("Options:StopBarBind")
     self:SetBindTarget(nil, nil, nil)
     self.binding = nil
     if self.catcher then self.catcher:Hide() end
@@ -463,6 +465,7 @@ function Options:Register()
         local setting = Settings.RegisterAddOnSetting(category, "CLASSICCONSOLEGAMEPADUI_" .. key:upper(), key, Addon.db,
             info.min and Settings.VarType.Number or Settings.VarType.Boolean, text[key], info.default)
         setting:SetValueChangedCallback(function()
+            Addon:Trace("setting " .. key)
             Addon:CheckNativeTaint("setting changed: " .. key)
             -- Non-layout options must not rebuild native frames while Settings owns focus.
             if geometrySettings[key] then Addon.Layout.dirty = true end

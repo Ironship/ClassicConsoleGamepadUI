@@ -127,6 +127,7 @@ function ItemDelete:Refresh()
         and dialog and dialog:IsShown() and dialog.gamepadFocused
         and deleteDialogs[dialog.which] and dialog.dialogInfo.requiresConfirmation
     if not wanted then
+        if self.header and self.header:IsShown() then Addon:Trace("ItemDelete hide") end
         if self.header then self.header:Hide() end
         self:RestoreSequence()
         return
@@ -147,6 +148,7 @@ function ItemDelete:Refresh()
         return
     end
     header:Hide()
+    Addon:Trace("ItemDelete show")
     -- Keep the native sequence and its binding stack untouched; only its art is covered.
     self.sequence, self.sequenceAlpha = sequence, sequence:GetAlpha()
     sequence:SetAlpha(0)
