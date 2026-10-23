@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.40
+
+- Removed **Upper row shift** (and `/cgp shift`). It only nudged the compact upper
+  row sideways and did nothing in the 12-slot layout. The upper row now starts
+  directly above the first bottom slot automatically.
+- Compact layout: the bags move under the right end of the upper row, closing the
+  empty gap left in the bottom row by the relocated micro menu.
+- Chat no longer jumps while bar settings change: it is not reset on every rebuild,
+  and its clearance is measured once the rebuilt bars have settled.
+
 ## 0.1.0-alpha.39
 
 - Fix: after switching to 12 slots, the extra upper slots (buttons 9-12 of each

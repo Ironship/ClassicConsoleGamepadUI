@@ -65,8 +65,6 @@ local extraText = ({
     plPL = {
         open = "Otwórz", apply = "Zastosuj", layout = "Układ pasków", menu = "Panel menu", hints = "Podpowiedzi i podświetlenie",
         legend = "Legenda pada", chat = "Chat",
-        upperShift = "Przesunięcie górnego rzędu (pola)",
-        upperShiftTip = "Przesuń górny rząd w prawo o wybraną liczbę pól. Dotyczy układu kompaktowego.",
         contextGap = "Odstęp wskaźników od górnego rzędu",
         contextGapTip = "Odstęp nad paskiem dla L1/R1 i przycisków klasy. Lewy wskaźnik pozostaje po lewej, prawy po prawej.",
         menuRight = "Odstęp menu od prawej krawędzi", menuBottom = "Odstęp menu od dołu ekranu",
@@ -100,8 +98,6 @@ local extraText = ({
     deDE = {
         open = "Öffnen", apply = "Anwenden", layout = "Leistenanordnung", menu = "Mikromenü", hints = "Hinweise und Hervorhebung",
         legend = "Gamepad-Legende", chat = "Chat",
-        upperShift = "Obere Reihe verschieben (Plätze)",
-        upperShiftTip = "Die obere Reihe um diese Anzahl Plätze nach rechts verschieben. Gilt für die kompakte Anordnung.",
         contextGap = "Abstand der Anzeigen zur oberen Reihe",
         contextGapTip = "Abstand für L1/R1 und Klassenaktionen über der Leiste. Die linke Anzeige bleibt links, die rechte rechts.",
         menuRight = "Menüabstand zum rechten Bildschirmrand", menuBottom = "Menüabstand zum unteren Bildschirmrand",
@@ -135,7 +131,6 @@ local extraText = ({
 })[GetLocale()] or {
     open = "Open", apply = "Apply", layout = "Bar layout", menu = "Micro menu", hints = "Hints and highlighting",
     legend = "Gamepad legend", chat = "Chat",
-    upperShift = "Upper row shift (slots)", upperShiftTip = "Move the upper row right by this many slots. Applies to the compact layout.",
     contextGap = "Indicator gap above the upper row", contextGapTip = "Gap for L1/R1 indicators and class actions. The left indicator stays on the left and the right stays on the right.",
     menuRight = "Menu distance from the right edge", menuBottom = "Menu distance from the bottom edge",
     menuTip = "0 places the menu against the screen edge. Bags keep their position.",
@@ -170,7 +165,6 @@ for key, value in pairs(extraText) do text[key] = value end
 local controls = {
     { key = "enabled", default = true, section = "layout" },
     { key = "compact", default = true },
-    { key = "upperShift", default = 4, min = 0, max = 8, step = 1 },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
     { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
     { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, tip = "menuTip" },
@@ -192,11 +186,11 @@ local controls = {
 
 -- Only bar, glyph and spacing options; chat, legend and deletion stay as chosen.
 local deckPreset = {
-    compact = true, upperShift = 4, contextGap = 8, menuRight = 4, menuBottom = 0,
+    compact = true, contextGap = 8, menuRight = 4, menuBottom = 0,
     promptScale = 1.25, modifierScale = 1.8, showKeyboardHints = false, highlightActive = true,
 }
 
-local geometrySettings = { compact = true, upperShift = true, contextGap = true,
+local geometrySettings = { compact = true, contextGap = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
 function Options:InitializeDefaults()

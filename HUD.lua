@@ -87,10 +87,8 @@ function HUD:RefreshChat(wanted, changedMode)
     wanted = wanted and (Addon.db.raiseChat or Addon.db.anchorChat)
     if changedMode then self:ResetChat(true) end
     if InCombatLockdown() then return end
-    if self.chatRevision ~= Addon.Layout.revision then
-        self:ResetChat()
-        self.chatRevision = Addon.Layout.revision
-    end
+    -- The target is always computed from the saved base position, so a bar
+    -- rebuild needs no reset; resetting made chat jump on every slider step.
     if not wanted then
         self:ResetChat()
         return

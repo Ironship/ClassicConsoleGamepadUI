@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.39"
+Addon.version = "0.1.0-alpha.40"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -182,6 +182,7 @@ function Addon:Refresh()
         if not gamepad then self:QueueRefresh(true) end
     end
     self.HUD:Refresh(wanted and not self.Display:IsEditing(), changed)
+    local revision = self.Layout.revision
     self:CheckNativeTaint("HUD:Refresh")
     local ok, visible = pcall(self.Display.Refresh, self.Display, wanted)
     self:CheckNativeTaint("Display:Refresh")
@@ -192,7 +193,12 @@ function Addon:Refresh()
         self.classicVisible = visible
     end
     if not self.classicVisible then self.Layout:Restore(false) end
-    self.HUD:RefreshChat(self.classicVisible, changed)
+    if self.classicVisible and not changed and self.Layout.revision ~= revision then
+        -- Measure chat clearance on the next tick, against the settled bars.
+        self:QueueRefresh(true)
+    else
+        self.HUD:RefreshChat(self.classicVisible, changed)
+    end
     self:CheckNativeTaint("HUD:RefreshChat")
     self.ItemDelete:Refresh()
     self:CheckNativeTaint("ItemDelete:Refresh")
@@ -320,13 +326,6 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         Addon.db.enabled = command == "on"
     elseif command == "native" or command == "classic" then
         Addon.nativeView = command == "native"
-    elseif command == "shift" then
-        local value = tonumber(input:match("(%d+)"))
-        Addon.db.upperShift = math.max(0, math.min(8, value or 4))
-        Addon.Layout.dirty = true
-        Addon:QueueRefresh(true)
-        Addon:Print("Upper row shift: " .. Addon.db.upperShift .. " slots")
-        return
     elseif command == "scale" then
         Addon:Print("Use the game's UI scale and Edit Mode; ClassicConsoleGamepadUI follows the original frames.")
         return

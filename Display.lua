@@ -165,10 +165,6 @@ end
 
 function Display:RefreshGeometry()
     if self.layoutRevision == Addon.Layout.revision then return true end
-    local upperShift = 0
-    if Addon.Layout.compact then
-        upperShift = (Addon.db.upperShift or 0) * (Addon.Layout.cutWidth / 4)
-    end
     for i, slot in ipairs(self.slots) do
         local template = slot.template
         local promptScale = Addon.db.promptScale
@@ -179,12 +175,11 @@ function Display:RefreshGeometry()
             glyph:SetSize(20 * modifierScale, 20 * modifierScale)
             glyph:SetPoint("TOPLEFT", ((index - 1) * 13 - 4) * modifierScale, 3 * modifierScale)
         end
-        local offset = i >= 13 and i <= 36 and upperShift or nil
         -- The stock main row runs right to left; mirror the visible row.
         local placeOn = template
         if i <= 12 and not Addon.Layout.compact then placeOn = self.slots[13 - i].template
         elseif i <= 8 then placeOn = self.slots[9 - i].template end
-        if not Addon.Layout:Place(slot, placeOn, nil, nil, offset) then return false end
+        if not Addon.Layout:Place(slot, placeOn) then return false end
         for _, entry in ipairs({
             { slot.Background, template.SlotBackground }, { slot.SlotArt, template.SlotArt },
             { slot.Border, template:GetNormalTexture() }, { slot.Checked, template:GetCheckedTexture() },
@@ -253,25 +248,58 @@ function Display:AlignCompactChrome()
         if border then border:SetWidth(border:GetWidth() - (Addon.Layout.cutWidth or 0)) end
         return
     end
-    local left, right
-    local function Include(region)
-        local regionLeft, regionRight = UIBox(region)
-        if not regionLeft then return end
-        left = left and math.min(left, regionLeft) or regionLeft
-        right = right and math.max(right, regionRight) or regionRight
+    -- Work from one set of measured positions; later moves never re-read rects.
+    local boxes = {}
+    for i, slot in ipairs(self.slots) do
+        local regionLeft, regionRight, bottom = UIBox(slot)
+        if regionLeft then boxes[i] = { regionLeft, regionRight, bottom } end
     end
-    for _, index in ipairs({
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-        13, 14, 15, 16, 17, 18, 19, 20,
-        25, 26, 27, 28, 29, 30, 31, 32, 37, 38,
-    }) do
-        Include(self.slots[index])
+    -- Fixed slot sets: the layout must not depend on which slots happen to be
+    -- visible when it is rebuilt (a class action can appear later).
+    local function Span(indices)
+        local spanLeft, spanRight
+        for _, i in ipairs(indices) do
+            local box = boxes[i]
+            if box then
+                spanLeft = spanLeft and math.min(spanLeft, box[1]) or box[1]
+                spanRight = spanRight and math.max(spanRight, box[2]) or box[2]
+            end
+        end
+        return spanLeft, spanRight
     end
-    if BagsBar and BagsBar:IsShown() then Include(BagsBar) end
-    if not left or not right or right - left < 8 then
+    local bottomLeft, bottomRight = Span({ 1, 2, 3, 4, 5, 6, 7, 8 })
+    local upperLeft, upperRight = Span({ 13, 14, 15, 16, 17, 18, 19, 20, 25, 26, 27, 28, 29, 30, 31, 32 })
+    if not bottomLeft or not upperLeft then
         self:PlaceMicroMenuRight()
         return
     end
+
+    -- Classic stack: the L2 half starts above the first bottom slot. Class
+    -- actions and shoulder indicators sit on the upper row and move with it.
+    local dx = bottomLeft - upperLeft
+    for _, range in ipairs({ { 9, 10 }, { 13, 38 } }) do
+        for i = range[1], range[2] do
+            local box = boxes[i]
+            if box then box[1], box[2] = box[1] + dx, box[2] + dx end
+        end
+    end
+    upperLeft, upperRight = upperLeft + dx, upperRight + dx
+
+    -- Bags close the space the micro menu used to fill: right-aligned under
+    -- the R2 half, never closer to the bottom row than the gap between halves.
+    local bagsLeft, bagsBottom, bagsScale, bagsRight
+    if BagsBar and BagsBar:IsShown() then
+        local regionLeft, regionRight, bottom, _, scale = UIBox(BagsBar)
+        if regionLeft then
+            local gap = boxes[20] and boxes[25] and math.max(0, boxes[25][1] - boxes[20][2]) or 0
+            bagsLeft = math.max(bottomRight + gap, upperRight - (regionRight - regionLeft))
+            bagsRight, bagsBottom, bagsScale = bagsLeft + regionRight - regionLeft, bottom, scale
+        end
+    end
+
+    local left, right = math.min(bottomLeft, upperLeft), math.max(bottomRight, upperRight, bagsRight or bottomRight)
+    local shouldersLeft, shouldersRight = Span({ 37, 38 })
+    if shouldersLeft then left, right = math.min(left, shouldersLeft), math.max(right, shouldersRight) end
 
     local buttonScale = (MainActionBar and MainActionBar:GetEffectiveScale() or UIParent:GetEffectiveScale()) / UIParent:GetEffectiveScale()
     local overlap = 30 * buttonScale
@@ -283,7 +311,7 @@ function Display:AlignCompactChrome()
     local rightLeft, rightRight = UIBox(rightTex)
     local borderLeft, borderRight, borderBottom, _, borderScale = UIBox(border)
     local statusPoints = {}
-    for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer, BagsBar }) do
+    for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
         local frameLeft, _, bottom, _, scale = UIBox(frame)
         if frameLeft then statusPoints[frame] = { frameLeft, bottom, scale } end
     end
@@ -294,13 +322,16 @@ function Display:AlignCompactChrome()
     local outerRight = (rightRight or right) + rightShift
     local centerShift = UIParent:GetWidth() / 2 - (outerLeft + outerRight) / 2
 
+    for i, slot in ipairs(self.slots) do
+        local box = boxes[i]
+        if box then MoveX(slot, box[1] + centerShift, box[3]) end
+    end
     local snapshot = {}
     local function Remember(region)
         if not region or snapshot[region] then return end
         local regionLeft, _, bottom = UIBox(region)
         if regionLeft then snapshot[region] = { regionLeft, bottom } end
     end
-    for _, slot in ipairs(self.slots) do Remember(slot) end
     for _, entry in ipairs(self.art) do Remember(entry.texture) end
     Remember(self.pageLabel)
     for region, point in pairs(snapshot) do
@@ -326,8 +357,9 @@ function Display:AlignCompactChrome()
             Addon.Layout:SetBottomLeft(frame, left + centerShift, point[2])
         end
     end
-    local bagsPoint = statusPoints[BagsBar]
-    if bagsPoint then Addon.Layout:SetBottomLeft(BagsBar, bagsPoint[1] + centerShift, bagsPoint[2]) end
+    if bagsLeft and bagsScale and bagsScale > 0 then
+        Addon.Layout:SetBottomLeft(BagsBar, (bagsLeft + centerShift) / bagsScale, bagsBottom / bagsScale)
+    end
     self:PlaceMicroMenuRight()
 end
 

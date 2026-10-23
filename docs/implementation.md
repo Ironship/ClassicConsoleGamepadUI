@@ -80,7 +80,10 @@ matching the exported source commit's build **1.60.1 (70450)**.
   Native flyout visibility securely hides/resumes hitboxes and their bindings.
 - The upper row stays fixed: L2 uses slots 13-20 and R2 uses slots 25-32.
   Compact mode hides 21-24 and 33-36, moves the right section left by four stock
-  button pitches and shortens the main border by the same amount. After the
+  button pitches and shortens the main border by the same amount. The upper row is
+  then aligned so its first slot starts above bottom slot 1 (no manual shift), and
+  the bags are right-aligned under slot 32, at least one half-gap from slot 8.
+  Positions come from one measurement pass. After the
   visible slots, micro menu and bags are placed, the mirrored gryphons close up
   to that span (keeping the stock 30-point overlap), the border is trimmed where
   it sticks out, and the experience/reputation bars adopt that width. The whole

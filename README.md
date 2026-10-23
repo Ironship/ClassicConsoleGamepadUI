@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.39**, interface **16001**.
+Version **0.1.0-alpha.40**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -19,7 +19,7 @@ anchors are rebuilt once; input-mode changes retain the new layout applied by th
   the main border, menu/bag positions and experience/reputation bars fit the shorter HUD.
 - The real Blizzard micro menu, bags and experience/reputation bars.
 - **Settings → AddOns → ClassicConsoleGamepadUI** (`/cgp` opens it in keyboard/mouse mode) has 20 settings:
-  enable the HUD, choose compact bars, shift the upper row, adjust shoulder/class
+  enable the HUD, choose compact bars, adjust shoulder/class
   indicator spacing, position the micro menu, resize controller glyphs and LT/RT hints independently, toggle
   keyboard labels, menu hints and active-layer highlighting, position the legend,
   position chat from the screen edges, and toggle chat avoidance with a configurable gap. The same scrollable panel
@@ -47,6 +47,8 @@ anchors are rebuilt once; input-mode changes retain the new layout applied by th
   R2 (RT) actions on the right. They highlight in place when their trigger is pressed.
   The bottom eight slots show the no-trigger layer, native L1/R1 (LB/RB) targeting
   or shortcut actions, or the L2+R2 layer while both triggers are active.
+  The upper row starts directly above the first bottom slot, and the bags sit under
+  the right end of the upper row, closing the space the micro menu used to fill.
   Gryphons and the experience/reputation bars close up to that shorter span, and the whole bar is centered.
   The micro menu sits on the right edge of the screen, flush with the bottom edge
   by default. Both edge distances are configurable in `/cgp`.
@@ -86,7 +88,8 @@ anchors are rebuilt once; input-mode changes retain the new layout applied by th
   default, preserving existing Edit Mode positions.
 - **Move chat above the action bar** independently raises chat when it overlaps the
   classic bars or end caps, leaving a configurable 12-point default gap. Disable it
-  for an exact bottom-edge position. Chat can move back down as the gap or bar
+  for an exact bottom-edge position. Changing bar settings no longer makes chat jump:
+  its clearance is measured once the rebuilt bars have settled. Chat can move back down as the gap or bar
   layout changes; offsets do not accumulate. Width and height stay as configured,
   and docked tabs move together. Native dragging and resizing establish a new base
   position; native view restores the original anchors.
@@ -170,7 +173,6 @@ Commands:
 - `/cgp deck` — apply the Steam Deck preset.
 - `/cgp debug` — toggle the diagnostic text line shown while the classic HUD is inactive.
 - `/cgp status` — version, state and the last layout/input diagnostic. It also reports whether a blocked-action snapshot was saved.
-- `/cgp shift <0-8>` — move the compact upper row sideways by that many slots (default 4).
 - `/cgp on` / `/cgp off` — enable/disable the visual changes.
 - `/cgp native` / `/cgp classic` — temporarily switch the action HUD in this session.
 
