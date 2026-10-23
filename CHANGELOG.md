@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.46
+
+- Shorter README. The repository is now called ClassicConsoleGamepadUI; the TOC website points to it.
+- No code changes.
+
 ## 0.1.0-alpha.45
 
 - The classic bars in the action editor are drawn one strata above the editor's dimmed background
