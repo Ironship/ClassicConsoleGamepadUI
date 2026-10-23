@@ -2,10 +2,21 @@
 
 Gamepad support for WoW Forever, with the classic look and feel.
 
-Turn on Gamepad Mode and keep the normal keyboard-and-mouse UI on screen. The game's own
+I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own
 controller controls stay as they are. Simple settings, not much to configure.
 
 Version 0.1.0-alpha.46. Alpha: expect bugs.
+
+## Compact mode (best for Xbox gamepad)
+
+<img width="1361" height="464" alt="1" src="https://github.com/user-attachments/assets/19bbc0d2-2a85-47e0-8dbf-571e4d98240d" />
+
+## Classic mode
+
+<img width="1975" height="443" alt="4" src="https://github.com/user-attachments/assets/b2f037a4-de36-43ad-8367-776f567c6661" />
+
+https://github.com/user-attachments/assets/981190c8-374b-48dc-9a8c-b1337b2b1fcb
+
 
 ## What it does
 
