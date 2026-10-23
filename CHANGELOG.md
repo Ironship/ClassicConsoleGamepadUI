@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.41
+
+- Removed the Steam Deck preset and `/cgp deck`. It only set existing options;
+  the Steam Deck tips in the README cover the same choices.
+
 ## 0.1.0-alpha.40
 
 - Removed **Upper row shift** (and `/cgp shift`). It only nudged the compact upper

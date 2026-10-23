@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.40"
+Addon.version = "0.1.0-alpha.41"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -329,9 +329,6 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "scale" then
         Addon:Print("Use the game's UI scale and Edit Mode; ClassicConsoleGamepadUI follows the original frames.")
         return
-    elseif command == "deck" then
-        Addon.Options:ApplyDeckPreset()
-        return
     elseif command == "debug" then
         Addon.db.debug = not Addon.db.debug or nil
         Addon:Print("Debug overlay " .. (Addon.db.debug and "on" or "off"))
@@ -367,7 +364,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | bindings | edit | on | off | native | classic | status | deck | debug")
+        Addon:Print("/cgp settings | bindings | edit | on | off | native | classic | status | debug")
         return
     end
     Addon:QueueRefresh(true)

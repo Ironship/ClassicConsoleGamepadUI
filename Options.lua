@@ -63,7 +63,7 @@ local text = ({
 
 local extraText = ({
     plPL = {
-        open = "Otwórz", apply = "Zastosuj", layout = "Układ pasków", menu = "Panel menu", hints = "Podpowiedzi i podświetlenie",
+        open = "Otwórz", layout = "Układ pasków", menu = "Panel menu", hints = "Podpowiedzi i podświetlenie",
         legend = "Legenda pada", chat = "Chat",
         contextGap = "Odstęp wskaźników od górnego rzędu",
         contextGapTip = "Odstęp nad paskiem dla L1/R1 i przycisków klasy. Lewy wskaźnik pozostaje po lewej, prawy po prawej.",
@@ -88,15 +88,11 @@ local extraText = ({
         bindPending = "Zamknij ustawienia, aby rozpocząć przypisywanie.",
         editRouteKey = "Natywny edytor akcji otworzysz przyciskiem: %s",
         editRouteCommand = "Wpisz na czacie /click GamepadActionBarEditFrameEnterEditMode, aby otworzyć natywny edytor akcji.",
-        deck = "Preset Steam Deck",
-        deckTip = "Ustawia układ pod ekran 1280×800: kompaktowe paski (8 pól), większe symbole pada (125%) i podpowiedzi LT/RT (180%), mniejsze odstępy, bez napisów klawiatury. Pozostałe opcje zostają. Dla tylnych przycisków L4/L5/R4/R5 wyłącz potem kompaktowe paski. Zostanie zastosowany po zamknięciu ustawień.",
-        deckPending = "Preset Steam Deck zostanie zastosowany po zamknięciu ustawień.",
-        deckApplied = "Zastosowano preset Steam Deck.",
         items = "Przedmioty", easyDelete = "Łatwe usuwanie: X, X, A, A",
         easyDeleteTip = "W oknie usuwania wymagającym sekwencji przycisków użyj X, X, A, A. Czwarty przycisk zatwierdza usunięcie. B nadal anuluje, błędny przycisk zeruje sekwencję. Działa poza walką w trybie pada.",
     },
     deDE = {
-        open = "Öffnen", apply = "Anwenden", layout = "Leistenanordnung", menu = "Mikromenü", hints = "Hinweise und Hervorhebung",
+        open = "Öffnen", layout = "Leistenanordnung", menu = "Mikromenü", hints = "Hinweise und Hervorhebung",
         legend = "Gamepad-Legende", chat = "Chat",
         contextGap = "Abstand der Anzeigen zur oberen Reihe",
         contextGapTip = "Abstand für L1/R1 und Klassenaktionen über der Leiste. Die linke Anzeige bleibt links, die rechte rechts.",
@@ -121,15 +117,11 @@ local extraText = ({
         bindPending = "Einstellungen schließen, um mit dem Zuweisen zu beginnen.",
         editRouteKey = "Den nativen Aktionseditor öffnest du mit: %s",
         editRouteCommand = "Im Chat /click GamepadActionBarEditFrameEnterEditMode eingeben, um den nativen Aktionseditor zu öffnen.",
-        deck = "Steam-Deck-Voreinstellung",
-        deckTip = "Passt die Anordnung an 1280×800 an: kompakte Leisten (8 Plätze), größere Controllersymbole (125 %) und LT/RT-Hinweise (180 %), kleinere Abstände, ohne Tastaturbeschriftung. Andere Optionen bleiben. Für die Rücktasten L4/L5/R4/R5 danach die kompakten Leisten deaktivieren. Wird nach dem Schließen der Einstellungen angewendet.",
-        deckPending = "Die Steam-Deck-Voreinstellung wird nach dem Schließen der Einstellungen angewendet.",
-        deckApplied = "Steam-Deck-Voreinstellung angewendet.",
         items = "Gegenstände", easyDelete = "Einfaches Zerstören: X, X, A, A",
         easyDeleteTip = "Im Zerstörungsdialog mit Tastenkombination X, X, A, A drücken. Die vierte Taste bestätigt das Zerstören. B bricht weiterhin ab; eine falsche Taste setzt die Folge zurück. Nur außerhalb des Kampfes im Gamepad-Modus.",
     },
 })[GetLocale()] or {
-    open = "Open", apply = "Apply", layout = "Bar layout", menu = "Micro menu", hints = "Hints and highlighting",
+    open = "Open", layout = "Bar layout", menu = "Micro menu", hints = "Hints and highlighting",
     legend = "Gamepad legend", chat = "Chat",
     contextGap = "Indicator gap above the upper row", contextGapTip = "Gap for L1/R1 indicators and class actions. The left indicator stays on the left and the right stays on the right.",
     menuRight = "Menu distance from the right edge", menuBottom = "Menu distance from the bottom edge",
@@ -153,10 +145,6 @@ local extraText = ({
     bindPending = "Close the settings to start assigning keys.",
     editRouteKey = "Open the native action editor with: %s",
     editRouteCommand = "Type /click GamepadActionBarEditFrameEnterEditMode in chat to open the native action editor.",
-    deck = "Steam Deck preset",
-    deckTip = "Fits the 1280×800 screen: compact bars (8 slots), larger controller glyphs (125%) and LT/RT hints (180%), tighter gaps and no keyboard labels. Other options are kept. For the L4/L5/R4/R5 back buttons, disable compact bars afterwards. Applies when the settings close.",
-    deckPending = "The Steam Deck preset applies when the settings close.",
-    deckApplied = "Steam Deck preset applied.",
     items = "Items", easyDelete = "Easy deletion: X, X, A, A",
     easyDeleteTip = "Use X, X, A, A in item deletion dialogs that require a button sequence. The fourth press confirms deletion. B still cancels; a wrong button resets the sequence. Available outside combat in Gamepad Mode.",
 }
@@ -182,12 +170,6 @@ local controls = {
     { key = "raiseChat", default = true },
     { key = "chatGap", default = 12, min = 0, max = 100, step = 2, parent = "raiseChat" },
     { key = "easyDelete", default = false, section = "items" },
-}
-
--- Only bar, glyph and spacing options; chat, legend and deletion stay as chosen.
-local deckPreset = {
-    compact = true, contextGap = 8, menuRight = 4, menuBottom = 0,
-    promptScale = 1.25, modifierScale = 1.8, showKeyboardHints = false, highlightActive = true,
 }
 
 local geometrySettings = { compact = true, contextGap = true,
@@ -460,30 +442,13 @@ function Options:BindFromBars()
     self:StartBarBind()
 end
 
--- Writes only ClassicConsoleGamepadUI's saved table. Inside Settings it waits for the
--- close, so the open panel is never refreshed from addon code.
-function Options:ApplyDeckPreset()
-    if SettingsPanel:IsShown() then
-        self.pendingDeck = true
-        Addon:Print(text.deckPending)
-        return
-    end
-    for key, value in pairs(deckPreset) do Addon.db[key] = value end
-    Addon.Layout.dirty = true
-    Addon.Input.dirty = true
-    Addon:QueueRefresh(true)
-    Addon:Print(text.deckApplied)
-end
-
 function Options:ObserveSettingsPanel()
     SettingsPanel:HookScript("OnHide", function()
-        if not self.pendingBind and not self.pendingDeck then return end
-        local bind, deck = self.pendingBind, self.pendingDeck
-        self.pendingBind, self.pendingDeck = nil, nil
-        -- Continue after the native close has finished.
+        if not self.pendingBind then return end
+        self.pendingBind = nil
+        -- Start after the native close has finished.
         C_Timer.After(0, function()
-            if deck then self:ApplyDeckPreset() end
-            if bind and OutsideCombat() then self:StartBarBind() end
+            if OutsideCombat() then self:StartBarBind() end
         end)
     end)
 end
@@ -518,9 +483,6 @@ function Options:Register()
         initializers[key] = initializer
         if info.parent then initializer:SetParentInitializer(initializers[info.parent]) end
     end
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Steam Deck"))
-    layout:AddInitializer(CreateSettingsButtonInitializer(text.deck, text.apply,
-        function() self:ApplyDeckPreset() end, text.deckTip, true))
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(SETTINGS_KEYBINDINGS_LABEL))
     for _, info in ipairs({
         { text.bind, text.bindTip, function() self:BindFromBars() end },

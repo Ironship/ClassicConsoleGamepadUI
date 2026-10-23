@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.40**, interface **16001**.
+Version **0.1.0-alpha.41**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -106,10 +106,6 @@ apply after combat ends.
 The client has no separate Steam Deck mode: the Deck is a controller in Gamepad Mode.
 Steam Input reports Xbox-style A/B/X/Y, so the glyphs match the Deck's face buttons.
 
-- **Settings → Steam Deck preset** (or `/cgp deck`) applies, in one step: compact
-  8-slot bars, controller glyphs at 125%, LT/RT hints at 180%, tighter indicator and
-  menu gaps, and no keyboard labels. Chat, legend and Easy deletion keep their values.
-  Pressed inside Settings, it applies when the settings close.
 - **Compact (8 slots)** fits the 1280×800 screen best and needs no extra buttons.
 - **12 slots** shows all 32 native actions. Their extra slots also answer to the
   keyboard bindings of their classic bar positions, so the back grips (L4/L5/R4/R5)
@@ -170,7 +166,6 @@ Commands:
 - `/cgp bindings` — open the game's binding editor (keyboard/mouse mode; route in Gamepad Mode).
 - `/cgp edit` — show how to open the native gamepad action editor: its bound button,
   or `/click GamepadActionBarEditFrameEnterEditMode` typed in chat.
-- `/cgp deck` — apply the Steam Deck preset.
 - `/cgp debug` — toggle the diagnostic text line shown while the classic HUD is inactive.
 - `/cgp status` — version, state and the last layout/input diagnostic. It also reports whether a blocked-action snapshot was saved.
 - `/cgp on` / `/cgp off` — enable/disable the visual changes.
