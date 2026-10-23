@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.44"
+Addon.version = "0.1.0-alpha.45"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -66,8 +66,12 @@ end
 -- tainted by this addon, and a count of the fields tainted by every other addon.
 function Addon:ScanTaint(maxDepth)
     local ours, others, seen, budget = {}, {}, {}, 30000
+    -- The first four roots are the gamepad focus, navigation, binding and action-bar state; any
+    -- addon's taint there can block protected calls, so those fields are named whoever owns them.
+    local foreign, critical = {}, 4
+    others.foreign = foreign
     if not issecurevariable then return ours, others end
-    local function Walk(label, object, depth)
+    local function Walk(label, object, depth, named)
         if type(object) ~= "table" or seen[object] or budget <= 0 then return end
         seen[object] = true
         for key, value in pairs(object) do
@@ -81,17 +85,21 @@ function Addon:ScanTaint(maxDepth)
                     else
                         owner = tostring(owner)
                         others[owner] = (others[owner] or 0) + 1
+                        if named and #foreign < 40 then
+                            foreign[#foreign + 1] = label .. "." .. tostring(key) .. " = " .. owner
+                        end
                     end
                 end
                 if depth < maxDepth and type(value) == "table" and keyType == "string" then
-                    Walk(label .. "." .. key, value, depth + 1)
+                    Walk(label .. "." .. key, value, depth + 1, named)
                 end
             end
             if budget <= 0 then return end
         end
     end
-    for _, root in ipairs(ScanRoots()) do Walk(root[1], root[2], 0) end
+    for index, root in ipairs(ScanRoots()) do Walk(root[1], root[2], 0, index <= critical) end
     table.sort(ours)
+    table.sort(foreign)
     return ours, others
 end
 
@@ -372,16 +380,22 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         return
     elseif command == "taint" then
         local ours, others = Addon:ScanTaint(2)
-        local summary = {}
+        local summary, foreign = {}, others.foreign or {}
+        others.foreign = nil
         for owner, count in pairs(others) do summary[#summary + 1] = owner .. " " .. count end
         table.sort(summary)
         Addon.diagnostics.lastScan = { time = date("%Y-%m-%d %H:%M:%S"), fields = ours, others = summary,
-            trace = TraceSnapshot() }
+            foreign = foreign, trace = TraceSnapshot() }
         Addon:Print(#ours .. " native fields tainted by this addon"
             .. (#ours > 0 and ":" or " (none)."))
         for i = 1, math.min(#ours, 20) do print("  " .. ours[i]) end
         if #ours > 20 then print("  ... " .. (#ours - 20) .. " more in the saved variables") end
         if #summary > 0 then Addon:Print("Other addons: " .. table.concat(summary, ", ")) end
+        if #foreign > 0 then
+            Addon:Print(#foreign .. " gamepad focus/navigation/binding fields tainted by other addons:")
+            for i = 1, math.min(#foreign, 12) do print("  " .. foreign[i]) end
+            if #foreign > 12 then print("  ... " .. (#foreign - 12) .. " more in the saved variables") end
+        end
         C_Timer.After(0, function()
             if C_AddOns and C_AddOns.SaveAddOns then pcall(C_AddOns.SaveAddOns) end
         end)

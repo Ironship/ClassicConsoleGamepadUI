@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.44**, interface **16001**.
+Version **0.1.0-alpha.45**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -136,7 +136,7 @@ enable/disable or `/cgp native` requested during combat apply after combat ends.
 
 The game's action editor ("Bind to Action Bar" and "Edit Action Bar", opened from the
 spellbook or the native edit button) keeps the classic bars: they mirror the editor's own
-crossbar, which is faded out, and are drawn above the editor's dimmed background. The
+crossbar, which is faded out, and are drawn one strata above the editor's dimmed background. The
 classic bars are not clickable while the editor is open; its page tracker (current page and
 the button hint for changing pages) stays visible. The native HUD is exposed automatically
 in Edit Mode and while a native action flyout is open; the classic view returns when that
@@ -176,7 +176,7 @@ Commands:
   or `/click GamepadActionBarEditFrameEnterEditMode` typed in chat.
 - `/cgp debug` — toggle the diagnostic text line shown while the classic HUD is inactive.
 - `/cgp status` — version, state and the last layout/input diagnostic. It also reports how many blocked actions were saved this session.
-- `/cgp taint` — list the native gamepad, navigation, binding, chat and action-bar fields this addon has tainted (read-only), with the other addons' counts, and save the result. Run it after each step of a reproduction to find the step that introduces the taint.
+- `/cgp taint` — list the native gamepad, navigation, binding, chat and action-bar fields this addon has tainted (read-only), with the other addons' counts, and name any field of the gamepad focus, navigation, binding and action-bar state that another addon tainted. The result is saved. Run it after each step of a reproduction to find the step that introduces the taint.
 - `/cgp on` / `/cgp off` — enable/disable the visual changes.
 - `/cgp native` / `/cgp classic` — temporarily switch the action HUD in this session.
 

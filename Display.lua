@@ -782,17 +782,28 @@ end
 
 -- The editor dims the screen with a HIGH-strata background. Draw above it while
 -- the editor is open, and return to the ordinary layer afterwards.
+local STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
+
+local function StrataAbove(strata)
+    for i, name in ipairs(STRATA) do
+        if name == strata then return STRATA[math.min(i + 1, #STRATA)] end
+    end
+    return "FULLSCREEN_DIALOG"
+end
+
+-- The editor dims the screen with a background in its own strata, and it raises itself above
+-- every sibling in that strata, so no frame level beats it. Draw one strata higher instead:
+-- the bars sit away from the editor's dialogs, so nothing of theirs is covered.
 function Display:SetLayer(editing)
     local root = self.root
-    if not root or self.layerEditing == editing then return end
-    self.layerEditing = editing
-    if editing then
-        SetStrata(root, GamepadActionBarEditFrame:GetFrameStrata())
-        root:SetFrameLevel(GamepadActionBarEditFrame:GetFrameLevel() + 1)
-    else
-        SetStrata(root, "LOW")
-        root:SetFrameLevel(self.baseLevel or root:GetFrameLevel())
+    if not root then return end
+    local strata = "LOW"
+    if editing and GamepadActionBarEditFrame then
+        strata = StrataAbove(GamepadActionBarEditFrame:GetFrameStrata())
     end
+    if self.layerStrata == strata then return end
+    self.layerStrata = strata
+    SetStrata(root, strata)
 end
 
 -- Edit Mode bars override Show/Hide in Lua and record isShownExternal;

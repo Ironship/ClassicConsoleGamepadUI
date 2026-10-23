@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.45
+
+- The classic bars in the action editor are drawn one strata above the editor's dimmed background
+  (they were still behind it: the editor raises itself above any frame level in its own strata).
+- `/cgp taint` also names the fields of the gamepad focus, navigation, binding and action-bar state
+  that other addons tainted, so a block blamed on another addon can be traced to a field.
+
 ## 0.1.0-alpha.44
 
 - 12-slot layout: the last main-row positions (keys `0`, `-`, `=`, and `9` when the character has no
