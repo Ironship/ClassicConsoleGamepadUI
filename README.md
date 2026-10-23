@@ -1,7 +1,7 @@
 # ClassicConsoleGamepadUI
 
 ClassicConsoleGamepadUI brings a familiar classic HUD to **WoW Forever's native gamepad mode**.
-Version **0.1.0-alpha.41**, interface **16001**.
+Version **0.1.0-alpha.42**, interface **16001**.
 
 The addon activates when the player enables Gamepad Mode. Connecting a controller
 alone does not activate it. Turning Gamepad Mode off restores the keyboard/mouse HUD.
@@ -130,10 +130,14 @@ temporary keyboard overrides. The controller keeps using the game's native bindi
 Input frames are created and positioned outside combat. Changes to layout, addon
 enable/disable or `/cgp native` requested during combat apply after combat ends.
 
-The native action HUD is exposed automatically while editing bindings or using a
-native action flyout. The classic view returns when that interaction
-ends. Other windows keep their native gamepad navigation and prompts; this alpha does
-not undo their controller-specific layouts.
+The game's action editor ("Bind to Action Bar" and "Edit Action Bar", opened from the
+spellbook or the native edit button) keeps the classic bars: they mirror the editor's own
+crossbar, which is faded out, and are drawn above the editor's dimmed background. The
+classic bars are not clickable while the editor is open; its page tracker (current page and
+the button hint for changing pages) stays visible. The native HUD is exposed automatically
+in Edit Mode and while a native action flyout is open; the classic view returns when that
+interaction ends. Other windows keep their native gamepad navigation and prompts; this alpha
+does not undo their controller-specific layouts.
 
 Classic slots accept mouse drag/drop outside combat. Pickup follows the game's
 action-bar lock setting and its pickup modifier (normally Shift). Dropping onto an

@@ -131,6 +131,7 @@ function Display:Create()
     root:SetAllPoints(UIParent)
     root:SetFrameStrata("LOW")
     root:SetFrameLevel(MainActionBar:GetFrameLevel())
+    self.baseLevel = root:GetFrameLevel()
     self.root, self.slots, self.hooked, self.pressed = root, {}, {}, {}
     for _, button in ipairs(Addon.Layout:GetButtons()) do
         self.slots[#self.slots + 1] = CreateSlot(root, button)
@@ -378,21 +379,39 @@ function Display:PlaceMicroMenuRight()
     Addon.Layout:SetBottomLeft(menu, x, Addon.db.menuBottom)
 end
 
-function Display:GetBars()
-    local native = GamepadMainActionBarFrame
-    local unit = native and native.PageUnit
+-- The native action editor ("Bind to Action Bar", "Edit Action Bar") draws its
+-- own crossbar from a separate page unit. Its buttons are read here exactly like
+-- the main HUD's, so the classic bars stay on screen while the editor is open.
+function Display:IsBarEditing()
+    return GamepadActionBarEditFrame ~= nil and GamepadActionBarEditFrame:IsShown()
+end
+
+local function PageUnitBars(unit)
     if not unit or not unit.actionBars then return end
     local bars = {}
     for _, bar in pairs(unit.actionBars) do bars[#bars + 1] = bar end
     for _, key in ipairs({ "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }) do
         if unit[key] then bars[#bars + 1] = unit[key] end
     end
-    return native, unit, bars
+    return bars
 end
 
+-- Returns the host frame, the page unit to read, its bars, and whether that is
+-- the editor's page unit.
+function Display:GetBars()
+    if self:IsBarEditing() then
+        local bars = PageUnitBars(GamepadActionBarEditFrame.PageUnit)
+        if bars then return GamepadActionBarEditFrame, GamepadActionBarEditFrame.PageUnit, bars, true end
+    end
+    local native = GamepadMainActionBarFrame
+    local unit = native and native.PageUnit
+    local bars = PageUnitBars(unit)
+    if bars then return native, unit, bars, false end
+end
+
+-- Edit Mode (HUD layout editing) stays entirely native.
 function Display:IsEditing()
-    return (EditModeManagerFrame and EditModeManagerFrame:IsEditModeActive())
-        or (GamepadActionBarEditFrame and GamepadActionBarEditFrame:IsShown())
+    return EditModeManagerFrame ~= nil and EditModeManagerFrame:IsEditModeActive()
 end
 
 function Display:NeedsNativeView(bars, unit)
@@ -411,7 +430,7 @@ function Display:NeedsNativeView(bars, unit)
 end
 
 function Display:GetDragAction(slot)
-    if InCombatLockdown() then return end
+    if InCombatLockdown() or self.barEditing then return end
     -- Resolve the current page/override before a hardware-driven edit.
     Addon:Refresh()
     if not Addon.classicVisible then return end
@@ -697,19 +716,48 @@ function Display:Update(unit)
     end
 end
 
-function Display:SuppressNative(native)
-    if self.native ~= native then
-        self.native, self.nativeAlpha = native, native:GetAlpha()
+-- Fade native frames instead of hiding them: their own code keeps running and
+-- no protected visibility is changed from addon code.
+function Display:SuppressNative(frames)
+    self.suppressed = self.suppressed or {}
+    local keep = {}
+    for _, frame in ipairs(frames) do
+        keep[frame] = true
+        if self.suppressed[frame] == nil then self.suppressed[frame] = frame:GetAlpha() end
+        frame:SetAlpha(0)
     end
-    native:SetAlpha(0)
+    for frame, alpha in pairs(self.suppressed) do
+        if not keep[frame] then frame:SetAlpha(alpha); self.suppressed[frame] = nil end
+    end
+    self.native = next(self.suppressed) ~= nil or nil
 end
 
 function Display:RestoreNative()
     self:HideTemplates()
     pcall(Addon.Input.Refresh, Addon.Input, false)
-    if self.native then self.native:SetAlpha(self.nativeAlpha) end
-    self.native, self.nativeAlpha = nil, nil
-    if self.root then self.root:Hide() end
+    for frame, alpha in pairs(self.suppressed or {}) do frame:SetAlpha(alpha) end
+    self.suppressed, self.native, self.barEditing = nil, nil, nil
+    if self.root then self:SetLayer(false); self.root:Hide() end
+end
+
+local function SetStrata(frame, strata)
+    frame:SetFrameStrata(strata)
+    for _, child in ipairs({ frame:GetChildren() }) do SetStrata(child, strata) end
+end
+
+-- The editor dims the screen with a HIGH-strata background. Draw above it while
+-- the editor is open, and return to the ordinary layer afterwards.
+function Display:SetLayer(editing)
+    local root = self.root
+    if not root or self.layerEditing == editing then return end
+    self.layerEditing = editing
+    if editing then
+        SetStrata(root, GamepadActionBarEditFrame:GetFrameStrata())
+        root:SetFrameLevel(GamepadActionBarEditFrame:GetFrameLevel() + 1)
+    else
+        SetStrata(root, "LOW")
+        root:SetFrameLevel(self.baseLevel or root:GetFrameLevel())
+    end
 end
 
 -- Edit Mode bars override Show/Hide in Lua and record isShownExternal;
@@ -757,10 +805,10 @@ function Display:HideTemplates()
 end
 
 function Display:Refresh(wanted)
-    local native, unit, bars = self:GetBars()
+    local native, unit, bars, editing = self:GetBars()
     if not wanted then self.reason = "disabled"; self:RestoreNative(); return false end
     if not native then self.reason = "native missing"; self:RestoreNative(); return false end
-    if self:NeedsNativeView(bars, unit) then self.reason = "editing or flyout"; self:RestoreNative(); return false end
+    if self:NeedsNativeView(bars, unit) then self.reason = "edit mode or flyout"; self:RestoreNative(); return false end
     -- Initial setup and secure input geometry wait for combat to end.
     if InCombatLockdown() and not self.native and not self.mouseState then
         self.reason = "combat"
@@ -775,12 +823,30 @@ function Display:Refresh(wanted)
     local geometryOK = self:RefreshGeometry()
     self:HideTemplates()
     if not geometryOK then self.reason = "geometry"; self:RestoreNative(); return false end
-    self.reason = "shown"
+    self.reason = editing and "shown (action editor)" or "shown"
+    self.barEditing = editing
     self:Update(unit)
     -- The visual HUD must not depend on the optional secure click layer.
-    self:SuppressNative(native)
+    if editing then
+        -- The editor's crossbar and the main HUD are both replaced by the classic bars.
+        -- Its page tracker (page number and the button hint for changing pages) stays.
+        local faded = { GamepadMainActionBarFrame }
+        for _, key in ipairs({ "TopCenteredAnchor", "LeftCenteredAnchor", "RightCenteredAnchor",
+            "BottomCenteredAnchor", "LeftIcon", "RightIcon", "CenteredIcons" }) do
+            if unit[key] then faded[#faded + 1] = unit[key] end
+        end
+        self:SuppressNative(faded)
+    else
+        self:SuppressNative({ native })
+    end
+    self:SetLayer(editing)
     self.root:Show()
     if Addon.Input.disabled then return true end
+    if editing then
+        -- Slots only mirror the editor; its own input groups own every button.
+        pcall(Addon.Input.Refresh, Addon.Input, false)
+        return true
+    end
     local ok, enabled = pcall(Addon.Input.Refresh, Addon.Input, true, native, unit, bars)
     if not ok then
         Addon.Input:Disable(enabled)

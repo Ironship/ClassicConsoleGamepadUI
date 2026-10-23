@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.41"
+Addon.version = "0.1.0-alpha.42"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -188,6 +188,8 @@ function Addon:Refresh()
     self:CheckNativeTaint("Display:Refresh")
     if not ok then
         self.classicVisible = false
+        -- Never leave native bars faded when drawing the classic ones failed.
+        pcall(self.Display.RestoreNative, self.Display)
         self:Note("Display:Refresh", visible)
     else
         self.classicVisible = visible

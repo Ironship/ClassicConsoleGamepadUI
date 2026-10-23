@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-alpha.42
+
+- The action editor ("Bind to Action Bar", "Edit Action Bar") now shows the classic
+  bars instead of the native crossbar. They mirror the editor's own bars (including
+  the page you switch to), are drawn above its dimmed background and are not
+  clickable while it is open. The page tracker with the page-switch hint stays.
+- If drawing the classic bars fails, the native bars are restored instead of staying faded.
+
 ## 0.1.0-alpha.41
 
 - Removed the Steam Deck preset and `/cgp deck`. It only set existing options;
