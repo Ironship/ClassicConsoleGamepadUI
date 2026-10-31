@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.47. Alpha: expect bugs.
+Version 0.1.0-alpha.48. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -51,6 +51,16 @@ Extract the ZIP into `Interface/AddOns` so you get `Interface/AddOns/ClassicCons
 
 Report them on GitHub. `/cgp taint` lists what the addon changed in the game's controller code, which helps with "action blocked" errors.
 
-It worth to also use BugSack or other bug catching addons which allow export of error data from game for further analysis.
+It is also worth using BugSack or another error-catching addon to export errors for analysis.
+
+`/cgp status` retains the last Lua error even after a successful refresh. `/cgp debug`
+shows diagnostic state in Gamepad Mode, including when the classic bars are visible.
+Mouse restoration failures are reported in chat and in `/cgp status`.
+
+## Building
+
+Run `python tools/package.py` with a Lua 5.1 compiler installed (`luac5.1`).
+On Windows, use `python tools\package.py --luac "C:\path\to\luac.exe"`.
+Packaging checks every runtime Lua file before creating the ZIP and rejects other Lua versions.
 
 License: All Rights Reserved, see LICENSE.

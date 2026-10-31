@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -13,6 +14,7 @@ NAME = "ClassicConsoleGamepadUI"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT.parent / f"{NAME}-releases")
+    parser.add_argument("--luac", default="luac5.1", help="Path to the Lua 5.1 syntax checker")
     args = parser.parse_args()
     toc = (ROOT / f"{NAME}.toc").read_text(encoding="utf-8")
     version = re.search(r"^## Version: (.+)$", toc, re.M).group(1)
@@ -21,6 +23,17 @@ def main():
     if code_version != version:
         raise SystemExit(f"Core.lua version must match {NAME}.toc before packaging")
     runtime = [line.strip() for line in toc.splitlines() if line.strip() and not line.startswith("#")]
+    try:
+        checker = subprocess.run([args.luac, "-v"], capture_output=True, text=True, check=True)
+        if not re.search(r"\bLua 5\.1\b", checker.stdout + checker.stderr):
+            raise SystemExit("Packaging requires Lua 5.1; use --luac to select its compiler")
+        for name in runtime:
+            if name.endswith(".lua"):
+                subprocess.run([args.luac, "-p", str(ROOT / name)], check=True)
+    except FileNotFoundError:
+        raise SystemExit("Lua 5.1 compiler not found; install it or pass --luac PATH") from None
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(f"Lua syntax validation failed (exit {error.returncode}); no package created") from None
     files = [f"{NAME}.toc", *runtime, "README.md", "CHANGELOG.md", "LICENSE"]
     payload = {name: (ROOT / name).read_bytes() for name in files}
     # Forever loads the _Camelot TOC; the plain TOC keeps other loaders working.

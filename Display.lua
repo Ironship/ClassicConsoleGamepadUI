@@ -888,7 +888,7 @@ function Display:Refresh(wanted)
     end
     self:SetLayer(editing)
     self.root:Show()
-    if Addon.Input.disabled then return true end
+    if Addon.Input.disabled then Addon.Input:RestoreAfterError(); return true end
     if editing then
         -- Slots only mirror the editor; its own input groups own every button.
         pcall(Addon.Input.Refresh, Addon.Input, false)

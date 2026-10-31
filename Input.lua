@@ -4,6 +4,7 @@ Addon.Input = Input
 
 local SETUP = [[
     bars, anchors, sources, delegates, owners = newtable(), newtable(), newtable(), newtable(), newtable()
+    mouseFrames = newtable()
     for i = 1, 9 do
         bars[i] = self:GetFrameRef("bar" .. i)
         sources[i], delegates[i] = newtable(), newtable()
@@ -109,19 +110,21 @@ local APPLY_BINDINGS = [[
 -- A tainted action button makes the client's later SetPreferredGamepadInteractTarget fail.
 local SUPPRESS_MOUSE = [[
     local restore = self:GetAttribute("mouserestore")
+    if restore then
+        for frame in pairs(mouseFrames) do
+            frame:EnableMouse(true)
+            mouseFrames[frame] = nil
+        end
+        return
+    end
     local stack, n, i = newtable(), 1, 1
     stack[1] = self:GetFrameRef("native")
     while i <= n do
         local frame = stack[i]
         i = i + 1
         if frame and (not frame.IsForbidden or not frame:IsForbidden()) then
-            if restore then
-                if frame:GetAttribute("cgpmouse") then
-                    frame:SetAttribute("cgpmouse", nil)
-                    frame:EnableMouse(true)
-                end
-            elseif frame:IsMouseEnabled() then
-                frame:SetAttribute("cgpmouse", true)
+            if frame:IsMouseEnabled() then
+                mouseFrames[frame] = true
                 frame:EnableMouse(false)
             end
             local kids = newtable(frame:GetChildren())
@@ -163,18 +166,31 @@ end
 
 function Input:SyncNativeMouse(restore)
     local header = self.header
-    if not header or self.disabled or InCombatLockdown() then return end
+    if not header or (self.disabled and not restore) or InCombatLockdown() then return end
     -- Snippets are not vararg functions, so the flag travels as an attribute.
     -- Skip repeat walks; refresh runs several times a second.
     local want = restore and true or false
     if self.mouseRestored == want then return end
     Addon:Trace("Input:SyncNativeMouse " .. tostring(want))
-    header:SetAttribute("mouserestore", want)
-    local ok, err = pcall(function() header:Execute(SUPPRESS_MOUSE) end)
+    local ok, err = pcall(function()
+        header:SetAttribute("mouserestore", want)
+        header:Execute(SUPPRESS_MOUSE)
+    end)
     if ok then
         self.mouseRestored = want
+        self.mouseRestoreError = nil
     else
-        self:Disable(err)
+        -- A partial walk changed mouse state; restoration must not use the old cache.
+        self.mouseRestored = nil
+        if restore then
+            err = tostring(err)
+            if self.mouseRestoreError ~= err then
+                Addon:Print("Native mouse restoration failed: " .. err .. ". Reload the UI if controls remain blocked.")
+            end
+            self.mouseRestoreError = err
+        else
+            self:Disable(err)
+        end
     end
 end
 
@@ -224,13 +240,25 @@ function Input:Disable(err)
     self.disabled = true
     self.lastError = tostring(err or "unknown error")
     self.state = "error"
-    if self.header then
-        pcall(function()
-            self.header:SetAttribute("enabled", false)
-            self.header:Hide()
-        end)
-    end
     Addon:Print("Mouse/keyboard layer disabled: " .. self.lastError)
+    self:RestoreAfterError()
+end
+
+function Input:RestoreAfterError()
+    if not self.header or InCombatLockdown() then return end
+    local ok, err = pcall(function()
+        if self.header:GetAttribute("enabled") then self.header:SetAttribute("enabled", false) end
+        if self.header:IsShown() then self.header:Hide() end
+    end)
+    if not ok then
+        err = tostring(err)
+        if self.cleanupError ~= err then Addon:Print("Input cleanup failed: " .. err) end
+        self.cleanupError = err
+    else
+        self.cleanupError = nil
+    end
+    -- Restore known changed frames, even if hiding the click layer failed.
+    self:SyncNativeMouse(true)
 end
 
 local function SetRef(header, label, frame)
@@ -243,6 +271,7 @@ function Input:Create(native, unit, bars)
     header:SetFrameLevel(Addon.Display.root:GetFrameLevel() + 5)
     header:Hide()
     self.header, self.buttons, self.blockers = header, {}, {}
+    self.mouseRestored = true
     header:SetFrameRef("native", native)
     header:SetAttribute("_onshow", APPLY_BINDINGS)
     header:SetAttribute("_onhide", "self:ClearBindings()")
@@ -392,7 +421,7 @@ function Input:SlotsChanged()
 end
 
 function Input:Refresh(wanted, native, unit, bars)
-    if self.disabled then return false end
+    if self.disabled then self:RestoreAfterError(); return false end
     if InCombatLockdown() then return self:IsEnabled() end
     if not self.header then
         if not wanted then return false end

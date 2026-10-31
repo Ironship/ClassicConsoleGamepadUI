@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.47"
+Addon.version = "0.1.0-alpha.48"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -159,14 +159,35 @@ function Addon:Note(stage, err)
     local diag = self.diagnostics
     if not diag then return end
     local message = err and tostring(err) or nil
+    local native = GamepadMainActionBarFrame
+    local shown = false
+    if native then
+        local ok, value = pcall(native.IsShown, native)
+        shown = ok and value == true
+    end
     local changed = diag.stage ~= stage or diag.error ~= message
+        or diag.version ~= self.version or diag.tocVersion ~= self.tocVersion
+        or diag.debug ~= self.db.debug or diag.nativeShown ~= shown
         or diag.classic ~= self.classicVisible or diag.gamepad ~= self:IsGamepadMode()
         or diag.input ~= (self.Input and self.Input.state)
         or diag.blockedBy ~= (self.Input and self.Input.blockedBy)
         or diag.displayReason ~= (self.Display and self.Display.reason)
+        or diag.inputError ~= (self.Input and self.Input.lastError)
+        or diag.mouseRestoreError ~= (self.Input and self.Input.mouseRestoreError)
+        or diag.inputCleanupError ~= (self.Input and self.Input.cleanupError)
+        or diag.enabled ~= self.db.enabled or diag.compact ~= self.db.compact
+        or diag.nativeView ~= self.nativeView or diag.wanted ~= self.wanted
+    if message and (not diag.lastError or diag.lastError.stage ~= stage or diag.lastError.error ~= message) then
+        diag.lastError = { stage = stage, error = message, time = date("%Y-%m-%d %H:%M:%S"),
+            stack = debugstack(2, 20, 0) }
+        self:Print(stage .. ": " .. message)
+    end
+    -- ponytail: keep polling live HUD state; skip stable diagnostic writes, not visual updates.
+    if not changed and not self.db.debug then return end
     diag.stage, diag.error = stage, message
     diag.version = self.version
     diag.tocVersion = self.tocVersion
+    diag.debug = self.db.debug
     diag.time = date("%Y-%m-%d %H:%M:%S")
     diag.gamepad = self:IsGamepadMode()
     diag.enabled = self.db and self.db.enabled
@@ -177,17 +198,13 @@ function Addon:Note(stage, err)
     diag.classic = self.classicVisible
     diag.input = self.Input and self.Input.state
     diag.inputError = self.Input and self.Input.lastError
+    diag.mouseRestoreError = self.Input and self.Input.mouseRestoreError
+    diag.inputCleanupError = self.Input and self.Input.cleanupError
     diag.blockedBy = self.Input and self.Input.blockedBy
     diag.displayReason = self.Display and self.Display.reason
-    local native = GamepadMainActionBarFrame
-    local shown = false
-    if native then
-        local ok, value = pcall(native.IsShown, native)
-        shown = ok and value == true
-    end
     diag.nativeShown = shown
     self.db.diagnostics = diag
-    if not self.debugText then
+    if self.db.debug and not self.debugText then
         local frame = CreateFrame("Frame", nil, UIParent)
         frame:SetPoint("TOP", 0, -120)
         frame:SetSize(1000, 40)
@@ -197,11 +214,12 @@ function Addon:Note(stage, err)
         self.debugText = text
     end
     -- Diagnostic overlay only on request (/cgp debug); never in normal play.
-    if not self.db.debug or self.classicVisible or not self:IsGamepadMode() then
-        self.debugText:Hide()
+    if not self.db.debug or not self:IsGamepadMode() then
+        if self.debugText then self.debugText:Hide() end
     else
         local reason = tostring(diag.displayReason or "?")
-        local err = tostring(diag.error or "-")
+        local err = tostring(diag.mouseRestoreError or diag.inputCleanupError or diag.error
+            or diag.inputError or (diag.lastError and diag.lastError.error) or "-")
         if #err > 120 then err = err:sub(1, 120) end
         self.debugText:SetText(self.version .. " | display=" .. reason .. " | input=" .. tostring(diag.input)
             .. " | blocked=" .. tostring(diag.blockedBy or "-") .. " | err=" .. err)
@@ -236,7 +254,6 @@ function Addon:Refresh()
         self.classicVisible = false
         -- Never leave native bars faded when drawing the classic ones failed.
         pcall(self.Display.RestoreNative, self.Display)
-        self:Note("Display:Refresh", visible)
     else
         self.classicVisible = visible
     end
@@ -251,7 +268,7 @@ function Addon:Refresh()
     self.ItemDelete:Refresh()
     self:CheckNativeTaint("ItemDelete:Refresh")
     if not gamepad and not changed then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
-    self:Note("refresh", not ok and visible or nil)
+    self:Note(not ok and "Display:Refresh" or "refresh", not ok and visible or nil)
     -- Keep observing while flyouts/cursor/editor temporarily expose the native HUD.
     local watchDelete = gamepad and self.db.easyDelete and self.ItemDelete.dialog
     driver:SetScript("OnUpdate", (wanted or watchDelete) and Poll or nil)
@@ -281,6 +298,7 @@ local function Initialize()
     if Addon.diagnostics.version ~= Addon.version then
         Addon.diagnostics.firstTaint, Addon.diagnostics.blockedAction = nil, nil
         Addon.diagnostics.blocked, Addon.diagnostics.lastScan = nil, nil
+        Addon.diagnostics.lastError = nil
     end
     for _, other in ipairs({ "ControllerForever", "ConsolePort", "ClassicGamepad" }) do
         if C_AddOns.IsAddOnLoaded(other) then
@@ -423,6 +441,12 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         Addon:Print("last=" .. tostring(diag and diag.stage) .. " error=" .. tostring(diag and diag.error)
             .. " input=" .. tostring(diag and diag.input) .. " blockedBy=" .. tostring(diag and diag.blockedBy)
             .. " inputError=" .. tostring(diag and diag.inputError) .. " at " .. tostring(diag and diag.time))
+        if diag and diag.lastError then
+            Addon:Print("Last error: " .. diag.lastError.stage .. ": " .. diag.lastError.error .. " at " .. diag.lastError.time)
+        end
+        if diag and (diag.mouseRestoreError or diag.inputCleanupError) then
+            Addon:Print("Cleanup error: " .. tostring(diag.mouseRestoreError or diag.inputCleanupError))
+        end
         local blocked = diag and diag.blocked
         if type(blocked) == "table" and #blocked > 0 then
             Addon:Print("Blocked actions this session: " .. #blocked .. " (first: " .. blocked[1].action

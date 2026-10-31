@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.48
+
+- Restore native mouse input after click-layer failures without repeating the failed frame-tree walk.
+  Cleanup deferred by combat is retried after combat; cleanup failures are reported.
+- Retain the last Lua error in diagnostics. `/cgp debug` also works with visible classic bars.
+- Skip unchanged diagnostic updates and create the debug overlay only on request.
+  The live HUD still refreshes at 10 Hz for states not fully covered by native hooks.
+- Packaging and CI validate runtime files with Lua 5.1 before creating a ZIP.
+
 ## 0.1.0-alpha.47
 
 - License changed to All Rights Reserved (earlier versions stay under the MIT License they were released with).
