@@ -110,32 +110,21 @@ local APPLY_BINDINGS = [[
 -- A tainted action button makes the client's later SetPreferredGamepadInteractTarget fail.
 local SUPPRESS_MOUSE = [[
     local restore = self:GetAttribute("mouserestore")
-    if restore then
-        for frame in pairs(mouseFrames) do
-            frame:EnableMouse(true)
-            mouseFrames[frame] = nil
-        end
-        return
-    end
-    local stack, n, i = newtable(), 1, 1
-    stack[1] = self:GetFrameRef("native")
-    while i <= n do
-        local frame = stack[i]
-        i = i + 1
-        if frame and (not frame.IsForbidden or not frame:IsForbidden()) then
-            if frame:IsMouseEnabled() then
+    for i = 1, self:GetAttribute("mousecount") do
+        if not self:GetAttribute("mouseblocked" .. i) then
+            local frame = self:GetFrameRef("mouse" .. i)
+            if restore then
+                if mouseFrames[frame] then
+                    frame:EnableMouse(true)
+                    mouseFrames[frame] = nil
+                end
+            elseif frame:IsMouseEnabled() then
                 mouseFrames[frame] = true
                 frame:EnableMouse(false)
             end
-            local kids = newtable(frame:GetChildren())
-            local c = 1
-            while kids[c] do
-                n = n + 1
-                stack[n] = kids[c]
-                c = c + 1
-            end
         end
     end
+    self:SetAttribute("mousecomplete", true)
 ]]
 
 local RESUME = [[
@@ -173,8 +162,41 @@ function Input:SyncNativeMouse(restore)
     if self.mouseRestored == want then return end
     Addon:Trace("Input:SyncNativeMouse " .. tostring(want))
     local ok, err = pcall(function()
+        if not want then
+            -- Read the tree before changing mouse state; keep these exact frames for restoration.
+            if self.nativeMouseRoot:IsForbidden() then error("Native mouse root is forbidden") end
+            local frames = { self.nativeMouseRoot }
+            local i = 1
+            while i <= #frames do
+                local frame = frames[i]
+                if not frame:IsForbidden() then
+                    for _, child in ipairs({ frame:GetChildren() }) do
+                        if not child:IsForbidden() then frames[#frames + 1] = child end
+                    end
+                end
+                i = i + 1
+            end
+            self.mouseFrames = frames
+            for index, frame in ipairs(frames) do
+                if not frame:IsForbidden() then header:SetFrameRef("mouse" .. index, frame) end
+            end
+            header:SetAttribute("mousecount", #frames)
+        end
+        local blocked = 0
+        for index, frame in ipairs(self.mouseFrames or {}) do
+            local forbidden = frame:IsForbidden()
+            header:SetAttribute("mouseblocked" .. index, forbidden)
+            if forbidden then blocked = blocked + 1 end
+        end
+        header:SetAttribute("mousecomplete", nil)
         header:SetAttribute("mouserestore", want)
         header:Execute(SUPPRESS_MOUSE)
+        if header:GetAttribute("mousecomplete") ~= true then
+            error("Native mouse snippet did not complete; see the client's Lua error report")
+        end
+        if want and blocked > 0 then
+            error("Native mouse restoration skipped " .. blocked .. " forbidden frames")
+        end
     end)
     if ok then
         self.mouseRestored = want
@@ -271,7 +293,9 @@ function Input:Create(native, unit, bars)
     header:SetFrameLevel(Addon.Display.root:GetFrameLevel() + 5)
     header:Hide()
     self.header, self.buttons, self.blockers = header, {}, {}
+    self.nativeMouseRoot = native
     self.mouseRestored = true
+    header:SetAttribute("mousecount", 0)
     header:SetFrameRef("native", native)
     header:SetAttribute("_onshow", APPLY_BINDINGS)
     header:SetAttribute("_onhide", "self:ClearBindings()")

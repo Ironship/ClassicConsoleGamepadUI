@@ -252,6 +252,7 @@ function Addon:Refresh()
     self:CheckNativeTaint("Display:Refresh")
     if not ok then
         self.classicVisible = false
+        self:Note("Display:Refresh", visible)
         -- Never leave native bars faded when drawing the classic ones failed.
         pcall(self.Display.RestoreNative, self.Display)
     else

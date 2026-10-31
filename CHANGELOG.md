@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Confirm secure mouse snippets completed before caching success.
+- Check frame availability outside the restricted environment; restore accessible
+  frames even when another recorded frame is forbidden, and report skipped frames.
+- Record display errors before attempting cleanup or refreshing other modules.
+
 ## 0.1.0-alpha.48
 
 - Restore native mouse input after click-layer failures without repeating the failed frame-tree walk.
