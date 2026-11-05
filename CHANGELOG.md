@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.49
 
+- The gamepad legend no longer sits under chat: when its place below the player frame lands on chat, it moves above
+  chat, or beside it, wherever it fits on screen clear of the player, target and focus frames.
+- Text other addons draw on the native action buttons (SpellDamageInfo's damage and healing numbers, bar addons'
+  labels) is copied onto the classic bars. The native buttons are faded while the classic bars show, so that text
+  was invisible.
 - Confirm secure mouse snippets completed before caching success.
 - Check frame availability outside the restricted environment; restore accessible
   frames even when another recorded frame is forbidden, and report skipped frames.
