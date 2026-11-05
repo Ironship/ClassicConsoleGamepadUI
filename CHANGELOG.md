@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.50
+
+- "Move the legend below the player frame" is marked experimental and is off by default, for new and existing
+  installs alike (the saved choice is reset once, because it was on without ever being chosen). With it off the
+  legend keeps its native position.
+
 ## 0.1.0-alpha.49
 
 - The gamepad legend no longer sits under chat: when its place below the player frame lands on chat, it moves above

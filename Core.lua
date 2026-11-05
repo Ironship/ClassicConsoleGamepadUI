@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.49"
+Addon.version = "0.1.0-alpha.50"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -288,6 +288,11 @@ local function Initialize()
     ClassicConsoleGamepadUIDB = type(ClassicConsoleGamepadUIDB) == "table" and ClassicConsoleGamepadUIDB or {}
     Addon.db = ClassicConsoleGamepadUIDB
     Addon.Options:InitializeDefaults()
+    -- Moving the legend is experimental and off by default. Installs from before that had it on without ever choosing it.
+    if Addon.db.legendOptIn ~= 1 then
+        Addon.db.moveLegend = false
+        Addon.db.legendOptIn = 1
+    end
     if type(Addon.db.keyboardHUD) ~= "table" then Addon.db.keyboardHUD = {} end
     if type(Addon.db.keyboardBars) ~= "table" then Addon.db.keyboardBars = {} end
     -- Older caches can contain hidden-bar placeholders or gamepad transition anchors.
