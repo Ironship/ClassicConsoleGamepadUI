@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.48"
+Addon.version = "0.1.0-alpha.49"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -264,6 +264,8 @@ function Addon:Refresh()
         self:QueueRefresh(true)
     else
         self.HUD:RefreshChat(self.classicVisible, changed)
+        -- The legend steers clear of chat, so it is placed again once chat has settled.
+        if self.HUD.applied and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
     end
     self:CheckNativeTaint("HUD:RefreshChat")
     self.ItemDelete:Refresh()

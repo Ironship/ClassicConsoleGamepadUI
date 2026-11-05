@@ -57,19 +57,103 @@ function HUD:GetClassicLayout(frame)
     end
 end
 
+-- The rectangle a frame takes up, in UIParent points: left, bottom, right, top (nil while it has no size on screen).
+local function Bounds(frame)
+    if not frame or type(frame.GetRect) ~= "function" or type(frame.GetEffectiveScale) ~= "function" then return end
+    local x, y, width, height = frame:GetRect()
+    if not x or not y or not width or not height or width <= 0 or height <= 0 then return end
+    local scale = frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    return x * scale, y * scale, (x + width) * scale, (y + height) * scale
+end
+
+local function Overlaps(a, b)
+    if not a or not a[1] or not b or not b[1] then return false end
+    return a[1] < b[3] and a[3] > b[1] and a[2] < b[4] and a[4] > b[2]
+end
+
+-- Everything chat covers: the selected window, its tabs and the edit box.
+function HUD:ChatBounds()
+    local chat = GENERAL_CHAT_DOCK and GENERAL_CHAT_DOCK.primary or ChatFrame1
+    if not chat or not chat:IsShown() then return end
+    local selected = GENERAL_CHAT_DOCK and FCFDock_GetSelectedWindow(GENERAL_CHAT_DOCK) or chat
+    selected = selected or chat
+    local rect
+    for _, frame in ipairs({ chat, selected, selected.Background, selected.editBox, selected.buttonFrame, selected.dock }) do
+        local left, bottom, right, top = Bounds(frame)
+        if left then
+            if rect then
+                rect = { math.min(rect[1], left), math.min(rect[2], bottom), math.max(rect[3], right), math.max(rect[4], top) }
+            else
+                rect = { left, bottom, right, top }
+            end
+        end
+    end
+    return rect
+end
+
+-- What the legend can cover. The legend frame itself is a 10 by 10 anchor; its backgrounds and entries are children
+-- hanging down and right from its top-left corner, and only one group of them is shown at a time (gameplay, menu,
+-- targeting, modifiers: 320 to 620 wide, 130 to 188 high). The area is sized for the largest group seen so far, shown
+-- or not, so the legend keeps one place instead of jumping each time another group appears, and stays put in combat
+-- when it is not placed again. Returns the offsets of that area from the legend's top-left corner (right, down)
+-- and its width and height, in UIParent points; nil while no child has a size.
+function HUD:LegendExtent(legend)
+    local legendLeft, _, _, legendTop = Bounds(legend)
+    if not legendLeft then return end
+    local known = self.legendArea
+    local left, bottom, right, top
+    if known then left, bottom, right, top = known[1], known[2], known[3], known[4] end
+    for _, child in ipairs({ legend:GetChildren() }) do
+        local l, b, r, t = Bounds(child)
+        if l then
+            l, b, r, t = l - legendLeft, b - legendTop, r - legendLeft, t - legendTop
+            left, bottom = math.min(left or l, l), math.min(bottom or b, b)
+            right, top = math.max(right or r, r), math.max(top or t, t)
+        end
+    end
+    if not left then return end
+    self.legendArea = { left, bottom, right, top }
+    return left, -top, right - left, top - bottom
+end
+
+-- Under the player frame, as set up; when that lands on chat, above chat, then beside it, wherever the legend fits
+-- on screen without covering the player, target or focus frame.
+function HUD:LegendSpot(legend, x, top)
+    local dx, dy, width, height = self:LegendExtent(legend)
+    local chat = self:ChatBounds()
+    if not dx or not chat or width <= 0 or height <= 0
+        or not Overlaps({ x + dx, top - dy - height, x + dx + width, top - dy }, chat) then return x, top end
+    local gap = Addon.db.legendGap
+    local screenWidth, screenHeight = UIParent:GetWidth(), UIParent:GetHeight()
+    -- left/bottom: where the covered area would start.
+    local function Free(left, bottom)
+        if left < 0 or bottom < 0 or left + width > screenWidth or bottom + height > screenHeight then return false end
+        local rect = { left, bottom, left + width, bottom + height }
+        if Overlaps(rect, chat) then return false end
+        for _, frame in ipairs(self:GetFrames()) do
+            if frame and frame:IsShown() and Overlaps(rect, { Bounds(frame) }) then return false end
+        end
+        return true
+    end
+    if Free(x + dx, chat[4] + gap) then return x, chat[4] + gap + height + dy end
+    if Free(chat[3] + gap, top - dy - height) then return chat[3] + gap - dx, top end
+    return x, top
+end
+
 function HUD:RefreshLegend(wanted)
     wanted = wanted and Addon.db.moveLegend
     local legend = GamepadPersistentInputLegend
     if not legend then return end
     if not wanted then
         if self.legendOriginal then Apply(legend, self.legendOriginal) end
-        self.legendOriginal, self.legendTop, self.legendX = nil, nil, nil
+        self.legendOriginal, self.legendTop, self.legendX, self.legendArea = nil, nil, nil, nil
         return
     end
     local bottom = PlayerFrame and PlayerFrame:GetBottom()
     if not bottom then return end
     local top = bottom * PlayerFrame:GetEffectiveScale() / UIParent:GetEffectiveScale() - Addon.db.legendGap
     local x = Addon.db.legendX
+    x, top = self:LegendSpot(legend, x, top)
     if self.legendTop == top and self.legendX == x then return end
     self.legendOriginal = self.legendOriginal or Snapshot(legend)
     -- Its native top-left anchor overlaps the restored classic player frame.
@@ -172,7 +256,7 @@ function HUD:Refresh(wanted, changedMode)
         -- The game just applied a different layout. Never restore the old mode's anchors over it.
         self.originals = {}
         self.applied = false
-        self.legendOriginal, self.legendTop, self.legendX = nil, nil, nil
+        self.legendOriginal, self.legendTop, self.legendX, self.legendArea = nil, nil, nil, nil
     end
     if InCombatLockdown() then self.pending = true; return end
     self.pending = false

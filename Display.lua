@@ -601,6 +601,72 @@ function Display:ShowKeyboardSlot(slot)
     end
 end
 
+-- Other addons draw on the native action buttons: SpellDamageInfo's damage and healing numbers, bar addons' labels.
+-- Those buttons are faded while the classic bars show, so their text is copied onto the slot. The button's own texts
+-- (key, count, macro name) are drawn by the slot already, and named regions belong to Blizzard's template.
+local BLIZZARD_TEXT_KEYS = { "HotKey", "Count", "Name", "RangeIndicator" }
+
+local function IsForeignText(region, source)
+    -- RangeIndicator is the gamepad button's own unnamed dot (tinted red when out of range), not another addon's text.
+    for _, key in ipairs(BLIZZARD_TEXT_KEYS) do
+        if region == source[key] then return false end
+    end
+    if type(region.GetObjectType) ~= "function" or region:GetObjectType() ~= "FontString" then return false end
+    return region:GetName() == nil
+end
+
+local function CopyForeignText(mirror, region, slot)
+    local text = region:GetText()
+    local shown = region:IsShown()
+    if not Readable(text) or not Readable(shown) or type(text) ~= "string" or text == "" or not shown then
+        mirror:Hide()
+        return
+    end
+    -- The slot and the native button can differ in scale: sizes and offsets are in each frame's own units.
+    local ratio = 1
+    local regionScale, mirrorScale = region:GetEffectiveScale(), mirror:GetEffectiveScale()
+    if Readable(regionScale) and Readable(mirrorScale) and regionScale and mirrorScale and mirrorScale > 0 then
+        ratio = regionScale / mirrorScale
+    end
+    if ratio <= 0 then ratio = 1 end
+    local font, size, flags = region:GetFont()
+    if font and Readable(font) and Readable(size) then mirror:SetFont(font, size * ratio, flags) end
+    mirror:SetTextColor(region:GetTextColor())
+    mirror:SetJustifyH(region:GetJustifyH())
+    mirror:SetJustifyV(region:GetJustifyV())
+    mirror:SetAlpha(region:GetAlpha())
+    local point, _, relativePoint, x, y = region:GetPoint(1)
+    mirror:ClearAllPoints()
+    if point then
+        mirror:SetPoint(point, slot, relativePoint or point, (x or 0) * ratio, (y or 0) * ratio)
+    else
+        mirror:SetPoint("CENTER", slot, "CENTER")
+    end
+    mirror:SetText(text)
+    mirror:Show()
+end
+
+function Display:MirrorForeignText(slot, source)
+    local mirrors = slot.Foreign
+    if not mirrors then mirrors = {}; slot.Foreign = mirrors end
+    local used = 0
+    if source then
+        local ok, regions = pcall(function() return { source:GetRegions() } end)
+        for _, region in ipairs(ok and regions or {}) do
+            if IsForeignText(region, source) then
+                used = used + 1
+                local mirror = mirrors[used]
+                if not mirror then
+                    mirror = slot.Labels:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+                    mirrors[used] = mirror
+                end
+                CopyForeignText(mirror, region, slot)
+            end
+        end
+    end
+    for i = used + 1, #mirrors do mirrors[i]:Hide() end
+end
+
 function Display:UpdateSlot(slot, source, bar, active)
     slot:Show()
     if slot.Key then slot.Key:SetShown(Addon.db.showKeyboardHints) end
@@ -618,6 +684,7 @@ function Display:UpdateSlot(slot, source, bar, active)
         slot.Cooldown:Clear()
         if slot.Overlay then slot.Overlay:Hide() end
         for _, glyph in ipairs(slot.Modifiers) do glyph:Hide() end
+        pcall(self.MirrorForeignText, self, slot, nil)
         return
     end
     slot:SetAlpha(source:GetAlpha())
@@ -652,6 +719,8 @@ function Display:UpdateSlot(slot, source, bar, active)
         if not slot.Overlay then slot.Overlay = Texture(slot.Labels, "ARTWORK"); slot.Overlay:SetAllPoints(slot.Icon) end
         CopyTexture(slot.Overlay, source.IconOverlay)
     elseif slot.Overlay then slot.Overlay:Hide() end
+    -- An extra, cosmetic copy: a failure here must not switch the classic bars off.
+    pcall(self.MirrorForeignText, self, slot, source)
 end
 
 function Display:Update(unit)
