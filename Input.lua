@@ -361,6 +361,9 @@ function Input:Create(native, unit, bars)
             end)
             slot.Key = slot.Labels:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
             slot.Key:SetPoint("BOTTOMLEFT", 5, 5)
+            slot.Key:SetPoint("BOTTOMRIGHT", -5, 5)
+            slot.Key:SetJustifyH("LEFT")
+            slot.Key:SetWordWrap(false)
             slot:EnableMouse(false)
             self.buttons[i] = button
         end
@@ -403,6 +406,22 @@ function Input:SetBindingMode(active)
     end)
 end
 
+-- Short slot label: mouse buttons and modifiers would otherwise spill over the neighbouring slots.
+local MODIFIER_LABELS = { SHIFT = "S", CTRL = "C", ALT = "A", META = "M" }
+local function ShortKeyLabel(key)
+    local prefix, base = "", key
+    while true do
+        local modifier, rest = base:match("^(%u+)%-(.+)$")
+        if not modifier or not MODIFIER_LABELS[modifier] then break end
+        prefix, base = prefix .. MODIFIER_LABELS[modifier] .. "-", rest
+    end
+    local button = base:match("^BUTTON(%d+)$")
+    if button then return prefix .. "Mouse" .. button end
+    if base == "MOUSEWHEELUP" then return prefix .. "Wheel+" end
+    if base == "MOUSEWHEELDOWN" then return prefix .. "Wheel-" end
+    return GetBindingText(key, 1)
+end
+
 -- Collect the keyboard keys of every visible slot's classic bar position.
 -- The secure header applies them only while the click layer is enabled.
 function Input:UpdateBindings()
@@ -423,7 +442,7 @@ function Input:UpdateBindings()
                         count = count + 1
                         header:SetAttribute("key" .. count, key)
                         header:SetAttribute("button" .. count, button:GetName())
-                        label = label or GetBindingText(key, 1)
+                        label = label or ShortKeyLabel(key)
                     end
                 end
             end)
@@ -433,6 +452,20 @@ function Input:UpdateBindings()
     header:SetAttribute("bindingcount", count)
     self.dirty, self.bindingsPending = false, true
     self.labelRevision = Addon.Layout.revision
+end
+
+-- True when the first key this layer should own is no longer bound to its hitbox.
+-- Checked at most once a second; another addon owning the same key retries at that pace only.
+function Input:BindingsLost()
+    local now = GetTime()
+    if self.bindingCheck and now - self.bindingCheck < 1 then return false end
+    self.bindingCheck = now
+    local header = self.header
+    if (header:GetAttribute("bindingcount") or 0) == 0 then return false end
+    local key, button = header:GetAttribute("key1"), header:GetAttribute("button1")
+    if not key or not button then return false end
+    local ok, action = pcall(GetBindingAction, key, true)
+    return ok and action ~= "CLICK " .. button .. ":Keybind"
 end
 
 -- True when a slot appeared or disappeared since the labels were collected.
@@ -510,7 +543,14 @@ function Input:Refresh(wanted, native, unit, bars)
     end
     header:SetAttribute("enabled", true)
     if not header:IsShown() then Addon:Trace("Input on"); header:Show()
-    elseif self.bindingsPending then header:Execute(APPLY_BINDINGS) end
+    elseif self.bindingsPending then header:Execute(APPLY_BINDINGS)
+    elseif self:BindingsLost() then
+        -- The client dropped the override bindings while the layer stayed shown (e.g. after the Settings
+        -- panel closed); applying them again restores the keyboard without a UI reload.
+        Addon:Trace("Input:BindingsLost")
+        self.rebound = (self.rebound or 0) + 1
+        header:Execute(APPLY_BINDINGS)
+    end
     self.bindingsPending = nil
     self:SyncNativeMouse(false)
     if self.disabled then return false end

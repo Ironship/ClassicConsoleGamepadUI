@@ -181,6 +181,7 @@ function Display:RefreshGeometry()
         local promptScale = Addon.db.promptScale
         slot.Prompt:SetSize(28 * promptScale, 28 * promptScale)
         slot.Prompt:SetPoint("TOPRIGHT", 4 * promptScale, 4 * promptScale)
+        slot.promptLow = nil
         local modifierScale = Addon.db.modifierScale
         for index, glyph in ipairs(slot.Modifiers) do
             glyph:SetSize(20 * modifierScale, 20 * modifierScale)
@@ -723,6 +724,17 @@ function Display:UpdateSlot(slot, source, bar, active)
     pcall(self.MirrorForeignText, self, slot, source)
 end
 
+-- Two modifier glyphs (LT + RT) fill the top row, so a third glyph, the button itself, drops to a second row.
+function Display:PlacePrompt(slot)
+    local low = slot.Prompt:IsShown() and slot.Modifiers[2]:IsShown() or false
+    if slot.promptLow == low then return end
+    slot.promptLow = low
+    local promptScale, modifierScale = Addon.db.promptScale, Addon.db.modifierScale
+    local drop = low and 17 * modifierScale or 0
+    slot.Prompt:ClearAllPoints()
+    slot.Prompt:SetPoint("TOPRIGHT", 4 * promptScale, 4 * promptScale - drop)
+end
+
 function Display:Update(unit)
     self.slotBySource = {}
     for i, key in ipairs({ "LeftShoulderIcon", "RightShoulderIcon" }) do
@@ -815,6 +827,9 @@ function Display:Update(unit)
             CopyGlyph(slot.Prompt, icons and icons[2])
             slot.Modifiers[2]:Hide()
         end
+    end
+    for i = 1, 36 do
+        if self.slots[i] then self:PlacePrompt(self.slots[i]) end
     end
 end
 

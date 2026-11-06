@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.51
+
+- Switching compact bars (8 slots) off in Settings no longer leaves the keyboard keys dead until a UI reload:
+  the click layer checks once a second that its key bindings are still active and applies them again if the
+  client dropped them. `/cgp status` shows how often (`rebound=`).
+- A slot with two modifier glyphs (LT + RT) puts the button glyph on a second row instead of drawing it over them.
+- Keyboard labels on the slots are short and cut to the slot width: mouse buttons read `Mouse4`, `Wheel+`, with
+  modifiers as `S-`, `C-`, `A-`, instead of long names that spilled over the neighbouring slots.
+
 ## 0.1.0-alpha.50
 
 - "Move the legend below the player frame" is marked experimental and is off by default, for new and existing
