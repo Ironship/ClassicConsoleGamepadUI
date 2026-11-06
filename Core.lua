@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.50"
+Addon.version = "0.1.0-alpha.51"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -444,6 +444,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             .. " conflict=" .. tostring(Addon.conflict or "none") .. " nativeView=" .. tostring(Addon.nativeView)
             .. " nativeShown=" .. tostring(nativeShown)
             .. " input=" .. tostring(Addon.Input and Addon.Input.state)
+            .. " rebound=" .. tostring(Addon.Input and Addon.Input.rebound or 0)
             .. " display=" .. tostring(Addon.Display and Addon.Display.reason))
         local diag = Addon.diagnostics
         Addon:Print("last=" .. tostring(diag and diag.stage) .. " error=" .. tostring(diag and diag.error)
