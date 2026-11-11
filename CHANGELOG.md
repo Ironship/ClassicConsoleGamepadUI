@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.66
+
+- Keyboard: a language key (EN, DE, PL) switches the layout and remembers the choice. EN is plain QWERTY, DE is QWERTZ with ä ö ü ß, PL is QWERTY with an extra row of Polish letters. The phone layouts get the letters of the language under their keys. `/cgp keyboard en|de|pl` sets it too.
+
 ## 0.1.0-alpha.65
 
 - Keyboard: the full layout is always QWERTY (no Y/Z swap on German clients); the keys for ä ö ü ß stay at the ends of the rows.

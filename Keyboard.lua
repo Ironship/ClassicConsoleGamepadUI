@@ -24,18 +24,42 @@ local SHIFTED = {
 local function T(digit, chars) return { digit = digit, chars = chars, width = 110, height = 48 } end
 local function Special(name, width) return { name, width, height = 48 } end
 
-local function Rows(mode)
-    local de = GetLocale() == "deDE"
+-- Keyboard languages: the full layout (QWERTY, QWERTZ for German) and the letters under the phone keys.
+local LANGUAGES = { "EN", "DE", "PL" }
+
+local PHONE_LETTERS = {
+    EN = { ["2"] = "abc", ["3"] = "def", ["4"] = "ghi", ["5"] = "jkl", ["6"] = "mno", ["7"] = "pqrs", ["8"] = "tuv",
+        ["9"] = "wxyz" },
+    DE = { ["2"] = { "a", "b", "c", "ä" }, ["3"] = "def", ["4"] = "ghi", ["5"] = "jkl", ["6"] = { "m", "n", "o", "ö" },
+        ["7"] = { "p", "q", "r", "s", "ß" }, ["8"] = { "t", "u", "v", "ü" }, ["9"] = "wxyz" },
+    PL = { ["2"] = { "a", "ą", "b", "c", "ć" }, ["3"] = { "d", "e", "ę", "f" }, ["4"] = "ghi",
+        ["5"] = { "j", "k", "l", "ł" }, ["6"] = { "m", "n", "ń", "o", "ó" }, ["7"] = { "p", "q", "r", "s", "ś" },
+        ["8"] = "tuv", ["9"] = { "w", "x", "y", "z", "ź", "ż" } },
+}
+
+-- The letters of a phone key as a list of characters, ending with its digit.
+local function Letters(language, digit)
+    local letters = PHONE_LETTERS[language][digit]
+    local chars = {}
+    if type(letters) == "string" then
+        for letter in letters:gmatch(".") do chars[#chars + 1] = letter end
+    else
+        for _, letter in ipairs(letters) do chars[#chars + 1] = letter end
+    end
+    chars[#chars + 1] = digit
+    return chars
+end
+
+local function Rows(mode, language)
     if mode == "t9" or mode == "t9p" then
         local rows = {
-            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }),
-                T("2", de and { "a", "b", "c", "ä", "2" } or { "a", "b", "c", "2" }), T("3", { "d", "e", "f", "3" }) },
-            { T("4", { "g", "h", "i", "4" }), T("5", { "j", "k", "l", "5" }),
-                T("6", de and { "m", "n", "o", "ö", "6" } or { "m", "n", "o", "6" }) },
-            { T("7", de and { "p", "q", "r", "s", "ß", "7" } or { "p", "q", "r", "s", "7" }),
-                T("8", de and { "t", "u", "v", "ü", "8" } or { "t", "u", "v", "8" }), T("9", { "w", "x", "y", "z", "9" }) },
+            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }), T("2", Letters(language, "2")),
+                T("3", Letters(language, "3")) },
+            { T("4", Letters(language, "4")), T("5", Letters(language, "5")), T("6", Letters(language, "6")) },
+            { T("7", Letters(language, "7")), T("8", Letters(language, "8")), T("9", Letters(language, "9")) },
             { Special("shift", 110), T("0", { " ", "0" }), Special("back", 110) },
-            { Special("close", 80), Special("clear", 80), Special("mode", 80), Special("predict", 80), Special("enter", 110) },
+            { Special("close", 70), Special("clear", 70), Special("mode", 70), Special("predict", 70),
+                Special("lang", 70), Special("enter", 100) },
         }
         if mode == "t9p" then
             local suggestions = {}
@@ -49,13 +73,42 @@ local function Rows(mode)
         { "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\" },
         { "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'" },
         { { "shift", 80 }, "z", "x", "c", "v", "b", "n", "m", ",", ".", "/" },
-        { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "space", 220 }, { "enter", 100 } },
+        { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "lang", 60 }, { "space", 200 }, { "enter", 100 } },
     }
-    if de then
+    local offsets = { 0, 20, 30, 0, 0 }
+    if language == "DE" then
+        rows[2][6], rows[4][2] = "z", "y"
         table.insert(rows[3], "ä"); table.insert(rows[3], "ö")
         table.insert(rows[4], "ü"); table.insert(rows[4], "ß")
+    elseif language == "PL" then
+        table.insert(rows, 5, { "ą", "ć", "ę", "ł", "ń", "ó", "ś", "ź", "ż" })
+        offsets = { 0, 20, 30, 0, 40, 0 }
     end
-    return rows, { 0, 20, 30, 0, 0 }
+    return rows, offsets
+end
+
+function Keyboard:Language()
+    local saved = Addon.db and Addon.db.keyboardLanguage
+    for _, language in ipairs(LANGUAGES) do
+        if saved == language then return language end
+    end
+    return "EN"
+end
+
+function Keyboard:SetLanguage(language)
+    if not PHONE_LETTERS[language] then return end
+    Addon.db.keyboardLanguage = language
+    if self.frame then self:Apply(self.mode) end
+end
+
+function Keyboard:NextLanguage()
+    local current = self:Language()
+    for i, language in ipairs(LANGUAGES) do
+        if language == current then
+            self:SetLanguage(LANGUAGES[i % #LANGUAGES + 1])
+            return
+        end
+    end
 end
 
 local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW, PREVIEW_HEIGHT = 560, 16, 24, 28
@@ -245,10 +298,11 @@ function Keyboard:Label(key)
     end
     if key.special == "mode" then return self.mode == "abc" and "T9" or "ABC" end
     if key.special == "predict" then return "Smart" end
+    if key.special == "lang" then return self:Language() end
     if key.special then return SPECIAL_LABELS[key.special] end
     if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
     if not self.shift then return key.base end
-    return SHIFTED[key.base] or key.base:upper()
+    return SHIFTED[key.base] or Upper(key.base)
 end
 
 function Keyboard:Refresh()
@@ -436,6 +490,9 @@ function Keyboard:Press(key)
     elseif special == "predict" then
         self:SetMode(self.mode == "t9p" and "t9" or "t9p")
         return
+    elseif special == "lang" then
+        self:NextLanguage()
+        return
     elseif key.cand then
         self:Choose(key.cand)
         return
@@ -486,7 +543,7 @@ end
 -- The buttons of one layout, built once and shown or hidden when the mode changes.
 function Keyboard:Build(mode)
     local frame = self.frame
-    local rows, offsets = Rows(mode)
+    local rows, offsets = Rows(mode, self:Language())
     local phone = mode ~= "abc"
     local set = { keys = {}, special = {} }
     local widths, total = {}, 0
@@ -595,10 +652,11 @@ function Keyboard:Apply(mode)
         for _, key in ipairs(set.keys) do key:Hide() end
         set.legend:Hide()
     end
-    local set = self.sets[mode]
+    local id = mode .. "/" .. self:Language()
+    local set = self.sets[id]
     if not set then
         set = self:Build(mode)
-        self.sets[mode] = set
+        self.sets[id] = set
     end
     self.keys, self.special, self.sel, self.tap, self.pred, self.shift = set.keys, set.special, set.home, nil, nil, false
     self.buffer = ""

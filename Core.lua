@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.65"
+Addon.version = "0.1.0-alpha.66"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -406,6 +406,8 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         elseif mode == "forget" then
             Addon.Words:Forget()
             Addon:Print("Learned words forgotten.")
+        elseif mode == "en" or mode == "de" or mode == "pl" then
+            Addon.Keyboard:SetLanguage(mode:upper())
         elseif mode == "t9" or mode == "abc" or mode == "tap" or mode == "smart" then
             Addon.Keyboard:SetMode(mode == "smart" and "t9p" or (mode == "tap" and "t9" or mode))
             Addon.Keyboard:Show(false)
