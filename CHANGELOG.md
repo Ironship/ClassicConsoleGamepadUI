@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.68
+
+- Settings: a window of its own (`/cgp`) with tabs General, Hints, Chat, Keyboard and Tools, replacing the long list in the game's Settings panel. Plain frames, so it opens in combat and in Gamepad Mode; with a controller D-pad up/down select, left/right adjust, A activates, LB/RB switch tabs, B closes. Options > AddOns > ClassicConsoleGamepadUI keeps one button that opens it. The window position is remembered.
+
 ## 0.1.0-alpha.67
 
 - Keyboard: new Hybrid T9 mode (tap the letters, suggestions complete the word; LB/RB pick, Y accepts). Words typed in Tap mode are learned too.

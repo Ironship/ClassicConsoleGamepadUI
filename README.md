@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.67. Alpha: expect bugs.
+Version 0.1.0-alpha.68. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -30,12 +30,15 @@ Version 0.1.0-alpha.67. Alpha: expect bugs.
 
 ## Settings
 
-Options > AddOns > ClassicConsoleGamepadUI. The defaults should be fine.
+`/cgp` opens the settings window, a tab per topic (General, Hints, Chat, Keyboard, Tools); Options > AddOns > ClassicConsoleGamepadUI has a button that opens it too.
+It is made of plain frames, so it opens in combat and in Gamepad Mode. With a controller: D-pad up/down select, left/right adjust, A activates, LB / RB switch tabs, B closes.
+The defaults should be fine.
 
 Commands: `/cgp` (or `/classicconsolegamepadui`)
 
 *   `/cgp on`, `/cgp off`: turn the classic look on or off.
 *   `/cgp native`, `/cgp classic`: switch the action bars for this session.
+*   `/cgp`: open or close the settings window.
 *   `/cgp bindings`, `/cgp edit`: how to open the key bindings and the action editor.
 *   `/cgp status`: current state and the last problem found.
 *   `/cgp keyboard`: show or hide the on-screen keyboard (`abc`, `t9`, `tap`, `smart`, `hybrid`, `en`, `de`, `pl`, `forget` or `debug` as argument).
@@ -50,7 +53,7 @@ The setting "Classic player, target and focus frames" turns this handling off.
 ## Typing without a keyboard
 
 The game has no on-screen keyboard of its own and an addon cannot open the system's, so the addon has one:
-`/cgp keyboard` (or Options > AddOns > ClassicConsoleGamepadUI > On-screen keyboard). Open the chat line the normal way, then click
+`/cgp keyboard` (or the Keyboard tab of the settings window). Open the chat line the normal way, then click
 the keys with the mouse or the controller: D-pad moves, A types, B closes, X sends, Y accepts the word (adds a space),
 LT Shift, RT deletes, Start is Done. Drag it to move it. The `T9` key switches to a phone keypad.
 The settings under On-screen keyboard choose the language (EN QWERTY, DE QWERTZ, PL QWERTY with Polish letters;

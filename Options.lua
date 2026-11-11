@@ -102,6 +102,12 @@ local extraText = ({
         keyboardInput = "Tryb T9 klawiatury ekranowej",
         keyboardInputTip = "Tap: naciskaj klawisz kilka razy, aby wybrać literę. Smart: naciskaj każdy klawisz raz i wybierz słowo z podpowiedzi. Hybrid: pisz literami jak w Tap, a podpowiedzi uzupełniają słowo (LB/RB wybierają, Y akceptuje).",
         inputTap = "Tap (wielokrotne naciśnięcia)", inputSmart = "Smart (podpowiedzi)", inputHybrid = "Hybrid (Tap + podpowiedzi)",
+        tabGeneral = "Ogólne", tabHints = "Podpowiedzi", tabKeyboard = "Klawiatura", tabTools = "Narzędzia",
+        padHint = "%s/%s: wybór  ·  %s/%s: zmiana  ·  %s: użyj  ·  %s: zamknij  ·  %s/%s: karty",
+        forgetWords = "Zapomnij nauczone słowa",
+        forgetWordsTip = "Czyści listę słów, których uczą się podpowiedzi klawiatury z czatu i tekstów zadań.",
+        wordsForgotten = "Nauczone słowa zapomniane.",
+        openTip = "Otwórz okno ustawień. Możesz też wpisać /cgp.",
         items = "Przedmioty", easyDelete = "Łatwe usuwanie: X, X, A, A",
         easyDeleteTip = "W oknie usuwania wymagającym sekwencji przycisków użyj X, X, A, A. Czwarty przycisk zatwierdza usunięcie. B nadal anuluje, błędny przycisk zeruje sekwencję. Działa poza walką w trybie pada.",
     },
@@ -139,6 +145,12 @@ local extraText = ({
         keyboardInput = "T9-Modus der Bildschirmtastatur",
         keyboardInputTip = "Tap: Taste mehrmals drücken, um den Buchstaben zu wählen. Smart: jede Taste einmal drücken und das Wort aus den Vorschlägen wählen. Hybrid: Buchstaben wie bei Tap tippen, Vorschläge ergänzen das Wort (LB/RB wählen, Y übernimmt).",
         inputTap = "Tap (mehrfach drücken)", inputSmart = "Smart (Vorschläge)", inputHybrid = "Hybrid (Tap + Vorschläge)",
+        tabGeneral = "Allgemein", tabHints = "Hinweise", tabKeyboard = "Tastatur", tabTools = "Werkzeuge",
+        padHint = "%s/%s: wählen  ·  %s/%s: ändern  ·  %s: benutzen  ·  %s: schließen  ·  %s/%s: Tabs",
+        forgetWords = "Gelernte Wörter vergessen",
+        forgetWordsTip = "Löscht die Wortliste, die die Vorschläge der Tastatur aus Chat und Questtexten lernen.",
+        wordsForgotten = "Gelernte Wörter vergessen.",
+        openTip = "Das Einstellungsfenster öffnen. Du kannst auch /cgp eingeben.",
         items = "Gegenstände", easyDelete = "Einfaches Zerstören: X, X, A, A",
         easyDeleteTip = "Im Zerstörungsdialog mit Tastenkombination X, X, A, A drücken. Die vierte Taste bestätigt das Zerstören. B bricht weiterhin ab; eine falsche Taste setzt die Folge zurück. Nur außerhalb des Kampfes im Gamepad-Modus.",
     },
@@ -175,6 +187,12 @@ local extraText = ({
     keyboardInput = "On-screen keyboard T9 mode",
     keyboardInputTip = "Tap: press a key repeatedly to pick the letter. Smart: press each key once and pick the word from the suggestions. Hybrid: tap the letters as in Tap and let the suggestions complete the word (LB/RB choose, Y accepts).",
     inputTap = "Tap (repeated presses)", inputSmart = "Smart (suggestions)", inputHybrid = "Hybrid (Tap + suggestions)",
+    tabGeneral = "General", tabHints = "Hints", tabKeyboard = "Keyboard", tabTools = "Tools",
+    padHint = "%s/%s: select  ·  %s/%s: adjust  ·  %s: activate  ·  %s: close  ·  %s/%s: tabs",
+    forgetWords = "Forget learned words",
+    forgetWordsTip = "Clears the word list the keyboard's suggestions learn from chat and quest texts.",
+    wordsForgotten = "Learned words forgotten.",
+    openTip = "Open the settings window. You can also type /cgp.",
     items = "Items", easyDelete = "Easy deletion: X, X, A, A",
     easyDeleteTip = "Use X, X, A, A in item deletion dialogs that require a button sequence. The fourth press confirms deletion. B still cancels; a wrong button resets the sequence. Available outside combat in Gamepad Mode.",
 }
@@ -206,6 +224,27 @@ local controls = {
 
 local geometrySettings = { compact = true, contextGap = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
+
+-- Shared with the settings window (SettingsWindow.lua).
+Options.text, Options.controls = text, controls
+Options.choices = {
+    keyboardLanguage = { { "EN", "English (QWERTY)" }, { "DE", "Deutsch (QWERTZ)" }, { "PL", "Polski (QWERTY)" } },
+    keyboardPhone = { { "t9", text.inputTap }, { "t9p", text.inputSmart }, { "t9h", text.inputHybrid } },
+}
+
+-- A setting was changed in the settings window (its value is already in the database).
+function Options:Changed(key)
+    Addon:Trace("setting " .. key)
+    Addon:CheckNativeTaint("setting changed: " .. key)
+    if key == "keyboardLanguage" then
+        Addon.Keyboard:SetLanguage(Addon.db[key])
+    elseif key == "keyboardPhone" then
+        if (Addon.Keyboard.mode or Addon.db.keyboardMode) ~= "abc" then Addon.Keyboard:SetMode(Addon.db[key]) end
+    else
+        if geometrySettings[key] then Addon.Layout.dirty = true end
+        Addon:QueueRefresh(true)
+    end
+end
 
 local KEYBOARD_LANGUAGES = { "EN", "DE", "PL" }
 local KEYBOARD_INPUTS = { "t9", "t9p", "t9h" }
@@ -478,6 +517,7 @@ end
 
 function Options:BindFromBars()
     if not OutsideCombat() then return end
+    Addon.SettingsWindow:Hide()
     if SettingsPanel:IsShown() then
         -- Let the player close Settings; closing it from here taints its teardown.
         self.pendingBind = true
@@ -498,101 +538,17 @@ function Options:ObserveSettingsPanel()
     end)
 end
 
+-- Options > AddOns has one button that opens the settings window.
 function Options:Register()
     local category, layout = Settings.RegisterVerticalLayoutCategory("ClassicConsoleGamepadUI")
     self.category = category
-    local initializers = {}
-    for _, info in ipairs(controls) do
-        if info.section then layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text[info.section])) end
-        local key = info.key
-        local setting = Settings.RegisterAddOnSetting(category, "CLASSICCONSOLEGAMEPADUI_" .. key:upper(), key, Addon.db,
-            info.min and Settings.VarType.Number or Settings.VarType.Boolean, text[key], info.default)
-        setting:SetValueChangedCallback(function()
-            Addon:Trace("setting " .. key)
-            Addon:CheckNativeTaint("setting changed: " .. key)
-            -- Non-layout options must not rebuild native frames while Settings owns focus.
-            if geometrySettings[key] then Addon.Layout.dirty = true end
-            Addon:QueueRefresh(true)
-        end)
-        local tooltip = text[info.tip or (key .. "Tip")]
-        local initializer
-        if info.min then
-            local options = Settings.CreateSliderOptions(info.min, info.max, info.step)
-            options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
-                if key == "promptScale" or key == "modifierScale" then return math.floor(value * 100 + 0.5) .. "%" end
-                return tostring(math.floor(value + 0.5))
-            end)
-            initializer = Settings.CreateSlider(category, setting, options, tooltip)
-        else
-            initializer = Settings.CreateCheckbox(category, setting, tooltip)
-        end
-        initializers[key] = initializer
-        if info.parent then initializer:SetParentInitializer(initializers[info.parent]) end
-    end
-    -- A choice from a short list, kept in the addon's database; a drop-down where the Settings API has one, else
-    -- a button that steps to the next choice.
-    local function AddChoice(key, label, tip, choices, apply)
-        local function name(value)
-            for _, choice in ipairs(choices) do
-                if choice[1] == value then return choice[2] end
-            end
-            return tostring(value)
-        end
-        local ok = pcall(function()
-            local setting = Settings.RegisterAddOnSetting(category, "CLASSICCONSOLEGAMEPADUI_" .. key:upper(), key,
-                Addon.db, Settings.VarType.String, label, Addon.db[key])
-            setting:SetValueChangedCallback(function() apply(Addon.db[key]) end)
-            local function options()
-                local container = Settings.CreateControlTextContainer()
-                for _, choice in ipairs(choices) do container:Add(choice[1], choice[2]) end
-                return container:GetData()
-            end
-            local create = Settings.CreateDropdown or Settings.CreateDropDown
-            create(category, setting, options, tip)
-        end)
-        if not ok then
-            layout:AddInitializer(CreateSettingsButtonInitializer(label, name(Addon.db[key]), function()
-                for i, choice in ipairs(choices) do
-                    if choice[1] == Addon.db[key] then
-                        apply(choices[i % #choices + 1][1])
-                        return
-                    end
-                end
-                apply(choices[1][1])
-            end, tip, true))
-        end
-    end
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text.keyboard))
-    AddChoice("keyboardLanguage", text.keyboardLanguage, text.keyboardLanguageTip, {
-        { "EN", "English (QWERTY)" }, { "DE", "Deutsch (QWERTZ)" }, { "PL", "Polski (QWERTY)" },
-    }, function(value) Addon.Keyboard:SetLanguage(value) end)
-    AddChoice("keyboardPhone", text.keyboardInput, text.keyboardInputTip, {
-        { "t9", text.inputTap }, { "t9p", text.inputSmart }, { "t9h", text.inputHybrid },
-    }, function(value)
-        if (Addon.Keyboard.mode or Addon.db.keyboardMode) ~= "abc" then
-            Addon.Keyboard:SetMode(value)
-        else
-            Addon.db.keyboardPhone = value
-        end
-    end)
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(SETTINGS_KEYBINDINGS_LABEL))
-    for _, info in ipairs({
-        { text.keyboard, text.keyboardTip, function() Addon.Keyboard:Toggle() end },
-        { text.bind, text.bindTip, function() self:BindFromBars() end },
-        { SETTINGS_KEYBINDINGS_LABEL, text.bindingsTip, function() self:OpenBindings() end },
-        { text.actions, text.actionsTip, function() self:EditActions() end },
-        { GAMEPAD_LABEL, text.controlsTip, function() self:OpenGamepad() end },
-    }) do
-        layout:AddInitializer(CreateSettingsButtonInitializer(info[1], text.open, info[3], info[2], true))
-    end
+    layout:AddInitializer(CreateSettingsButtonInitializer("ClassicConsoleGamepadUI", text.open, function()
+        Addon.SettingsWindow:Open()
+    end, text.openTip, true))
     Settings.RegisterAddOnCategory(category)
     self:ObserveSettingsPanel()
 end
 
 function Options:Open()
-    if not CanDrivePanels() then
-        Addon:Print(text.panelRoute)
-        return
-    end
-    Settings.OpenToCategory(self.category:GetID())
+    Addon.SettingsWindow:Toggle()
 end
