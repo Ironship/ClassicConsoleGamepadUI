@@ -2,8 +2,10 @@
 
 ## 0.1.0-alpha.53
 
-- On-screen keyboard for typing in chat (`/cgp keyboard`, or the button in the settings). Click the keys with
-  the mouse; Shift applies to the next key, `<-` removes a character, Enter sends. It acts on the open chat
+- On-screen keyboard for typing in chat (`/cgp keyboard`, or the button in the settings). It works with the
+  controller too: D-pad moves the highlight, A types the key, B deletes, X is space, Y is Shift, Start sends,
+  Back closes. The pad buttons are taken over only while the keyboard is open (not in combat, where addons
+  cannot change bindings; the mouse still works and the pad returns after combat). Mouse: Shift applies to the next key, `<-` removes a character, Enter sends. It acts on the open chat
   line only (insert, delete, send) and can be dragged anywhere. The German layout swaps Y and Z and adds
   the umlauts and ß. Setting "On-screen keyboard when typing in chat" opens it with the chat line in
   Gamepad Mode (off by default).

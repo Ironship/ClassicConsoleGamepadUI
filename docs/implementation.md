@@ -175,7 +175,12 @@ matching the exported source commit's build **1.60.1 (70450)**.
   `ChatFrameUtil.GetActiveWindow` / `OpenChat` (legacy `ChatEdit_*` as fallback) give the edit box;
   `ChatFrameEditBox.lua`: `ChatFrameEditBoxMixin:SendMessage` sends and clears the line. Keys only call
   `Insert`, `SetText`, `SetFocus` and `SendMessage` on that box. `ChatFrame.OnEditBoxFocusGained` (EventRegistry)
-  opens it with the chat line when the setting is on.
+  opens it with the chat line when the setting is on. Controller: like `ItemDelete.lua`, a
+  `SecureHandlerShowHideTemplate,SecureHandlerStateTemplate` header binds the D-pad, face buttons and
+  Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a `SecureActionButtonTemplate` while the keyboard
+  is shown in Gamepad Mode; its wrapped `OnClick` only bumps `padcount`/`padtoken`, which an `OnAttributeChanged`
+  hook reads. The `[combat]` state driver clears the bindings, and the keyboard's 0.25 s `OnUpdate` shows the
+  header again after combat.
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the
