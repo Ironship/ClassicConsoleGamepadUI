@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.70. Alpha: expect bugs.
+Version 0.1.0-alpha.71. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -55,8 +55,10 @@ The setting "Classic player, target and focus frames" turns this handling off.
 The game has no on-screen keyboard of its own and an addon cannot open the system's, so the addon has one:
 `/cgp keyboard` (or the Keyboard tab of the settings window). Open the chat line the normal way, then click
 the keys with the mouse or the controller: D-pad moves, A types, B closes, Y accepts the word (adds a space),
-LT Shift, RT deletes, X (or Start) is Done: the word goes into the chat line, the keyboard lets go of the controller and the
-game's own A sends the line. Drag it to move it. The `T9` key switches to a phone keypad.
+LT Shift, RT deletes, Start is Done (the word goes into the line and the keyboard closes). X sends the line: while the chat line has the
+focus and no word is waiting, X is the game's own send button, so the game itself sends (a waiting word goes into the
+line with the first X; with the keyboard closed the game's own A sends as usual). The keyboard closes when the line closes.
+Drag it to move it. The `T9` key switches to a phone keypad.
 The settings under On-screen keyboard choose the language (EN QWERTY, DE QWERTZ, PL QWERTY with Polish letters;
 `/cgp keyboard en|de|pl`) and the T9 mode (`tap`, `smart`, `hybrid`; `/cgp keyboard tap|smart|hybrid`):
 Tap presses a key repeatedly for the next letter (RB, a pause or moving the selection ends a letter), Smart takes one

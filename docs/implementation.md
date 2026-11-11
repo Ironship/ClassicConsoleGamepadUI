@@ -178,10 +178,18 @@ matching the exported source commit's build **1.60.1 (70450)**.
   `FrameControlsManager` and the `InputBindingManager` binding sets, and `SendText` calls `ParseText(1)`, which runs
   secure slash commands. Called from addon code all of it runs with the addon's taint, and `securecallfunction`
   does not change that: `CallbackRegistryMixin:TriggerEvent` uses it so that an addon callback's taint does not reach
-  the game's own caller, not the other way round. Done (X or Start) puts the word into the line and hides the
-  keyboard; the game's own A then sends. `ChatFrame.OnEditBoxFocusGained` (EventRegistry callbacks run through
-  `securecallfunction`) opens the keyboard with the chat line when the setting is on, a frame later and not within
-  the first five seconds after entering the world.
+  the game's own caller, not the other way round. Sending is the game's: the footer's "A: send" is an
+  `InputFunctionBinding`, i.e. `PAD1` bound to the global button `InputFunctionBindingButton_PAD1`, whose `OnClick` calls
+  `PromptedBindingMixin:TriggerBinding` (only on a key down, so a secure `type = "click"` action, which calls
+  `Click(button)` with `down = false`, cannot trigger it). While the chat line has the focus,
+  `box.chatFrame.footer.isShown` is true (read raw: the footer is a mixin table whose metatable throws on a missing
+  field) and no word waits in the buffer, the header binds X straight to that button
+  (`SetBindingClick(true, "PAD3", "InputFunctionBindingButton_PAD1", "LeftButton")`, attribute `sendbutton`), so the
+  game runs its own send. `Keyboard:SyncSend` follows that state (the 0.25 s check, every change of the buffer, the
+  chat's focus callbacks). A waiting word goes into the line with the first X. Start is Done: the word goes into the
+  line and the keyboard closes. The keyboard also hides when a chat line it has seen closes.
+  `ChatFrame.OnEditBoxFocusGained` (EventRegistry callbacks run through `securecallfunction`) opens the keyboard with
+  the chat line when the setting is on, a frame later and not within the first five seconds after entering the world.
 - Keyboard controller: like `ItemDelete.lua`, a `SecureHandlerShowHideTemplate,SecureHandlerStateTemplate` header
   binds the D-pad, face buttons, shoulders, triggers and Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a
   `SecureActionButtonTemplate` while the keyboard is shown in Gamepad Mode; its wrapped `OnClick` only bumps

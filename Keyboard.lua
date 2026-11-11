@@ -2,7 +2,8 @@ local _, Addon = ...
 -- An on-screen keyboard for typing in chat. The game has none in Gamepad Mode and an addon cannot open the
 -- system's. The keys act on the chat line the player has opened, with plain edit box calls (Insert, SetText) only:
 -- opening, focusing or sending the line from addon code runs the game's chat and gamepad binding code with this
--- addon's taint (securecallfunction does not remove it), so the player opens the line and the game's own A sends it.
+-- addon's taint (securecallfunction does not remove it). So the player opens the line, and sending is the game's
+-- own: X is bound to the game's send button while that works (Keyboard:SyncSend), else the native A sends.
 -- No protected frame is touched, so the keyboard is also safe to leave open in combat.
 -- Layouts: "abc" (full keyboard) and the phone keypad: "t9" (multi-tap), "t9p" (smart: one press per key, words
 -- suggested) and "t9h" (hybrid: multi-tap letters, suggestions complete the word).
@@ -15,6 +16,50 @@ local KEY, GAP, PAD = 40, 3, 10
 local function Trace(message)
     if Addon.Trace then Addon:Trace(message) end
 end
+
+-- Texts, in the client's language (English where a text is missing).
+local STRINGS = {
+    enUS = {
+        move = "Move", key = "Key", send = "Send", close = "Close", space = "Space", shift = "Shift",
+        delete = "Delete", done = "Done", capital = "Capital", accept = "Accept", acceptWord = "Accept word",
+        pressAgain = "Press (again: next letter)", nextLetter = "Next letter", letterAgain = "Letter (again: next)",
+        previousWord = "Previous word", nextWord = "Next word", clear = "Clear",
+        hintSmart = "Smart: press each key once, LB/RB changes the word, Y accepts",
+        hintHybrid = "Hybrid: tap the letters, LB/RB picks a suggestion, Y accepts",
+        hintTap = "Tap: press a key again for its next letter, RB ends a letter, Y accepts",
+        noMatch = "no word matches: Tap and Hybrid are in the settings",
+        noChat = "No chat line is open: open it first (Enter or the chat button)",
+        openChat = "Open the chat line first (Enter or the chat button), then use the keyboard.",
+    },
+    deDE = {
+        move = "Bewegen", key = "Taste", send = "Senden", close = "Schließen", space = "Leerzeichen",
+        shift = "Umschalt", delete = "Löschen", done = "Fertig", capital = "Großbuchstabe", accept = "Übernehmen",
+        acceptWord = "Wort übernehmen", pressAgain = "Drücken (nochmal: nächster Buchstabe)",
+        nextLetter = "Nächster Buchstabe", letterAgain = "Buchstabe (nochmal: nächster)",
+        previousWord = "Vorheriges Wort", nextWord = "Nächstes Wort", clear = "Leeren",
+        hintSmart = "Smart: jede Taste einmal drücken, LB/RB wechselt das Wort, Y übernimmt",
+        hintHybrid = "Hybrid: Buchstaben antippen, LB/RB wählt einen Vorschlag, Y übernimmt",
+        hintTap = "Tap: Taste nochmal drücken für den nächsten Buchstaben, RB beendet einen Buchstaben, Y übernimmt",
+        noMatch = "kein Wort passt: Tap und Hybrid gibt es in den Einstellungen",
+        noChat = "Keine Chatzeile offen: erst öffnen (Enter oder Chat-Taste)",
+        openChat = "Erst die Chatzeile öffnen (Enter oder Chat-Taste), dann die Tastatur benutzen.",
+    },
+    plPL = {
+        move = "Ruch", key = "Klawisz", send = "Wyślij", close = "Zamknij", space = "Spacja", shift = "Shift",
+        delete = "Usuń", done = "Gotowe", capital = "Wielka litera", accept = "Przyjmij", acceptWord = "Przyjmij słowo",
+        pressAgain = "Naciśnij (ponownie: kolejna litera)", nextLetter = "Kolejna litera",
+        letterAgain = "Litera (ponownie: kolejna)", previousWord = "Poprzednie słowo", nextWord = "Następne słowo",
+        clear = "Wyczyść",
+        hintSmart = "Smart: każdy klawisz raz, LB/RB zmienia słowo, Y przyjmuje",
+        hintHybrid = "Hybrid: wpisuj litery, LB/RB wybiera podpowiedź, Y przyjmuje",
+        hintTap = "Tap: naciśnij klawisz ponownie, by zmienić literę, RB kończy literę, Y przyjmuje",
+        noMatch = "brak pasującego słowa: Tap i Hybrid są w ustawieniach",
+        noChat = "Brak otwartej linii czatu: otwórz ją najpierw (Enter lub przycisk czatu)",
+        openChat = "Najpierw otwórz linię czatu (Enter lub przycisk czatu), potem użyj klawiatury.",
+    },
+}
+local L = STRINGS[GetLocale()] or STRINGS.enUS
+if L ~= STRINGS.enUS then setmetatable(L, { __index = STRINGS.enUS }) end
 
 local SHIFTED = {
     ["`"] = "~", ["1"] = "!", ["2"] = "@", ["3"] = "#", ["4"] = "$", ["5"] = "%", ["6"] = "^", ["7"] = "&",
@@ -117,14 +162,16 @@ local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW, PREVIEW_HEIGHT = 560, 16, 24, 28
 
 -- The button prompts under the keys: an icon of the pad button and what it does.
 local LEGENDS = {
-    abc = { { "dpad", "Move" }, { "A", "Key" }, { "X", "Done: A sends" }, { "B", "Close" }, { "Y", "Space" },
-        { "LT", "Shift" }, { "RT", "Delete" } },
-    t9 = { { "dpad", "Move" }, { "A", "Press (again: next letter)" }, { "RB", "Next letter" },
-        { "Y", "Accept word" }, { "X", "Done: A sends" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" } },
-    t9h = { { "dpad", "Move" }, { "A", "Letter (again: next)" }, { "Y", "Accept" }, { "LB", "Previous word" },
-        { "RB", "Next word" }, { "X", "Done: A sends" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" } },
-    t9p = { { "dpad", "Move" }, { "A", "Key" }, { "Y", "Accept word" }, { "LB", "Previous word" },
-        { "RB", "Next word" }, { "X", "Done: A sends" }, { "B", "Close" }, { "LT", "Capital" }, { "RT", "Delete" } },
+    abc = { { "dpad", L.move }, { "A", L.key }, { "X", L.send }, { "B", L.close }, { "Y", L.space },
+        { "LT", L.shift }, { "RT", L.delete }, { "Start", L.done } },
+    t9 = { { "dpad", L.move }, { "A", L.pressAgain }, { "RB", L.nextLetter }, { "Y", L.acceptWord },
+        { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete }, { "Start", L.done } },
+    t9h = { { "dpad", L.move }, { "A", L.letterAgain }, { "Y", L.accept }, { "LB", L.previousWord },
+        { "RB", L.nextWord }, { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete },
+        { "Start", L.done } },
+    t9p = { { "dpad", L.move }, { "A", L.key }, { "Y", L.acceptWord }, { "LB", L.previousWord },
+        { "RB", L.nextWord }, { "X", L.send }, { "B", L.close }, { "LT", L.capital }, { "RT", L.delete },
+        { "Start", L.done } },
 }
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -196,6 +243,7 @@ end
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
 -- item deletion helper does (see ItemDelete.lua), and tells this file which one was pressed. It removes its
 -- bindings in combat, when addons may not change them; the bindings come back once combat ends.
+local SEND_KEY = GAMEPAD_FACE_LEFT or "PAD3"
 local PAD_TOKENS = {
     [GAMEPAD_DPAD_TOP or "PADDUP"] = "up", [GAMEPAD_DPAD_BOTTOM or "PADDDOWN"] = "down",
     [GAMEPAD_DPAD_LEFT or "PADDLEFT"] = "left", [GAMEPAD_DPAD_RIGHT or "PADDRIGHT"] = "right",
@@ -206,10 +254,16 @@ local PAD_TOKENS = {
     [GAMEPAD_TRIGGER_LEFT or "PADLTRIGGER"] = "shift", [GAMEPAD_TRIGGER_RIGHT or "PADRTRIGGER"] = "delete",
 }
 
+-- "sendbutton": while the chat line can be sent, X is bound straight to the game's own send button
+-- (see Keyboard:SyncSend); otherwise it is the keyboard's.
 local PAD_BIND = [[
     self:ClearBindings()
     for i = 1, self:GetAttribute("keycount") do
         self:SetBindingClick(true, self:GetAttribute("key" .. i), self:GetAttribute("button"), self:GetAttribute("token" .. i))
+    end
+    local send = self:GetAttribute("sendbutton")
+    if send then
+        self:SetBindingClick(true, self:GetAttribute("sendkey"), send, "LeftButton")
     end
 ]]
 
@@ -228,19 +282,16 @@ end
 
 -- The edit box that has the chat line open. Opening, focusing or sending the chat line from here would run
 -- the game's chat focus and gamepad binding code inside this addon's call, and the bindings it sets up would
--- be tainted: opening the game menu in combat is then blocked. The player opens and sends the line natively.
+-- be tainted: opening the game menu in combat is then blocked. The player opens the line natively, and the
+-- game itself sends it (X is bound to the game's own send button, see Keyboard:SyncSend).
 local function FindEditBox()
     local active = ChatFunction("GetActiveWindow", "ChatEdit_GetActiveWindow")
     local box = active and active()
     if box then return box end
-    -- The game may not report its chat line as the active one in Gamepad Mode: take any open one.
+    -- The game may not report its chat line as the active one: take one that has the focus.
     for i = 1, NUM_CHAT_WINDOWS or 10 do
         local candidate = _G["ChatFrame" .. i .. "EditBox"]
         if candidate and candidate:IsShown() and candidate.HasFocus and candidate:HasFocus() then return candidate end
-    end
-    for i = 1, NUM_CHAT_WINDOWS or 10 do
-        local candidate = _G["ChatFrame" .. i .. "EditBox"]
-        if candidate and candidate:IsShown() then return candidate end
     end
 end
 
@@ -252,26 +303,26 @@ local function EditBox()
         local now = GetTime()
         if not Keyboard.noticeTime or now - Keyboard.noticeTime > 3 then
             Keyboard.noticeTime = now
-            Addon:Print("Open the chat line first (Enter or the chat button), then use the keyboard.")
+            Addon:Print(L.openChat)
         end
     end
     return box
 end
 
--- A line on the keyboard itself that tells whether there is a chat line to type into.
+-- A line on the keyboard itself that tells whether there is a chat line to type into. A keyboard that opened with
+-- the chat line, or that has seen a chat line since it was shown, goes away when that line closes (sent, or closed
+-- with B).
 function Keyboard:UpdateStatus()
     if not self.status then return end
     local open = FindEditBox()
-    -- A keyboard that opened by itself with the chat line goes away with it.
-    if not open and self.auto and self.frame and self.frame:IsShown() and GetTime() - (self.shownAt or 0) > 1 then
+    if open then
+        self.sawChat = true
+    elseif self.frame and self.frame:IsShown() and GetTime() - (self.shownAt or 0) > 1
+        and (self.auto or self.sawChat) then
         self:Hide()
         return
     end
-    if open then
-        self.status:SetText("")
-    else
-        self.status:SetText("No chat line is open: open it first (Enter or the chat button)")
-    end
+    self.status:SetText(open and "" or L.noChat)
 end
 
 local function Upper(text)
@@ -290,7 +341,7 @@ local function WithoutLastCharacter(text)
     return (text:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""))
 end
 
-local SPECIAL_LABELS = { back = "<-", shift = "Shift", close = "X", clear = "Clear", space = "Space", enter = "Done" }
+local SPECIAL_LABELS = { back = "<-", shift = L.shift, close = "X", clear = L.clear, space = L.space, enter = L.done }
 
 function Keyboard:Label(key)
     if key.cand then
@@ -365,6 +416,7 @@ function Keyboard:UpdateHints()
     self.hints = hints
     if self.keys then self:Refresh() end
     self:ShowPreview()
+    if self.pad then self:QueueSendSync() end
 end
 
 function Keyboard:ShowPreview()
@@ -372,14 +424,14 @@ function Keyboard:ShowPreview()
     local text = self:Pending()
     if text == "" then
         if self.mode == "t9p" then
-            self.preview:SetText("|cff888888Smart: press each key once, LB/RB changes the word, Y accepts|r")
+            self.preview:SetText("|cff888888" .. L.hintSmart .. "|r")
         elseif self.mode == "t9h" then
-            self.preview:SetText("|cff888888Hybrid: tap the letters, LB/RB picks a suggestion, Y accepts|r")
+            self.preview:SetText("|cff888888" .. L.hintHybrid .. "|r")
         else
-            self.preview:SetText("|cff888888Tap: press a key again for its next letter, RB ends a letter, Y accepts|r")
+            self.preview:SetText("|cff888888" .. L.hintTap .. "|r")
         end
     elseif self.pred and self.pred.fallback then
-        self.preview:SetText(text .. "|cffffd100_|r  |cffff9933no word matches: the Smart key switches to Tap|r")
+        self.preview:SetText(text .. "|cffffd100_|r  |cffff9933" .. L.noMatch .. "|r")
     else
         self.preview:SetText(text .. "|cffffd100_|r")
     end
@@ -417,12 +469,19 @@ function Keyboard:ShowWord()
 end
 
 -- Put the word in progress into the chat line, with a space after it if wanted. Without a word, the space alone.
--- False when there is no chat line to put it in (the word stays in the buffer).
+-- A space is never the first character of the line (a line that starts with a space is no slash command any more)
+-- and never follows another space. False when there is no chat line to put it in (the word stays in the buffer).
 function Keyboard:Flush(space)
     local text = self:Pending()
     if text == "" and not space then return true end
     local box = EditBox()
     if not box then return false end
+    local line = box:GetText() or ""
+    if line == "" then text = (text:gsub("^%s+", "")) end
+    if text == "" then
+        if line ~= "" and line:sub(-1) ~= " " then box:Insert(" ") end
+        return true
+    end
     local pred = self.pred
     if pred then
         if not pred.fallback and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
@@ -621,7 +680,7 @@ function Keyboard:Build(mode)
                 button.chars, button.digit = entry.chars, entry.digit
                 local hint = {}
                 for _, c in ipairs(entry.chars) do
-                    if c ~= entry.digit then hint[#hint + 1] = c == " " and "space" or c end
+                    if c ~= entry.digit then hint[#hint + 1] = c == " " and L.space:lower() or c end
                 end
                 button.hint = table.concat(hint)
             elseif isTable and entry.cand then
@@ -776,7 +835,7 @@ function Keyboard:Show(auto)
     self.auto = auto and true or false
     self.shownAt = GetTime()
     self.shift, self.tap, self.pred, self.buffer = false, nil, nil, ""
-    self.unreadable = nil
+    self.unreadable, self.sawChat = nil, nil
     self:UpdateHints()
     self.frame:Show()
     self:SyncPad()
@@ -789,7 +848,10 @@ function Keyboard:Hide()
     self.pred, self.buffer, self.tap = nil, "", nil
     self.hints = nil
     if self.frame then self.frame:Hide() end
-    if self.pad and self.pad:IsShown() and not InCombatLockdown() then self.pad:Hide() end
+    if self.pad and not InCombatLockdown() then
+        self.pad:SetAttribute("sendbutton", nil)
+        if self.pad:IsShown() then self.pad:Hide() end
+    end
 end
 
 function Keyboard:CreatePad()
@@ -817,6 +879,7 @@ function Keyboard:CreatePad()
         end
     end
     pad:SetAttribute("keycount", count)
+    pad:SetAttribute("sendkey", SEND_KEY)
     pad:SetAttribute("button", button:GetName())
     pad:HookScript("OnAttributeChanged", function(_, name)
         if name == "padcount" then self:PadPress(pad:GetAttribute("padtoken")) end
@@ -834,12 +897,20 @@ function Keyboard:SyncPad()
     if InCombatLockdown() then return end
     if wanted and not self.pad then self:CreatePad() end
     if not self.pad then return end
-    if wanted and not self.pad:IsShown() then Trace("Keyboard pad on"); self.pad:Show()
+    if wanted and not self.pad:IsShown() then
+        Trace("Keyboard pad on")
+        self.pad:Show()
+        self:QueueSendSync()
     elseif not wanted and self.pad:IsShown() then Trace("Keyboard pad off"); self.pad:Hide()
-    elseif wanted and self:BindingsLost() then self:Reclaim() end
+    elseif wanted then
+        self:SyncSend()
+        if self:BindingsLost() then self:Reclaim() end
+    end
 end
 
 local function Expected(self, key)
+    local send = key == SEND_KEY and self.pad:GetAttribute("sendbutton")
+    if send then return "CLICK " .. send .. ":LeftButton" end
     return "CLICK " .. self.pad:GetAttribute("button") .. ":" .. PAD_TOKENS[key]
 end
 
@@ -896,6 +967,46 @@ function Keyboard:Reclaim()
     C_Timer.After(0, function() self.rebindQueued = nil; self:Rebind() end)
 end
 
+-- The game's button for PAD1 (A). While the chat footer is up its OnClick is the chat's own "A: send"
+-- (GamepadSharedUtility.InputFunctionBinding: SetOverrideBindingClick(UIParent, true, "PAD1", this button)).
+local NATIVE_SEND = "InputFunctionBindingButton_" .. (GAMEPAD_FACE_BOTTOM or "PAD1")
+
+-- X sends the line the game's way: while the chat line has the focus, its footer is up and no word waits in the
+-- keyboard's buffer, X is bound straight to that button, so the send runs in the game's own code. Calling the
+-- chat's SendMessage from here would run it (closing the line, the footer's binding sets, secure slash commands)
+-- with this addon's taint, and securecallfunction does not remove that.
+function Keyboard:WantsNativeSend()
+    if InCombatLockdown() or not (self.frame and self.frame:IsShown()) or not Addon:IsGamepadMode() then return false end
+    if self:Pending() ~= "" or not _G[NATIVE_SEND] then return false end
+    local box = FindEditBox()
+    if not (box and box.HasFocus and box:HasFocus()) then return false end
+    -- The footer is a mixin table whose metatable throws on a field it does not have: read it raw.
+    local chatFrame = box.chatFrame
+    local footer = type(chatFrame) == "table" and rawget(chatFrame, "footer") or nil
+    return type(footer) == "table" and rawget(footer, "isShown") == true
+end
+
+function Keyboard:SyncSend()
+    local pad = self.pad
+    if not pad or InCombatLockdown() or not SecureHandlerExecute then return end
+    local ok, want = pcall(self.WantsNativeSend, self)
+    local desired = ok and want and NATIVE_SEND or nil
+    if pad:GetAttribute("sendbutton") == desired then return end
+    pad:SetAttribute("sendbutton", desired)
+    Trace("Keyboard: X is " .. (desired and "the game's send button" or "the keyboard's"))
+    if pad:IsShown() then SecureHandlerExecute(pad, PAD_BIND) end
+end
+
+-- The state of X can change with every key (the buffer fills and empties): look at it once, on the next frame.
+function Keyboard:QueueSendSync()
+    if self.sendQueued then return end
+    self.sendQueued = true
+    C_Timer.After(0, function()
+        self.sendQueued = nil
+        self:SyncSend()
+    end)
+end
+
 -- The game's input binding stack: every footer, menu and dialog that takes the pad adds or removes a set there.
 -- A post-hook runs after the game's own code and does not taint it.
 function Keyboard:WatchBindings()
@@ -911,10 +1022,10 @@ end
 
 -- /cgp keyboard debug: what the pad buttons are bound to while the keyboard is up.
 function Keyboard:Debug()
-    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s",
+    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s send=%s",
         tostring(self.frame and self.frame:IsShown()), tostring(self.pad and self.pad:IsShown()),
         tostring(Addon:IsGamepadMode()), tostring(FindEditBox() and FindEditBox():GetName()),
-        tostring(self.reclaims or 0)))
+        tostring(self.reclaims or 0), tostring(self.pad and self.pad:GetAttribute("sendbutton"))))
     if not (GetBindingAction and self.pad) then return end
     for key, token in pairs(PAD_TOKENS) do
         Addon:Print(string.format("  %s (%s): %s", key, token, tostring(GetBindingAction(key, true))))
@@ -976,8 +1087,13 @@ function Keyboard:PadPress(token)
     elseif token == "b" or token == "select" then
         self:Hide()
     elseif token == "x" then
-        -- Done: the word goes to the chat line and the keyboard lets go of the pad, so the game's own A sends it.
-        self:Press(self.special.enter)
+        -- Send. While the line can be sent X is the game's own send button and this press never arrives. It does
+        -- arrive when a word is waiting (it goes into the line, X sends the next time) or there is no chat line.
+        if self:Pending() ~= "" then
+            self:Flush(false)
+        elseif EditBox() then
+            self:SyncSend()
+        end
     elseif token == "delete" then
         self:Press(self.special.back)
     elseif token == "y" then
@@ -1010,7 +1126,9 @@ function Keyboard:Observe()
     local loader = CreateFrame("Frame")
     loader:RegisterEvent("PLAYER_ENTERING_WORLD")
     loader:SetScript("OnEvent", function() self.worldTime = GetTime() end)
+    EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusLost", function() self:QueueSendSync() end, self)
     EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusGained", function()
+        self:QueueSendSync()
         if not (Addon.db.autoKeyboard and Addon:IsGamepadMode()) then return end
         if not self.worldTime or GetTime() - self.worldTime < 5 then return end
         if self.frame and self.frame:IsShown() then return end

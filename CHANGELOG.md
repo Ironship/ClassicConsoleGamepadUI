@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-alpha.71
+
+- X sends the line again, and this time the game does the sending. While the chat line has the focus, the chat's footer
+  is up and no word waits in the keyboard's buffer, X is bound straight to the game's own button for PAD1 (the chat's
+  "A: send"), so the chat's code runs in the game's own call and not inside this addon's (that was the taint of
+  alpha.58 to alpha.69). A waiting word goes into the line with the first X, the next X sends. `/cgp keyboard debug`
+  shows `send=` (the button X is bound to, or nil).
+- The keyboard closes when the chat line closes (after a send, or when the line is closed with B).
+- The keyboard's texts follow the client's language (English, German, Polish).
+- Fix: Y with nothing waiting inserted a space as the first character of the line, and a line that starts with a space
+  is no slash command (`/cgp status` was sent to the chat as text). A space is never the first character and never
+  follows another space.
+- Fix: an edit box that was only shown (not active, not focused) counted as an open chat line.
+- `tools/package.py` stamps the files in the ZIP with the commit's date (or `SOURCE_DATE_EPOCH`) instead of a fixed date.
+
 ## 0.1.0-alpha.70
 
 - Fix: X no longer sends the chat line. The send ran the game's chat code (closing the line, the footer's binding
