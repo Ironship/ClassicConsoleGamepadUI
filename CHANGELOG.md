@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.60
+
+- Keyboard: when the chat takes over a pad button's binding (it sets its own when the line opens), the keyboard binds its buttons again, at most once a second.
+- `/cgp keyboard debug` shows what each pad button is bound to and whether raw pad buttons reach the keyboard.
+
 ## 0.1.0-alpha.59
 
 - Keyboard: no longer opens by itself at login (the chat reports focus while loading in); it opens with the chat line only from 5 seconds after entering the world, and an automatically opened keyboard closes when the chat line does.

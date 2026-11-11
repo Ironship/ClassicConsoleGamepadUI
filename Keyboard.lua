@@ -481,6 +481,10 @@ function Keyboard:Create()
     self.legend = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     self.legend:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
     self.legend:SetJustifyH("CENTER")
+    -- Only to see whether raw pad buttons reach us while the chat line has the focus (shown by /cgp keyboard debug).
+    if frame.EnableGamePadButton then frame:EnableGamePadButton(true) end
+    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+    frame:SetScript("OnGamePadButtonDown", function(_, button) self.raw = button end)
     self.status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     self.status:SetPoint("BOTTOM", frame, "BOTTOM", 0, 36)
     self.status:SetTextColor(1, 0.35, 0.3)
@@ -562,7 +566,42 @@ function Keyboard:SyncPad()
     if wanted and not self.pad then self:CreatePad() end
     if not self.pad then return end
     if wanted and not self.pad:IsShown() then Trace("Keyboard pad on"); self.pad:Show()
-    elseif not wanted and self.pad:IsShown() then Trace("Keyboard pad off"); self.pad:Hide() end
+    elseif not wanted and self.pad:IsShown() then Trace("Keyboard pad off"); self.pad:Hide()
+    elseif wanted then self:Reclaim() end
+end
+
+local function Expected(self, key)
+    return "CLICK " .. self.pad:GetAttribute("button") .. ":" .. PAD_TOKENS[key]
+end
+
+-- The chat sets its own pad bindings when its line opens or changes, and the newest binding wins. When one of
+-- ours has been taken over, bind ours again (at most once a second).
+function Keyboard:Reclaim()
+    if not (GetBindingAction and SecureHandlerExecute) then return end
+    local now = GetTime()
+    if self.reclaimed and now - self.reclaimed < 1 then return end
+    for key in pairs(PAD_TOKENS) do
+        local actual = GetBindingAction(key, true)
+        if actual ~= Expected(self, key) then
+            self.reclaimed = now
+            self.reclaims = (self.reclaims or 0) + 1
+            Trace("Keyboard: " .. key .. " was " .. tostring(actual) .. ", binding again")
+            SecureHandlerExecute(self.pad, PAD_BIND)
+            return
+        end
+    end
+end
+
+-- /cgp keyboard debug: what the pad buttons are bound to while the keyboard is up.
+function Keyboard:Debug()
+    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s raw=%s",
+        tostring(self.frame and self.frame:IsShown()), tostring(self.pad and self.pad:IsShown()),
+        tostring(Addon:IsGamepadMode()), tostring(FindEditBox() and FindEditBox():GetName()),
+        tostring(self.reclaims or 0), tostring(self.raw)))
+    if not (GetBindingAction and self.pad) then return end
+    for key, token in pairs(PAD_TOKENS) do
+        Addon:Print(string.format("  %s (%s): %s", key, token, tostring(GetBindingAction(key, true))))
+    end
 end
 
 function Keyboard:Select(key)
