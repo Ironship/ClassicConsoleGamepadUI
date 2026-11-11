@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.61
+
+- Keyboard: Blizzard-style look (dialog frame, tooltip-border keys with a gold edge on the selected key) and lower on the screen by default.
+- Keyboard: the button prompts are icons (round A/B/X/Y, D-pad cross, LB/RB/LT/RT/Start plates) with a short label, in the style of the game's own prompts.
+
 ## 0.1.0-alpha.60
 
 - Keyboard: when the chat takes over a pad button's binding (it sets its own when the line opens), the keyboard binds its buttons again, at most once a second.

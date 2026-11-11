@@ -59,12 +59,84 @@ local function Rows(mode)
     return rows, { 0, 20, 30, 0, 0 }
 end
 
-local MIN_WIDTH, LEGEND_HEIGHT = 560, 58
+local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW = 560, 16, 24
+
+-- The button prompts under the keys: an icon of the pad button and what it does.
 local LEGENDS = {
-    abc = "D-pad: move   A: key   B: close   X: send   Y: space   LT: shift   RT: delete   Start: done",
-    t9 = "D-pad: move   A: press (again: next letter)   B: close   X: send   Y: space   LT: shift   RT: delete   Start: done",
-    t9p = "D-pad: move   A: key   Y: accept word   LB/RB: other word   RT: delete   X: send   B: close   LT: capital   Start: done",
+    abc = { { "dpad", "Move" }, { "A", "Key" }, { "X", "Send" }, { "B", "Close" }, { "Y", "Space" },
+        { "LT", "Shift" }, { "RT", "Delete" }, { "Start", "Done" } },
+    t9 = { { "dpad", "Move" }, { "A", "Press (again: next letter)" }, { "X", "Send" }, { "B", "Close" },
+        { "Y", "Space" }, { "LT", "Shift" }, { "RT", "Delete" }, { "Start", "Done" } },
+    t9p = { { "dpad", "Move" }, { "A", "Key" }, { "Y", "Accept word" }, { "LB", "Previous word" },
+        { "RB", "Next word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Capital" }, { "RT", "Delete" },
+        { "Start", "Done" } },
 }
+
+local WHITE = "Interface\\Buttons\\WHITE8X8"
+local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+local FACE = {
+    A = { 0.4, 0.85, 0.4 }, B = { 1, 0.4, 0.35 }, X = { 0.45, 0.65, 1 }, Y = { 1, 0.85, 0.25 },
+}
+
+local function Circle(frame, size, r, g, b)
+    local texture = frame:CreateTexture(nil, "ARTWORK")
+    texture:SetSize(size, size)
+    texture:SetPoint("CENTER")
+    texture:SetTexture(WHITE)
+    texture:SetVertexColor(r, g, b)
+    if frame.CreateMaskTexture and texture.AddMaskTexture then
+        local mask = frame:CreateMaskTexture()
+        mask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(texture)
+        texture:AddMaskTexture(mask)
+    end
+    return texture
+end
+
+-- An icon for a pad button: a round face button, the D-pad cross, or a small plate for shoulders, triggers and
+-- Start. Returns the icon frame and its width.
+local function Icon(parent, name)
+    local icon = CreateFrame("Frame", nil, parent)
+    local width = 22
+    if FACE[name] then
+        Circle(icon, 22, 0.6, 0.6, 0.62)
+        Circle(icon, 19, 0.07, 0.07, 0.08)
+        local text = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        text:SetPoint("CENTER", 0, 0)
+        text:SetText(name)
+        text:SetTextColor(FACE[name][1], FACE[name][2], FACE[name][3])
+    elseif name == "dpad" then
+        for _, size in ipairs({ { 18, 7 }, { 7, 18 } }) do
+            local bar = icon:CreateTexture(nil, "ARTWORK")
+            bar:SetSize(size[1], size[2])
+            bar:SetPoint("CENTER")
+            bar:SetTexture(WHITE)
+            bar:SetVertexColor(0.7, 0.7, 0.72)
+        end
+        local dot = icon:CreateTexture(nil, "OVERLAY")
+        dot:SetSize(3, 3)
+        dot:SetPoint("CENTER")
+        dot:SetTexture(WHITE)
+        dot:SetVertexColor(0.1, 0.1, 0.1)
+    else
+        width = name == "Start" and 38 or 28
+        local edge = icon:CreateTexture(nil, "BACKGROUND")
+        edge:SetAllPoints()
+        edge:SetTexture(WHITE)
+        edge:SetVertexColor(0.6, 0.6, 0.62)
+        local inner = icon:CreateTexture(nil, "ARTWORK")
+        inner:SetPoint("TOPLEFT", 1, -1)
+        inner:SetPoint("BOTTOMRIGHT", -1, 1)
+        inner:SetTexture(WHITE)
+        inner:SetVertexColor(0.07, 0.07, 0.08)
+        local text = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        text:SetPoint("CENTER", 0, 0)
+        text:SetText(name)
+        text:SetTextColor(0.9, 0.9, 0.9)
+    end
+    icon:SetSize(width, (name == "dpad" or FACE[name]) and 22 or 16)
+    return icon, width
+end
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
 -- item deletion helper does (see ItemDelete.lua), and tells this file which one was pressed. It removes its
@@ -189,11 +261,20 @@ function Keyboard:Refresh()
     end
 end
 
+-- Gold edge on the selected key, brown fill when pressed or switched on.
 function Keyboard:Paint(key, pressed)
-    local c = (pressed and { 0.45, 0.35, 0.1 }) or (key == self.sel and self.showSel and { 0.15, 0.45, 0.65 })
-        or (key.active and { 0.55, 0.42, 0.1 })
-        or (key.hover and { 0.28, 0.28, 0.3 }) or { 0.12, 0.12, 0.14 }
-    key.bg:SetColorTexture(c[1], c[2], c[3], 0.95)
+    local selected = key == self.sel and self.showSel
+    local bg, edge = { 0.1, 0.08, 0.06 }, { 0.5, 0.45, 0.35 }
+    if pressed then bg, edge = { 0.45, 0.33, 0.08 }, { 1, 0.82, 0 }
+    elseif selected then bg, edge = { 0.3, 0.22, 0.05 }, { 1, 0.82, 0 }
+    elseif key.active then bg, edge = { 0.38, 0.28, 0.05 }, { 0.9, 0.72, 0.1 }
+    elseif key.hover then bg, edge = { 0.2, 0.17, 0.12 }, { 0.8, 0.7, 0.45 } end
+    if key.SetBackdropColor then
+        key:SetBackdropColor(bg[1], bg[2], bg[3], 0.95)
+        key:SetBackdropBorderColor(edge[1], edge[2], edge[3], 1)
+    elseif key.bg then
+        key.bg:SetColorTexture(bg[1], bg[2], bg[3], 0.95)
+    end
 end
 
 -- Multi-tap: a key's characters take turns while it is pressed again within a second; any other key
@@ -392,11 +473,16 @@ function Keyboard:Build(mode)
             local size = isTable and (entry.width or entry[2]) or KEY
             local height = isTable and entry.height or KEY
             rowHeight = math.max(rowHeight, height)
-            local button = CreateFrame("Button", nil, frame)
+            local button = CreateFrame("Button", nil, frame, "BackdropTemplate")
             button:SetSize(size, height)
             button:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -y)
-            button.bg = button:CreateTexture(nil, "BACKGROUND")
-            button.bg:SetAllPoints()
+            if button.SetBackdrop then
+                button:SetBackdrop({ bgFile = WHITE, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10,
+                    insets = { left = 2, right = 2, top = 2, bottom = 2 } })
+            else
+                button.bg = button:CreateTexture(nil, "BACKGROUND")
+                button.bg:SetAllPoints()
+            end
             button.text = button:CreateFontString(nil, "OVERLAY",
                 (isTable and (entry.chars or entry.cand)) and "GameFontHighlight" or "GameFontHighlightLarge")
             button.text:SetPoint("CENTER")
@@ -428,7 +514,37 @@ function Keyboard:Build(mode)
         total = total + rowHeight + GAP
         y = y + rowHeight + GAP
     end
-    set.width, set.height = width, PAD * 2 + total - GAP + LEGEND_HEIGHT
+    -- Button prompts, in as many rows as the width needs, each row centred.
+    local legend = CreateFrame("Frame", nil, frame)
+    local rowsOfEntries, row, used, available = {}, {}, 0, width - PAD * 2
+    for _, entry in ipairs(LEGENDS[mode]) do
+        local icon, iconWidth = Icon(legend, entry[1])
+        local label = legend:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetText(entry[2])
+        local labelWidth = tonumber(label:GetStringWidth()) or 60
+        local item = { icon = icon, label = label, width = iconWidth + 4 + labelWidth }
+        if used > 0 and used + 14 + item.width > available then
+            rowsOfEntries[#rowsOfEntries + 1] = row
+            row, used = {}, 0
+        end
+        used = used + (used > 0 and 14 or 0) + item.width
+        row[#row + 1] = item
+    end
+    rowsOfEntries[#rowsOfEntries + 1] = row
+    for r, items in ipairs(rowsOfEntries) do
+        local rowWidth = -14
+        for _, item in ipairs(items) do rowWidth = rowWidth + item.width + 14 end
+        local left = (width - rowWidth) / 2
+        local rowY = PAD + 4 + (#rowsOfEntries - r) * LEGEND_ROW + LEGEND_ROW / 2
+        for _, item in ipairs(items) do
+            item.icon:SetPoint("LEFT", frame, "BOTTOMLEFT", left, rowY)
+            item.label:SetPoint("LEFT", item.icon, "RIGHT", 4, 0)
+            left = left + item.width + 14
+        end
+    end
+    legend:Hide()
+    set.legend, set.legendHeight = legend, #rowsOfEntries * LEGEND_ROW
+    set.width, set.height = width, PAD * 2 + total - GAP + STATUS_HEIGHT + set.legendHeight + 4
     set.home = set.home or set.keys[1]
     return set
 end
@@ -439,6 +555,7 @@ function Keyboard:Apply(mode)
     self.sets = self.sets or {}
     for _, set in pairs(self.sets) do
         for _, key in ipairs(set.keys) do key:Hide() end
+        set.legend:Hide()
     end
     local set = self.sets[mode]
     if not set then
@@ -448,8 +565,9 @@ function Keyboard:Apply(mode)
     self.keys, self.special, self.sel, self.tap, self.pred, self.shift = set.keys, set.special, set.home, nil, nil, false
     for _, key in ipairs(set.keys) do key:Show() end
     self.frame:SetSize(set.width, set.height)
-    self.legend:SetWidth(set.width - PAD * 2)
-    self.legend:SetText(LEGENDS[mode])
+    set.legend:Show()
+    self.status:ClearAllPoints()
+    self.status:SetPoint("BOTTOM", self.frame, "BOTTOM", 0, PAD + 4 + set.legendHeight)
     self:Refresh()
 end
 
@@ -462,7 +580,7 @@ function Keyboard:SetMode(mode)
 end
 
 function Keyboard:Create()
-    local frame = CreateFrame("Frame", "ClassicConsoleGamepadUIKeyboard", UIParent)
+    local frame = CreateFrame("Frame", "ClassicConsoleGamepadUIKeyboard", UIParent, "BackdropTemplate")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
@@ -474,19 +592,22 @@ function Keyboard:Create()
         local point, _, relativePoint, x, y = f:GetPoint(1)
         Addon.db.keyboardPos = { point, relativePoint, x, y }
     end)
-    local background = frame:CreateTexture(nil, "BACKGROUND")
-    background:SetAllPoints()
-    background:SetColorTexture(0, 0, 0, 0.8)
+    if frame.SetBackdrop then
+        frame:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+        frame:SetBackdropColor(1, 1, 1, 0.95)
+    else
+        local background = frame:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints()
+        background:SetColorTexture(0, 0, 0, 0.8)
+    end
     self.frame = frame
-    self.legend = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    self.legend:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
-    self.legend:SetJustifyH("CENTER")
     -- Only to see whether raw pad buttons reach us while the chat line has the focus (shown by /cgp keyboard debug).
     if frame.EnableGamePadButton then frame:EnableGamePadButton(true) end
     if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
     frame:SetScript("OnGamePadButtonDown", function(_, button) self.raw = button end)
     self.status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    self.status:SetPoint("BOTTOM", frame, "BOTTOM", 0, 36)
     self.status:SetTextColor(1, 0.35, 0.3)
     frame:SetScript("OnUpdate", function(_, elapsed)
         self.idle = (self.idle or 0) + elapsed
@@ -497,7 +618,7 @@ function Keyboard:Create()
     if type(saved) == "table" and saved[1] then
         frame:SetPoint(saved[1], UIParent, saved[2], saved[3], saved[4])
     else
-        frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 260)
+        frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 120)
     end
     frame:Hide()
     local mode = Addon.db.keyboardMode
