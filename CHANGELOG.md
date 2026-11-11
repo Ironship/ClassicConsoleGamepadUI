@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.59
+
+- Keyboard: no longer opens by itself at login (the chat reports focus while loading in); it opens with the chat line only from 5 seconds after entering the world, and an automatically opened keyboard closes when the chat line does.
+
 ## 0.1.0-alpha.58
 
 - Keyboard buttons follow the chat's own prompts: A key, X sends the line, B closes, Y accepts the suggested word (a space elsewhere), RT deletes, LT shift, Start done.

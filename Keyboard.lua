@@ -134,7 +134,13 @@ end
 -- A line on the keyboard itself that tells whether there is a chat line to type into.
 function Keyboard:UpdateStatus()
     if not self.status then return end
-    if FindEditBox() then
+    local open = FindEditBox()
+    -- A keyboard that opened by itself with the chat line goes away with it.
+    if not open and self.auto and self.frame and self.frame:IsShown() and GetTime() - (self.shownAt or 0) > 1 then
+        self:Hide()
+        return
+    end
+    if open then
         self.status:SetText("")
     else
         self.status:SetText("No chat line is open: open it first (Enter or the chat button)")
@@ -498,6 +504,7 @@ function Keyboard:Show(auto)
     Trace("Keyboard:Show")
     if not self.frame then self:Create() end
     self.auto = auto and true or false
+    self.shownAt = GetTime()
     self.shift, self.tap, self.pred = false, nil, nil
     self.frame:Show()
     self:SyncPad()
@@ -656,13 +663,17 @@ function Keyboard:Toggle()
     if self.frame and self.frame:IsShown() then self:Hide() else self:Show(false) end
 end
 
--- Optionally open with the chat line, only in Gamepad Mode where there is no other way to type.
+-- Optionally open with the chat line, only in Gamepad Mode where there is no other way to type. Not while the
+-- game is still loading in: the chat line is set up (and may report focus) at login without the player.
 function Keyboard:Observe()
     if not EventRegistry or not EventRegistry.RegisterCallback then return end
+    local loader = CreateFrame("Frame")
+    loader:RegisterEvent("PLAYER_ENTERING_WORLD")
+    loader:SetScript("OnEvent", function() self.worldTime = GetTime() end)
     EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusGained", function()
-        if Addon.db.autoKeyboard and Addon:IsGamepadMode()
-            and not (self.frame and self.frame:IsShown()) then
-            self:Show(true)
-        end
+        if not (Addon.db.autoKeyboard and Addon:IsGamepadMode()) then return end
+        if not self.worldTime or GetTime() - self.worldTime < 5 then return end
+        if self.frame and self.frame:IsShown() then return end
+        if FindEditBox() then self:Show(true) end
     end, self)
 end
