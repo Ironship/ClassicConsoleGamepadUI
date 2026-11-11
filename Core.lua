@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.69"
+Addon.version = "0.1.0-alpha.70"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -319,20 +319,29 @@ local function Initialize()
     end
     ready = true
     Addon:CheckNativeTaint("before Initialize")
-    local ok, err = pcall(function()
+    -- Every part is set up on its own: one that fails is reported and the others still start.
+    local function Try(label, setup)
+        local ok, err = pcall(setup)
+        if not ok then Addon:Note("Initialize " .. label, err) end
+    end
+    Try("SmartNavigation", function()
         if SmartNavigation and type(SmartNavigation.SelectButton) == "function" then
             hooksecurefunc(SmartNavigation, "SelectButton", function()
                 Addon:CheckNativeTaint("SmartNavigation:SelectButton")
             end)
         end
-        Addon.HUD:Observe()
-        Addon.Layout:Observe()
-        Addon.MenuHints:Observe()
+    end)
+    Try("HUD", function() Addon.HUD:Observe() end)
+    Try("Layout", function() Addon.Layout:Observe() end)
+    Try("MenuHints", function() Addon.MenuHints:Observe() end)
+    Try("Options", function()
         Addon.Options:Register()
         Addon:CheckNativeTaint("Options:Register")
-        Addon.ItemDelete:Observe()
-        Addon.Words:Observe()
-        Addon.Keyboard:Observe()
+    end)
+    Try("ItemDelete", function() Addon.ItemDelete:Observe() end)
+    Try("Words", function() Addon.Words:Observe() end)
+    Try("Keyboard", function() Addon.Keyboard:Observe() end)
+    Try("native hooks", function()
         local native = GamepadMainActionBarFrame
         if native then
             hooksecurefunc(native, "OnShow", function() Addon:QueueRefresh() end)
@@ -356,7 +365,6 @@ local function Initialize()
             end)
         end
     end)
-    if not ok then Addon:Note("Initialize", err) end
     Addon:CheckNativeTaint("Initialize")
     Addon:QueueRefresh(true)
 end

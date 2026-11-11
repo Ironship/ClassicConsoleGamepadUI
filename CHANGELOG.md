@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-alpha.70
+
+- Fix: X no longer sends the chat line. The send ran the game's chat code (closing the line, the footer's binding
+  sets, secure slash commands) with this addon's taint; `securecallfunction` does not remove it, it only keeps the callee's
+  taint away from its caller. That is the "interface action failed because of an addon" message after a send. X is now
+  Done, like Start: the word goes into the chat line, the keyboard lets go of the controller and the game's own A sends it.
+- Fix: the chat's footer binds A, X, Y and B again with every focus refresh and, with the same priority, the newest
+  binding wins, so it kept taking the controller from the keyboard (an A press then sent the half-typed line). The keyboard
+  now binds its buttons again right after the game's binding stack changes (post-hooks on `AddBindingSet`, `RemoveSet`
+  and `ClearBindings`; once, at most every tenth of a second, only when one of its buttons is bound to something else),
+  as well as from its 0.25 s check.
+- Fix: the settings window ignores the controller while the keyboard is shown (both used to move at once).
+- "Forget learned words" asks for a second click within four seconds.
+- The learned word list keeps its most used words when it grows past its limit. A list full of words that had all been
+  seen more than once used to stay too big, and every chat message then rebuilt the whole index.
+- A part of the addon that fails while it starts (hooks, options, keyboard) is reported and no longer stops the parts
+  after it.
+
 ## 0.1.0-alpha.69
 
 - Keyboard: Hybrid is the default T9 mode (a saved Tap or Smart choice is replaced once).

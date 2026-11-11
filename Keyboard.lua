@@ -1,7 +1,9 @@
 local _, Addon = ...
 -- An on-screen keyboard for typing in chat. The game has none in Gamepad Mode and an addon cannot open the
--- system's. The keys act on the active chat edit box with plain edit box calls (Insert, SetText, SendMessage);
--- nothing native is replaced and no protected frame is touched, so it is also safe to leave open in combat.
+-- system's. The keys act on the chat line the player has opened, with plain edit box calls (Insert, SetText) only:
+-- opening, focusing or sending the line from addon code runs the game's chat and gamepad binding code with this
+-- addon's taint (securecallfunction does not remove it), so the player opens the line and the game's own A sends it.
+-- No protected frame is touched, so the keyboard is also safe to leave open in combat.
 -- Layouts: "abc" (full keyboard) and the phone keypad: "t9" (multi-tap), "t9p" (smart: one press per key, words
 -- suggested) and "t9h" (hybrid: multi-tap letters, suggestions complete the word).
 local Keyboard = {}
@@ -115,17 +117,14 @@ local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW, PREVIEW_HEIGHT = 560, 16, 24, 28
 
 -- The button prompts under the keys: an icon of the pad button and what it does.
 local LEGENDS = {
-    abc = { { "dpad", "Move" }, { "A", "Key" }, { "X", "Send" }, { "B", "Close" }, { "Y", "Space" },
-        { "LT", "Shift" }, { "RT", "Delete" }, { "Start", "Done" } },
+    abc = { { "dpad", "Move" }, { "A", "Key" }, { "X", "Done: A sends" }, { "B", "Close" }, { "Y", "Space" },
+        { "LT", "Shift" }, { "RT", "Delete" } },
     t9 = { { "dpad", "Move" }, { "A", "Press (again: next letter)" }, { "RB", "Next letter" },
-        { "Y", "Accept word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" },
-        { "Start", "Done" } },
+        { "Y", "Accept word" }, { "X", "Done: A sends" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" } },
     t9h = { { "dpad", "Move" }, { "A", "Letter (again: next)" }, { "Y", "Accept" }, { "LB", "Previous word" },
-        { "RB", "Next word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" },
-        { "Start", "Done" } },
+        { "RB", "Next word" }, { "X", "Done: A sends" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" } },
     t9p = { { "dpad", "Move" }, { "A", "Key" }, { "Y", "Accept word" }, { "LB", "Previous word" },
-        { "RB", "Next word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Capital" }, { "RT", "Delete" },
-        { "Start", "Done" } },
+        { "RB", "Next word" }, { "X", "Done: A sends" }, { "B", "Close" }, { "LT", "Capital" }, { "RT", "Delete" } },
 }
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -777,6 +776,7 @@ function Keyboard:Show(auto)
     self.auto = auto and true or false
     self.shownAt = GetTime()
     self.shift, self.tap, self.pred, self.buffer = false, nil, nil, ""
+    self.unreadable = nil
     self:UpdateHints()
     self.frame:Show()
     self:SyncPad()
@@ -836,27 +836,75 @@ function Keyboard:SyncPad()
     if not self.pad then return end
     if wanted and not self.pad:IsShown() then Trace("Keyboard pad on"); self.pad:Show()
     elseif not wanted and self.pad:IsShown() then Trace("Keyboard pad off"); self.pad:Hide()
-    elseif wanted then self:Reclaim() end
+    elseif wanted and self:BindingsLost() then self:Reclaim() end
 end
 
 local function Expected(self, key)
     return "CLICK " .. self.pad:GetAttribute("button") .. ":" .. PAD_TOKENS[key]
 end
 
--- The chat sets its own pad bindings when its line opens or changes, and the newest binding wins. When one of
--- ours has been taken over, bind ours again (at most once a second).
-function Keyboard:Reclaim()
-    if not (GetBindingAction and SecureHandlerExecute) then return end
-    local now = GetTime()
-    if self.reclaimed and now - self.reclaimed < 1 then return end
+-- True when one of the pad buttons this keyboard binds is bound to something else now.
+function Keyboard:BindingsLost()
+    if not (GetBindingAction and self.pad) then return false end
     for key in pairs(PAD_TOKENS) do
-        local actual = GetBindingAction(key, true)
-        if actual ~= Expected(self, key) then
-            self.reclaimed = now
-            self.reclaims = (self.reclaims or 0) + 1
-            Trace("Keyboard: " .. key .. " was " .. tostring(actual) .. ", binding again")
-            SecureHandlerExecute(self.pad, PAD_BIND)
-            return
+        if not (self.unreadable and self.unreadable[key]) then
+            local actual = GetBindingAction(key, true)
+            if actual ~= Expected(self, key) then
+                Trace("Keyboard: " .. key .. " was " .. tostring(actual))
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Bind this keyboard's buttons again. The chat's footer binds its own keys (A send, X channels, Y tab settings,
+-- B back) with the same priority and the newest binding wins, so the footer takes the buttons over whenever it
+-- rebinds. At most one rebind every tenth of a second, so a binding stack that keeps changing cannot make a loop.
+local REBIND_GAP = 0.1
+function Keyboard:Rebind()
+    if not (self.pad and self.pad:IsShown()) or InCombatLockdown() or not SecureHandlerExecute then return end
+    local now = GetTime()
+    if self.rebound and now - self.rebound < REBIND_GAP then return false end
+    if not self:BindingsLost() then return true end
+    self.rebound = now
+    self.reclaims = (self.reclaims or 0) + 1
+    Trace("Keyboard: binding again")
+    SecureHandlerExecute(self.pad, PAD_BIND)
+    -- A button that still does not read back as ours right after binding cannot be checked on this controller:
+    -- leave it out of the check instead of binding again and again.
+    for key in pairs(PAD_TOKENS) do
+        if GetBindingAction(key, true) ~= Expected(self, key) then
+            self.unreadable = self.unreadable or {}
+            self.unreadable[key] = true
+            Trace("Keyboard: " .. key .. " does not read back")
+        end
+    end
+    return true
+end
+
+-- Called when the game's binding stack changed (and by the 0.25 s poll as a safety net).
+function Keyboard:Reclaim()
+    if self.rebindQueued or not (self.pad and self.pad:IsShown()) then return end
+    if self.rebound and GetTime() - self.rebound < REBIND_GAP then
+        self.rebindQueued = true
+        C_Timer.After(REBIND_GAP, function() self.rebindQueued = nil; self:Rebind() end)
+        return
+    end
+    -- The stack changes several times in a row (a group is removed, then added): rebind once, after the last.
+    self.rebindQueued = true
+    C_Timer.After(0, function() self.rebindQueued = nil; self:Rebind() end)
+end
+
+-- The game's input binding stack: every footer, menu and dialog that takes the pad adds or removes a set there.
+-- A post-hook runs after the game's own code and does not taint it.
+function Keyboard:WatchBindings()
+    local manager = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
+    if not manager or self.watching then return end
+    self.watching = true
+    for _, method in ipairs({ "AddBindingSet", "RemoveSet", "ClearBindings" }) do
+        if type(manager[method]) == "function" then
+            hooksecurefunc(manager, method, function() self:Reclaim() end)
         end
     end
 end
@@ -913,19 +961,6 @@ function Keyboard:Move(direction)
     self:Select(best)
 end
 
--- Send the line with the chat's own send function, called through securecallfunction so that the game's
--- chat code (it closes the line and rewires the pad bindings) does not run with this addon's taint.
-function Keyboard:Send()
-    local box = EditBox()
-    if not box then return end
-    if not self:Flush(false) then return end
-    Trace("Keyboard:Send")
-    if box.SendMessage then
-        if securecallfunction then securecallfunction(box.SendMessage, box) else box:SendMessage() end
-    end
-    self:Hide()
-end
-
 function Keyboard:ZeroKey()
     for _, key in ipairs(self.keys) do
         if key.digit == "0" then return key end
@@ -941,7 +976,8 @@ function Keyboard:PadPress(token)
     elseif token == "b" or token == "select" then
         self:Hide()
     elseif token == "x" then
-        self:Send()
+        -- Done: the word goes to the chat line and the keyboard lets go of the pad, so the game's own A sends it.
+        self:Press(self.special.enter)
     elseif token == "delete" then
         self:Press(self.special.back)
     elseif token == "y" then
@@ -969,6 +1005,7 @@ end
 -- Optionally open with the chat line, only in Gamepad Mode where there is no other way to type. Not while the
 -- game is still loading in: the chat line is set up (and may report focus) at login without the player.
 function Keyboard:Observe()
+    self:WatchBindings()
     if not EventRegistry or not EventRegistry.RegisterCallback then return end
     local loader = CreateFrame("Frame")
     loader:RegisterEvent("PLAYER_ENTERING_WORLD")

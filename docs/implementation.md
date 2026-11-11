@@ -171,26 +171,44 @@ matching the exported source commit's build **1.60.1 (70450)**.
   `moves` > `gamepadHUD` > `keyboardHUD` > preset. The frames are not restored to the gamepad layout while
   Edit Mode is open. The hooks are post-hooks: nothing in Edit Mode's tables is written.
 - No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation), so
-  `Keyboard.lua` draws one from plain unprotected frames. `Blizzard_ChatFrameBase/Shared/ChatFrameUtil.lua`:
-  `ChatFrameUtil.GetActiveWindow` / `OpenChat` (legacy `ChatEdit_*` as fallback) give the edit box;
-  `ChatFrameEditBox.lua`: `OnEditFocusGained` / `SendMessage` run `FrameControlsManager` and the
-  `InputBindingManager` binding sets (chat footer PAD1 / PAD3), so the keyboard never opens, focuses or sends the
-  line: called from addon code they leave those binding tables tainted and the game menu's `SetOverrideBindingClick`
-  is then blocked in combat. Keys only call `Insert` and `SetText` on a line the player has already opened; Done
-  closes the keyboard and the native send button sends. `ChatFrame.OnEditBoxFocusGained` (EventRegistry)
-  opens it with the chat line when the setting is on. Controller: like `ItemDelete.lua`, a
-  `SecureHandlerShowHideTemplate,SecureHandlerStateTemplate` header binds the D-pad, face buttons and
-  Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a `SecureActionButtonTemplate` while the keyboard
-  is shown in Gamepad Mode; its wrapped `OnClick` only bumps `padcount`/`padtoken`, which an `OnAttributeChanged`
-  hook reads. The `[combat]` state driver clears the bindings, and the keyboard's 0.25 s `OnUpdate` shows the
-  header again after combat. The T9 layout is a second set of buttons on the same frame (`Keyboard:Apply`
-  hides one set and shows the other, `db.keyboardMode` keeps the choice). A key press within one second of the
-  previous press of the same key replaces the last character of the line with the next one in its cycle,
-  provided the line is unchanged since. The "t9p" layout keeps the digits of the word in progress, asks
-  `Words.lua` for matches (exact digit sequence by use count, then longer words that start with it) and writes
-  the chosen one into the line after the text that was already there, so the line is the only state shared with
-  the game. Words come from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events and a
-  post-hook on `SendChatMessage`; item links and colours are stripped and only letters are kept.
+  `Keyboard.lua` draws one from plain unprotected frames. It acts only on a chat line the player has already opened
+  (`ChatFrameUtil.GetActiveWindow`; any shown `ChatFrameNEditBox` as fallback) and only with `Insert` and `SetText`.
+  It never opens, focuses or sends the line. `Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua`:
+  `OnEditFocusGained` and `SendMessage` (through `ClearChat`, `Hide` and `ChatFrameUtil.DeactivateChat`) run
+  `FrameControlsManager` and the `InputBindingManager` binding sets, and `SendText` calls `ParseText(1)`, which runs
+  secure slash commands. Called from addon code all of it runs with the addon's taint, and `securecallfunction`
+  does not change that: `CallbackRegistryMixin:TriggerEvent` uses it so that an addon callback's taint does not reach
+  the game's own caller, not the other way round. Done (X or Start) puts the word into the line and hides the
+  keyboard; the game's own A then sends. `ChatFrame.OnEditBoxFocusGained` (EventRegistry callbacks run through
+  `securecallfunction`) opens the keyboard with the chat line when the setting is on, a frame later and not within
+  the first five seconds after entering the world.
+- Keyboard controller: like `ItemDelete.lua`, a `SecureHandlerShowHideTemplate,SecureHandlerStateTemplate` header
+  binds the D-pad, face buttons, shoulders, triggers and Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a
+  `SecureActionButtonTemplate` while the keyboard is shown in Gamepad Mode; its wrapped `OnClick` only bumps
+  `padcount`/`padtoken`, which an `OnAttributeChanged` hook reads. The `[combat]` state driver clears the bindings and
+  the keyboard's 0.25 s `OnUpdate` shows the header again after combat. The chat's footer
+  (`FloatingChatFrameMixin:CreateFooter`: PAD3 channels, PAD4 tab settings, PAD1 send, back prompt) binds its keys with
+  `SetOverrideBindingClick(UIParent, true, ...)` (`InputButtonBinding` / `InputFunctionBinding`), the same priority as the
+  header's `SetBindingClick(true, ...)`, and does it again at every `Gamepad.RefreshFrameFocus` and SmartNavigation
+  selection (`PromptedBindingFooterMixin:Refresh` / `RefreshBindingGroup`). The newest binding wins, so the keyboard
+  binds its buttons again after `InputBindingManager:AddBindingSet`, `RemoveSet` and `ClearBindings` (post-hooks), once,
+  at most every 0.1 s, only when `GetBindingAction(key, true)` shows one of its buttons bound to something else;
+  `Input.lua` does the same for the action bar keys (`BindingsLost`). `/cgp keyboard debug` lists what each button is bound to.
+- The phone layouts compose a word in a buffer of their own (shown in a strip above the keys) and put it into the chat
+  line only when it is accepted (Y adds a space, the 0 key of the smart layout, Done), so the line is the only state
+  shared with the game. Tap cycles a key's letters (1.5 s, a move of the selection or RB ends a letter), Smart keeps the digits
+  of the word and asks `Words.lua` for matches (exact digit sequence by use count, then longer words that start with
+  it), Hybrid taps letters and asks `Words:Prefix` for words that begin with them. `db.keyboardLanguage` (EN, DE, PL) picks
+  the full layout and the letters under the phone keys, `db.keyboardPhone` the T9 mode (Hybrid by default). Words come
+  from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events, a post-hook on `SendChatMessage` and
+  the words accepted on the keyboard; item links and colours are stripped and only letters are kept. Past 6000
+  words the 4500 most used are kept.
+- The settings window (`SettingsWindow.lua`) is made of plain frames (`ButtonFrameTemplate`, `PanelTopTabButtonTemplate`,
+  `UIPanelButtonTemplate`; no secure templates), so it opens in combat and in Gamepad Mode, and Options > AddOns has one
+  button (`CreateSettingsButtonInitializer`) that opens it. In Gamepad Mode it takes the pad with
+  `EnableGamePadButton` and an `OnGamePadButtonDown` handler that stops propagation for the buttons it uses.
+  `SetPropagateKeyboardInput` is blocked for addons in combat (a BugGrabber report from the keyboard frame), so these calls
+  are made out of combat only. It leaves the pad to the keyboard while that is shown.
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the

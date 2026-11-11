@@ -46,6 +46,28 @@ end
 -- options), {"choice", key}, {"button", label, tooltip, function}, {"note", text}.
 -- ---------------------------------------------------------------------------------------------
 
+-- A destructive button asks twice: the first click changes its label, a second one within four seconds does it.
+local function Confirmed(action)
+    local armed
+    return function(button)
+        local now = GetTime()
+        if armed and now - armed < 4 then
+            armed = nil
+            button:SetText(button.baseText)
+            action()
+            return
+        end
+        armed = now
+        button:SetText(Text("confirmAgain"))
+        C_Timer.After(4, function()
+            if armed == now then
+                armed = nil
+                button:SetText(button.baseText)
+            end
+        end)
+    end
+end
+
 local function Tabs()
     local options = Addon.Options
     return {
@@ -73,10 +95,10 @@ local function Tabs()
             { "control", "autoKeyboard" },
             { "choice", "keyboardLanguage" }, { "choice", "keyboardPhone" },
             { "button", Text("keyboard"), Text("keyboardTip"), function() Addon.Keyboard:Toggle() end },
-            { "button", Text("forgetWords"), Text("forgetWordsTip"), function()
+            { "button", Text("forgetWords"), Text("forgetWordsTip"), Confirmed(function()
                 Addon.Words:Forget()
                 Addon:Print(Text("wordsForgotten"))
-            end },
+            end) },
         } },
         { id = "tools", label = Text("tabTools"), items = {
             { "header", "items" },
@@ -261,6 +283,7 @@ local function Button(page, y, label, tip, action)
     button:SetSize(300, 24)
     button:SetPoint("LEFT", 2, 0)
     button:SetText(label)
+    button.baseText = label
     button:SetScript("OnClick", action)
     AddTooltip(button, label, tip)
     Register(page, row, button, y, 34, function() end)
@@ -401,6 +424,9 @@ end
 
 -- Moves, adjusts or activates on a pad button; true when the window used the button.
 function Window:PadButton(key)
+    -- The keyboard owns the pad while it is shown; both reacting to one press would move two selections.
+    local keyboard = Addon.Keyboard and Addon.Keyboard.frame
+    if keyboard and keyboard:IsShown() and Addon:IsGamepadMode() then return false end
     if key == "PAD2" then
         self:Hide()
         return true

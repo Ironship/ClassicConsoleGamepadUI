@@ -79,14 +79,18 @@ function Words:Load()
     end
 end
 
+-- Over the limit: keep the most used words (ties keep the alphabetically first), so a list full of words that were
+-- all seen more than once still shrinks, and the next message does not rebuild the whole index again.
 function Words:Prune()
-    for word, count in pairs(self.db) do
-        if count <= 1 then
-            self.db[word] = nil
-            self.size = self.size - 1
-            if self.size <= KEEP_WORDS then break end
-        end
-    end
+    local list = {}
+    for word in pairs(self.db) do list[#list + 1] = word end
+    local db = self.db
+    table.sort(list, function(a, b)
+        if db[a] ~= db[b] then return db[a] > db[b] end
+        return a < b
+    end)
+    for i = KEEP_WORDS + 1, #list do db[list[i]] = nil end
+    self.size = math.min(#list, KEEP_WORDS)
     self.index = nil
     self:Load()
 end
