@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.65
+
+- Keyboard: the full layout is always QWERTY (no Y/Z swap on German clients); the keys for ä ö ü ß stay at the ends of the rows.
+
 ## 0.1.0-alpha.64
 
 - Keyboard: the strip above the T9 keys says which layout is active (Tap or Smart) and how it works; the Smart key is highlighted while the smart layout is on, and the strip says when no word matches.

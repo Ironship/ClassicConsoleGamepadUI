@@ -52,7 +52,6 @@ local function Rows(mode)
         { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "space", 220 }, { "enter", 100 } },
     }
     if de then
-        rows[2][6], rows[4][2] = "z", "y"
         table.insert(rows[3], "ä"); table.insert(rows[3], "ö")
         table.insert(rows[4], "ü"); table.insert(rows[4], "ß")
     end
