@@ -1,52 +1,38 @@
 local _, Addon = ...
-local HUD = { originals = {} }
+local HUD = { originals = {}, moves = {} }
 Addon.HUD = HUD
 
-local function Snapshot(frame, named)
-    local points = {}
-    for i = 1, frame:GetNumPoints() do
-        local point, relative, relativePoint, x, y = frame:GetPoint(i)
-        if named then
-            if relative then
-                relative = relative:GetName()
-                if not relative then return end
-            else
-                relative = "UIParent"
-            end
-        end
-        points[#points + 1] = { point, relative, relativePoint, x, y }
-    end
-    if #points > 0 then return { points = points, scale = frame:GetScale() } end
-end
-
-local function Apply(frame, layout)
-    if not layout then return end
-    for _, point in ipairs(layout.points) do
-        if type(point[2]) == "string" and not _G[point[2]] then return end
-    end
-    (frame.ClearAllPointsBase or frame.ClearAllPoints)(frame)
-    for _, point in ipairs(layout.points) do
-        (frame.SetPointBase or frame.SetPoint)(frame, point[1], type(point[2]) == "string" and _G[point[2]] or point[2], point[3], point[4], point[5])
-    end
-    (frame.SetScaleBase or frame.SetScale)(frame, layout.scale or 1)
-end
+local Snapshot, Apply = Addon.Layout.Snapshot, Addon.Layout.Apply
 
 function HUD:GetFrames()
     return { PlayerFrame, TargetFrame, FocusFrame }
 end
 
+-- A hidden frame that Edit Mode has not anchored yet still carries its XML placeholder.
+local function IsPlaceholder(snapshot)
+    local point = snapshot.points[1]
+    return #snapshot.points == 1 and point[1] == "TOPLEFT" and point[2] == "UIParent" and point[3] == "TOPLEFT"
+        and (point[4] or 0) == 0 and (point[5] or 0) == 0
+end
+
 function HUD:CaptureKeyboardLayout()
     if not Addon.Layout:CanCaptureKeyboard() then return end
     for _, frame in ipairs(self:GetFrames()) do
-        if frame and frame:IsVisible() and not self.originals[frame] then
+        if frame and not self.originals[frame] then
+            -- The target and focus frames are hidden most of the time; Edit Mode anchors them all the same.
             local snapshot = Snapshot(frame, true)
-            if snapshot then Addon.db.keyboardHUD[frame:GetName()] = snapshot end
+            if snapshot and (frame:IsVisible() or not IsPlaceholder(snapshot)) then
+                Addon.db.keyboardHUD[frame:GetName()] = snapshot
+            end
         end
     end
 end
 
+-- Where the classic HUD puts a unit frame: the place the player dragged it to in Edit Mode while in
+-- Gamepad Mode, else its place in the keyboard/mouse layout, else the client's classic preset.
 function HUD:GetClassicLayout(frame)
-    local saved = Addon.db.keyboardHUD[frame:GetName()]
+    local name = frame:GetName()
+    local saved = self.moves[name] or Addon.db.gamepadHUD[name] or Addon.db.keyboardHUD[name]
     if saved then return saved end
     local map = EDIT_MODE_CLASSIC_SYSTEM_MAP
     local system = map and frame.system and map[frame.system]
@@ -55,6 +41,48 @@ function HUD:GetClassicLayout(frame)
     if anchor then
         return { points = { { anchor.point, anchor.relativeTo, anchor.relativePoint, anchor.offsetX, anchor.offsetY } }, scale = 1 }
     end
+end
+
+-- A frame's place as one anchor to UIParent, for when it is anchored to a frame without a name.
+local function ScreenSnapshot(frame)
+    local left, top = frame:GetLeft(), frame:GetTop()
+    if not left or not top then return end
+    local ratio = UIParent:GetEffectiveScale() / frame:GetEffectiveScale()
+    return { points = { { "TOPLEFT", "UIParent", "TOPLEFT",
+        left - (UIParent:GetLeft() or 0) * ratio, top - (UIParent:GetTop() or 0) * ratio } }, scale = frame:GetScale() }
+end
+
+-- The player moved a unit frame in Edit Mode while the classic HUD had placed it. The new place is kept
+-- once the layout is saved; leaving Edit Mode without saving drops it, like every other unsaved change.
+function HUD:OnUserMove(frame)
+    if not self.applied or not frame or not Addon:IsGamepadMode() then return end
+    for _, known in ipairs(self:GetFrames()) do
+        if known == frame then
+            self.moves[frame:GetName()] = Snapshot(frame, true) or ScreenSnapshot(frame)
+            Addon:Trace("HUD:OnUserMove " .. frame:GetName())
+            return
+        end
+    end
+end
+
+function HUD:CommitMoves()
+    for _, moves in ipairs({ self.reverted or {}, self.moves }) do
+        for name, snapshot in pairs(moves) do Addon.db.gamepadHUD[name] = snapshot end
+    end
+    self.moves, self.reverted = {}, nil
+end
+
+-- Saving a preset as a new layout reverts first and saves right after, in the same call:
+-- the moves stay available until the end of this frame.
+function HUD:DropMoves()
+    if not next(self.moves) then return end
+    self.reverted, self.moves = self.moves, {}
+    C_Timer.After(0, function() self.reverted = nil end)
+end
+
+function HUD:ResetFrames()
+    Addon.db.gamepadHUD, self.moves, self.reverted = {}, {}, nil
+    self.applied = false
 end
 
 -- The rectangle a frame takes up, in UIParent points: left, bottom, right, top (nil while it has no size on screen).
@@ -251,19 +279,22 @@ function HUD:RefreshChat(wanted, changedMode)
     Apply(chat, { points = { { "BOTTOMLEFT", UIParent, "BOTTOMLEFT", targetX / scale, targetY / scale } }, scale = chat:GetScale() })
 end
 
-function HUD:Refresh(wanted, changedMode)
+function HUD:Refresh(wanted, changedMode, editing)
     if changedMode then
         -- The game just applied a different layout. Never restore the old mode's anchors over it.
         self.originals = {}
         self.applied = false
+        self.moves, self.reverted = {}, nil
         self.legendOriginal, self.legendTop, self.legendX, self.legendArea = nil, nil, nil, nil
     end
     if InCombatLockdown() then self.pending = true; return end
     self.pending = false
-    if wanted ~= self.applied then Addon:Trace("HUD:Refresh " .. tostring(wanted)) end
+    -- The unit frames keep their classic places in Edit Mode, so they can be dragged from there.
+    local frames = wanted and Addon.db.moveUnitFrames or false
+    if frames ~= self.applied then Addon:Trace("HUD:Refresh " .. tostring(frames)) end
     for _, frame in ipairs(self:GetFrames()) do
         if frame then
-            if wanted then
+            if frames then
                 if not self.originals[frame] then self.originals[frame] = Snapshot(frame) end
                 local layout = self:GetClassicLayout(frame)
                 if layout and not self.applied then Apply(frame, layout) end
@@ -273,17 +304,28 @@ function HUD:Refresh(wanted, changedMode)
             end
         end
     end
-    self:RefreshLegend(wanted)
-    self.applied = wanted
+    self.legendWanted = wanted and not editing or false
+    self:RefreshLegend(self.legendWanted)
+    self.applied = frames
 end
 
 function HUD:Observe()
     for _, frame in ipairs(self:GetFrames()) do
         if frame and frame.ApplySystemAnchor then
             hooksecurefunc(frame, "ApplySystemAnchor", function()
+                -- The game put the frame back where its own layout has it: that is the place to
+                -- return to, and the classic place goes on top of it again.
+                self.originals[frame] = nil
                 self.applied = false
                 Addon:QueueRefresh(true)
             end)
         end
     end
+    local manager = EditModeManagerFrame
+    if not manager then return end
+    if manager.OnSystemPositionChange then
+        hooksecurefunc(manager, "OnSystemPositionChange", function(_, frame) self:OnUserMove(frame) end)
+    end
+    if manager.SaveLayouts then hooksecurefunc(manager, "SaveLayouts", function() self:CommitMoves() end) end
+    if manager.RevertAllChanges then hooksecurefunc(manager, "RevertAllChanges", function() self:DropMoves() end) end
 end

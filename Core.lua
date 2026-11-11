@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.51"
+Addon.version = "0.1.0-alpha.52"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -245,7 +245,7 @@ function Addon:Refresh()
         self.Layout:Restore(true)
         if not gamepad then self:QueueRefresh(true) end
     end
-    self.HUD:Refresh(wanted and not self.Display:IsEditing(), changed)
+    self.HUD:Refresh(wanted, changed, self.Display:IsEditing())
     local revision = self.Layout.revision
     self:CheckNativeTaint("HUD:Refresh")
     local ok, visible = pcall(self.Display.Refresh, self.Display, wanted)
@@ -265,7 +265,7 @@ function Addon:Refresh()
     else
         self.HUD:RefreshChat(self.classicVisible, changed)
         -- The legend steers clear of chat, so it is placed again once chat has settled.
-        if self.HUD.applied and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
+        if self.HUD.legendWanted and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
     end
     self:CheckNativeTaint("HUD:RefreshChat")
     self.ItemDelete:Refresh()
@@ -295,6 +295,8 @@ local function Initialize()
     end
     if type(Addon.db.keyboardHUD) ~= "table" then Addon.db.keyboardHUD = {} end
     if type(Addon.db.keyboardBars) ~= "table" then Addon.db.keyboardBars = {} end
+    -- Where the player dragged the unit frames in Edit Mode while in Gamepad Mode.
+    if type(Addon.db.gamepadHUD) ~= "table" then Addon.db.gamepadHUD = {} end
     -- Older caches can contain hidden-bar placeholders or gamepad transition anchors.
     if Addon.db.keyboardLayoutVersion ~= 1 then
         Addon.db.keyboardHUD, Addon.db.keyboardBars = {}, {}
@@ -402,8 +404,12 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "native" or command == "classic" then
         Addon.nativeView = command == "native"
     elseif command == "scale" then
-        Addon:Print("Use the game's UI scale and Edit Mode; ClassicConsoleGamepadUI follows the original frames.")
+        Addon:Print("Use the game's UI scale and Edit Mode: drag the player, target and focus frames there and save the layout.")
         return
+    elseif command == "resetframes" then
+        if InCombatLockdown() then Addon:Print("Not in combat."); return end
+        Addon.HUD:ResetFrames()
+        Addon:Print("Player, target and focus frames are back at their classic places.")
     elseif command == "taint" then
         local ours, others = Addon:ScanTaint(2)
         local summary, foreign = {}, others.foreign or {}
@@ -468,7 +474,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | bindings | edit | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)

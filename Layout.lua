@@ -53,6 +53,9 @@ local function Apply(frame, layout)
     return true
 end
 
+-- HUD.lua snapshots and restores the unit frames the same way.
+Layout.Snapshot, Layout.Apply = Snapshot, Apply
+
 function Layout:CanCaptureKeyboard()
     if InCombatLockdown() or self.active or Addon:IsGamepadMode() then return false end
     local manager = EditModeManagerFrame

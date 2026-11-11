@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.51. Alpha: expect bugs.
+Version 0.1.0-alpha.52. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -38,6 +38,19 @@ Commands: `/cgp` (or `/classicconsolegamepadui`)
 *   `/cgp native`, `/cgp classic`: switch the action bars for this session.
 *   `/cgp bindings`, `/cgp edit`: how to open the key bindings and the action editor.
 *   `/cgp status`: current state and the last problem found.
+*   `/cgp resetframes`: put the player, target and focus frames back at their classic places.
+
+## Moving frames
+
+Open the game's Edit Mode in Gamepad Mode, drag the player, target or focus frame and save the layout.
+The addon remembers the place. Frames that never moved stay at their classic places.
+The setting "Classic player, target and focus frames" turns this handling off.
+
+## Typing without a keyboard
+
+The game has no on-screen keyboard of its own, and an addon cannot open one. Use the system's:
+Steam Deck: Steam + X (or bind "Show keyboard" to a back button in Steam Input). Windows: the touch keyboard
+(Win + Ctrl + O). Open the chat box with the controller, then use that keyboard.
 
 ## Steam Deck
 

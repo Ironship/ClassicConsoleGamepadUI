@@ -164,6 +164,13 @@ matching the exported source commit's build **1.60.1 (70450)**.
   No shared native callback table is modified.
 - `Blizzard_EditMode/Mainline/EditModePresetLayouts.lua`: the classic unit-frame
   and bar anchors supply a fallback before a keyboard/mouse layout has been captured.
+- `Blizzard_EditMode/Shared/EditModeManager.lua`: `OnSystemPositionChange` runs after a drag or nudge,
+  `SaveLayouts` after Save (also right after `RevertAllChanges` when a preset is saved as a new layout) and
+  `RevertAllChanges` on exit. Post-hooks keep a drag of the player, target or focus frame as a pending move;
+  `SaveLayouts` commits it to `gamepadHUD`, a revert drops it. The classic place is then
+  `moves` > `gamepadHUD` > `keyboardHUD` > preset. The frames are not restored to the gamepad layout while
+  Edit Mode is open. The hooks are post-hooks: nothing in Edit Mode's tables is written.
+- No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation).
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the

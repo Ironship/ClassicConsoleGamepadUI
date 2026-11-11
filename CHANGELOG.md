@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0-alpha.52
+
+- The player, target and focus frames can be moved in Edit Mode while in Gamepad Mode. Drag them and save the
+  layout: the new place is remembered and no longer reverts to the top left. Leaving Edit Mode without saving
+  drops the move, like any other Edit Mode change. `/cgp resetframes` puts them back at their classic places.
+- New setting "Classic player, target and focus frames" (on by default). Off leaves these frames entirely to the
+  Edit Mode of the gamepad layout.
+- The classic places of the target and focus frames are now captured in keyboard/mouse mode even while those
+  frames are hidden (before, they were captured only while a target or focus existed).
+- The classic frames stay put while Edit Mode is open instead of jumping back to the gamepad layout.
+- `/cgp scale` describes what actually works. README: on-screen keyboard for typing in chat (Steam Deck,
+  Windows touch keyboard); the packaged AI instruction files name this repository.
+
 ## 0.1.0-alpha.51
 
 - Switching compact bars (8 slots) off in Settings no longer leaves the keyboard keys dead until a UI reload:
