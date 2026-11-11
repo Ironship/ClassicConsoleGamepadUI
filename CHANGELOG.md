@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.58
+
+- Keyboard buttons follow the chat's own prompts: A key, X sends the line, B closes, Y accepts the suggested word (a space elsewhere), RT deletes, LT shift, Start done.
+- Sending goes through securecallfunction so the chat's own code is not run with this addon's taint.
+
 ## 0.1.0-alpha.57
 
 - Keyboard: X accepts the suggested word (and adds a space) in the smart T9 layout; RT deletes in every layout (X deletes in the others).

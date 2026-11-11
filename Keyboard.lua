@@ -61,9 +61,9 @@ end
 
 local MIN_WIDTH, LEGEND_HEIGHT = 560, 58
 local LEGENDS = {
-    abc = "D-pad: move   A: key   B: close   X: delete   Y: space   LT: shift   RT: delete   Start: done (then A sends)",
-    t9 = "D-pad: move   A: press (again: next letter)   B: close   X: delete   Y: space   LT: shift   RT: delete   Start: done (then A sends)",
-    t9p = "D-pad: move   A: key   X: accept word   LB/RB: other word   RT: delete   B: close   Y: space   LT: capital   Start: done",
+    abc = "D-pad: move   A: key   B: close   X: send   Y: space   LT: shift   RT: delete   Start: done",
+    t9 = "D-pad: move   A: press (again: next letter)   B: close   X: send   Y: space   LT: shift   RT: delete   Start: done",
+    t9p = "D-pad: move   A: key   Y: accept word   LB/RB: other word   RT: delete   X: send   B: close   LT: capital   Start: done",
 }
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
@@ -597,6 +597,20 @@ function Keyboard:Move(direction)
     self:Select(best)
 end
 
+-- Send the line with the chat's own send function, called through securecallfunction so that the game's
+-- chat code (it closes the line and rewires the pad bindings) does not run with this addon's taint.
+function Keyboard:Send()
+    local box = EditBox()
+    if not box then return end
+    self:Commit()
+    self.tap = nil
+    Trace("Keyboard:Send")
+    if box.SendMessage then
+        if securecallfunction then securecallfunction(box.SendMessage, box) else box:SendMessage() end
+    end
+    self:Hide()
+end
+
 function Keyboard:ZeroKey()
     for _, key in ipairs(self.keys) do
         if key.digit == "0" then return key end
@@ -612,19 +626,15 @@ function Keyboard:PadPress(token)
     elseif token == "b" or token == "select" then
         self:Hide()
     elseif token == "x" then
-        -- With suggestions, X takes the word shown (and adds the space); otherwise it deletes.
-        if self.mode == "t9p" and self.pred and self.pred.cands[self.pred.idx] then
-            self:Choose(self.pred.idx)
-        else
-            self:Press(self.special.back)
-        end
+        self:Send()
     elseif token == "delete" then
         self:Press(self.special.back)
     elseif token == "y" then
-        -- The full keyboard has a space key; the phone layouts spell it with 0.
-        local space = self.special.space
-        if space then
-            self:Press(space)
+        -- Smart T9: take the word shown (and add the space). Elsewhere: a space; the phone layouts spell it with 0.
+        if self.mode == "t9p" and self.pred and self.pred.cands[self.pred.idx] then
+            self:Choose(self.pred.idx)
+        elseif self.special.space then
+            self:Press(self.special.space)
         elseif self.mode == "t9p" then
             self:Press(self:ZeroKey())
         else
