@@ -2,6 +2,7 @@ local _, Addon = ...
 -- An on-screen keyboard for typing in chat. The game has none in Gamepad Mode and an addon cannot open the
 -- system's. The keys act on the active chat edit box with plain edit box calls (Insert, SetText, SendMessage);
 -- nothing native is replaced and no protected frame is touched, so it is also safe to leave open in combat.
+-- Layouts: "abc" (full keyboard), "t9" (phone keypad, multi-tap) and "t9p" (phone keypad with word suggestions).
 local Keyboard = {}
 Addon.Keyboard = Keyboard
 
@@ -14,23 +15,29 @@ local SHIFTED = {
     ["ä"] = "Ä", ["ö"] = "Ö", ["ü"] = "Ü", ["ß"] = "ß",
 }
 
--- A key of the multi-tap layout: the digit, and the characters its presses cycle through.
+-- A key of the phone layouts: the digit, and the characters its presses cycle through.
 local function T(digit, chars) return { digit = digit, chars = chars, width = 110, height = 48 } end
+local function Special(name, width) return { name, width, height = 48 } end
 
 local function Rows(mode)
     local de = GetLocale() == "deDE"
-    if mode == "t9" then
-        return {
-            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }), T("2", de and { "a", "b", "c", "ä", "2" } or { "a", "b", "c", "2" }),
-                T("3", { "d", "e", "f", "3" }) },
+    if mode == "t9" or mode == "t9p" then
+        local rows = {
+            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }),
+                T("2", de and { "a", "b", "c", "ä", "2" } or { "a", "b", "c", "2" }), T("3", { "d", "e", "f", "3" }) },
             { T("4", { "g", "h", "i", "4" }), T("5", { "j", "k", "l", "5" }),
                 T("6", de and { "m", "n", "o", "ö", "6" } or { "m", "n", "o", "6" }) },
             { T("7", de and { "p", "q", "r", "s", "ß", "7" } or { "p", "q", "r", "s", "7" }),
                 T("8", de and { "t", "u", "v", "ü", "8" } or { "t", "u", "v", "8" }), T("9", { "w", "x", "y", "z", "9" }) },
-            { { "shift", 110, height = 48 }, T("0", { " ", "0" }), { "back", 110, height = 48 } },
-            { { "close", 80, height = 48 }, { "clear", 80, height = 48 }, { "mode", 80, height = 48 },
-                { "enter", 110, height = 48 } },
-        }, { 0, 0, 0, 0, 0 }
+            { Special("shift", 110), T("0", { " ", "0" }), Special("back", 110) },
+            { Special("close", 80), Special("clear", 80), Special("mode", 80), Special("predict", 80), Special("enter", 110) },
+        }
+        if mode == "t9p" then
+            local suggestions = {}
+            for i = 1, 5 do suggestions[i] = { cand = i, width = 100, height = KEY } end
+            table.insert(rows, 1, suggestions)
+        end
+        return rows, { 0, 0, 0, 0, 0, 0 }
     end
     local rows = {
         { "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", { "back", 80 } },
@@ -51,6 +58,7 @@ local MIN_WIDTH, LEGEND_HEIGHT = 560, 34
 local LEGENDS = {
     abc = "D-pad: move   A: key   B: delete   X: space   Y: shift   Start: send   Back: close",
     t9 = "D-pad: move   A: press (press again to change the letter)   B: delete   X: space   Y: shift   Start: send   Back: close",
+    t9p = "D-pad: move   A: key   LB/RB: other word   B: delete   X: space   Y: capital   Start: send   Back: close",
 }
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
@@ -62,6 +70,7 @@ local PAD_TOKENS = {
     [GAMEPAD_FACE_BOTTOM or "PAD1"] = "a", [GAMEPAD_FACE_RIGHT or "PAD2"] = "b",
     [GAMEPAD_FACE_LEFT or "PAD3"] = "x", [GAMEPAD_FACE_TOP or "PAD4"] = "y",
     [GAMEPAD_MENU_RIGHT or "PADFORWARD"] = "start", [GAMEPAD_MENU_LEFT or "PADBACK"] = "select",
+    [GAMEPAD_SHOULDER_LEFT or "PADLSHOULDER"] = "previous", [GAMEPAD_SHOULDER_RIGHT or "PADRSHOULDER"] = "next",
 }
 
 local PAD_BIND = [[
@@ -98,13 +107,31 @@ local function EditBox()
 end
 
 local function Upper(text)
-    return (text:upper():gsub("ä", "Ä"):gsub("ö", "Ö"):gsub("ü", "Ü"))
+    return (text:upper():gsub("ä", "Ä"):gsub("ö", "Ö"):gsub("ü", "Ü"):gsub("ą", "Ą"):gsub("ć", "Ć"):gsub("ę", "Ę")
+        :gsub("ł", "Ł"):gsub("ń", "Ń"):gsub("ó", "Ó"):gsub("ś", "Ś"):gsub("ź", "Ź"):gsub("ż", "Ż"))
+end
+
+local function CapitalizeFirst(text)
+    local first = text:match("^[%z\1-\127\194-\244][\128-\191]*")
+    if not first then return text end
+    return Upper(first) .. text:sub(#first + 1)
+end
+
+local function WithoutLastCharacter(text)
+    -- One whole UTF-8 character.
+    return (text:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""))
 end
 
 local SPECIAL_LABELS = { back = "<-", shift = "Shift", close = "X", clear = "Clear", space = "Space", enter = "Enter" }
 
 function Keyboard:Label(key)
-    if key.special == "mode" then return self.mode == "t9" and "ABC" or "T9" end
+    if key.cand then
+        local pred = self.pred
+        local word = pred and pred.cands[key.cand]
+        return word and (pred.cap and CapitalizeFirst(word) or word) or ""
+    end
+    if key.special == "mode" then return self.mode == "abc" and "T9" or "ABC" end
+    if key.special == "predict" then return self.mode == "t9p" and "Tap" or "Smart" end
     if key.special then return SPECIAL_LABELS[key.special] end
     if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
     if not self.shift then return key.base end
@@ -112,9 +139,11 @@ function Keyboard:Label(key)
 end
 
 function Keyboard:Refresh()
+    local pred = self.pred
     for _, key in ipairs(self.keys) do
         key.text:SetText(self:Label(key))
-        key.active = key.special == "shift" and self.shift or false
+        key.active = (key.special == "shift" and (self.shift or (pred and pred.cap))) or
+            (key.cand and pred and pred.idx == key.cand) or false
         self:Paint(key)
     end
 end
@@ -124,11 +153,6 @@ function Keyboard:Paint(key, pressed)
         or (key.active and { 0.55, 0.42, 0.1 })
         or (key.hover and { 0.28, 0.28, 0.3 }) or { 0.12, 0.12, 0.14 }
     key.bg:SetColorTexture(c[1], c[2], c[3], 0.95)
-end
-
-local function WithoutLastCharacter(text)
-    -- One whole UTF-8 character.
-    return (text:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""))
 end
 
 -- Multi-tap: a key's characters take turns while it is pressed again within a second; any other key
@@ -150,29 +174,141 @@ function Keyboard:Tap(box, key)
     self.tap = { key = key, index = index, upper = upper, time = now, text = box:GetText() or "" }
 end
 
+-- Suggestions: the keys pressed so far stand for a word, shown in the chat line as the best match. The
+-- other matches are in the top row; LB/RB or a click picks one. A space, a punctuation key, Enter or a
+-- chosen suggestion accepts the word and teaches it to the word list.
+function Keyboard:ShowWord(box)
+    local pred = self.pred
+    local word = pred.cands[pred.idx] or ""
+    if pred.cap then word = CapitalizeFirst(word) end
+    pred.shown = word
+    box:SetText(pred.prefix .. word)
+    self:Refresh()
+end
+
+function Keyboard:Commit()
+    local pred = self.pred
+    if not pred then return end
+    self.pred = nil
+    if not pred.fallback and pred.shown and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
+    self:Refresh()
+end
+
+function Keyboard:Lookup(pred)
+    pred.cands = Addon.Words:Lookup(pred.digits, 5)
+    pred.fallback = #pred.cands == 0
+    if pred.fallback then pred.cands = { Addon.Words.Fallback(pred.digits) } end
+    pred.idx = 1
+end
+
+function Keyboard:Predict(box, key)
+    local text, pred = box:GetText() or "", self.pred
+    -- The line changed behind our back (typed on a keyboard, sent, cleared): a new word starts here.
+    if pred and text ~= pred.prefix .. pred.shown then pred = nil end
+    if not pred then
+        pred = { prefix = text, digits = "", idx = 1, shown = "", cands = {}, cap = self.shift }
+        if self.shift then self.shift = false end
+        self.pred = pred
+    end
+    pred.digits = pred.digits .. key.digit
+    self:Lookup(pred)
+    self:ShowWord(box)
+end
+
+function Keyboard:Cycle(step)
+    local pred = self.pred
+    if not pred or #pred.cands < 2 then return end
+    local box = EditBox()
+    if not box then return end
+    pred.idx = (pred.idx - 1 + step) % #pred.cands + 1
+    self:ShowWord(box)
+end
+
+function Keyboard:Choose(index)
+    local pred = self.pred
+    if not pred or not pred.cands[index] then return end
+    local box = EditBox()
+    if not box then return end
+    pred.idx = index
+    self:ShowWord(box)
+    self:Commit()
+    box:Insert(" ")
+end
+
+-- Delete: one pressed key of the word in progress, else one character of the line.
+function Keyboard:Delete(box)
+    local pred = self.pred
+    if pred and (box:GetText() or "") == pred.prefix .. pred.shown then
+        if #pred.digits > 1 then
+            pred.digits = pred.digits:sub(1, -2)
+            self:Lookup(pred)
+            self:ShowWord(box)
+        else
+            box:SetText(pred.prefix)
+            self.pred = nil
+            self:Refresh()
+        end
+        return
+    end
+    self.pred = nil
+    box:SetText(WithoutLastCharacter(box:GetText() or ""))
+end
+
 function Keyboard:Press(key)
     local special = key.special
     if special == "shift" then
-        self.shift = not self.shift
-        self:Refresh()
+        local pred = self.pred
+        if pred then
+            -- A word in progress: capital letter or not.
+            pred.cap = not pred.cap
+            local box = EditBox()
+            if box then self:ShowWord(box) end
+        else
+            self.shift = not self.shift
+            self:Refresh()
+        end
         return
     elseif special == "close" then
         self:Hide()
         return
     elseif special == "mode" then
-        self:SetMode(self.mode == "t9" and "abc" or "t9")
+        self:SetMode(self.mode == "abc" and (Addon.db.keyboardPhone or "t9") or "abc")
+        return
+    elseif special == "predict" then
+        self:SetMode(self.mode == "t9p" and "t9" or "t9p")
+        return
+    elseif key.cand then
+        self:Choose(key.cand)
         return
     end
     local box = EditBox()
     if not box then return end
+    if self.mode == "t9p" and key.digit then
+        local digit = key.digit
+        if digit == "0" then
+            self:Commit()
+            self.tap = nil
+            box:Insert(" ")
+        elseif digit == "1" then
+            self:Commit()
+            self:Tap(box, key)
+        else
+            self.tap = nil
+            self:Predict(box, key)
+        end
+        return
+    end
     if key.chars then
         self:Tap(box, key)
         return
     end
     self.tap = nil
     if special == "back" then
-        box:SetText(WithoutLastCharacter(box:GetText() or ""))
-    elseif special == "clear" then
+        self:Delete(box)
+        return
+    end
+    self:Commit()
+    if special == "clear" then
         box:SetText("")
     elseif special == "space" then
         box:Insert(" ")
@@ -191,12 +327,14 @@ end
 
 -- The buttons of one layout, built once and shown or hidden when the mode changes.
 function Keyboard:Build(mode)
-    local frame, rows, offsets = self.frame, Rows(mode)
+    local frame = self.frame
+    local rows, offsets = Rows(mode)
+    local phone = mode ~= "abc"
     local set = { keys = {}, special = {} }
-    local widths, tallest = {}, 0
+    local widths, total = {}, 0
     for r, row in ipairs(rows) do
         local w = -GAP
-        for _, entry in ipairs(row) do w = w + (type(entry) == "table" and entry.width or entry[2] or KEY) + GAP end
+        for _, entry in ipairs(row) do w = w + (type(entry) == "table" and (entry.width or entry[2]) or KEY) + GAP end
         widths[r] = w
     end
     local widest = 0
@@ -204,12 +342,13 @@ function Keyboard:Build(mode)
     local width = math.max(MIN_WIDTH, widest + PAD * 2)
     local y = PAD
     for r, row in ipairs(rows) do
-        local x = mode == "t9" and (width - widths[r]) / 2 or (PAD + offsets[r])
+        local x = phone and (width - widths[r]) / 2 or (PAD + offsets[r])
         local rowHeight = KEY
         for _, entry in ipairs(row) do
-            local special = type(entry) == "table" and not entry.chars and entry[1] or nil
-            local size = type(entry) == "table" and (entry.width or entry[2]) or KEY
-            local height = type(entry) == "table" and entry.height or KEY
+            local isTable = type(entry) == "table"
+            local special = isTable and not entry.chars and not entry.cand and entry[1] or nil
+            local size = isTable and (entry.width or entry[2]) or KEY
+            local height = isTable and entry.height or KEY
             rowHeight = math.max(rowHeight, height)
             local button = CreateFrame("Button", nil, frame)
             button:SetSize(size, height)
@@ -217,17 +356,18 @@ function Keyboard:Build(mode)
             button.bg = button:CreateTexture(nil, "BACKGROUND")
             button.bg:SetAllPoints()
             button.text = button:CreateFontString(nil, "OVERLAY",
-                entry.chars and "GameFontHighlight" or "GameFontHighlightLarge")
+                (isTable and (entry.chars or entry.cand)) and "GameFontHighlight" or "GameFontHighlightLarge")
             button.text:SetPoint("CENTER")
             button.special = special
-            if entry.chars then
+            if isTable and entry.chars then
                 button.chars, button.digit = entry.chars, entry.digit
                 local hint = {}
                 for _, c in ipairs(entry.chars) do
                     if c ~= entry.digit then hint[#hint + 1] = c == " " and "space" or c end
                 end
                 button.hint = table.concat(hint)
-                if entry.digit == "0" then button.hint = "space" end
+            elseif isTable and entry.cand then
+                button.cand = entry.cand
             elseif not special then
                 button.base = entry
             end
@@ -240,18 +380,19 @@ function Keyboard:Build(mode)
             button:SetScript("OnClick", function() self:Press(button) end)
             button:Hide()
             set.keys[#set.keys + 1] = button
-            if (mode == "t9" and button.digit == "5") or button.base == "h" then set.home = button end
+            if (phone and button.digit == "5") or button.base == "h" then set.home = button end
             x = x + size + GAP
         end
-        tallest = tallest + rowHeight + GAP
+        total = total + rowHeight + GAP
         y = y + rowHeight + GAP
     end
-    set.width, set.height = width, PAD * 2 + tallest - GAP + LEGEND_HEIGHT
+    set.width, set.height = width, PAD * 2 + total - GAP + LEGEND_HEIGHT
     set.home = set.home or set.keys[1]
     return set
 end
 
 function Keyboard:Apply(mode)
+    self:Commit()
     self.mode = mode
     self.sets = self.sets or {}
     for _, set in pairs(self.sets) do
@@ -262,7 +403,7 @@ function Keyboard:Apply(mode)
         set = self:Build(mode)
         self.sets[mode] = set
     end
-    self.keys, self.special, self.sel, self.tap, self.shift = set.keys, set.special, set.home, nil, false
+    self.keys, self.special, self.sel, self.tap, self.pred, self.shift = set.keys, set.special, set.home, nil, nil, false
     for _, key in ipairs(set.keys) do key:Show() end
     self.frame:SetSize(set.width, set.height)
     self.legend:SetWidth(set.width - PAD * 2)
@@ -271,8 +412,10 @@ function Keyboard:Apply(mode)
 end
 
 function Keyboard:SetMode(mode)
-    mode = mode == "t9" and "t9" or "abc"
+    if mode ~= "t9" and mode ~= "t9p" then mode = "abc" end
     Addon.db.keyboardMode = mode
+    -- The phone layout to come back to from the full keyboard.
+    if mode ~= "abc" then Addon.db.keyboardPhone = mode end
     if self.frame then self:Apply(mode) end
 end
 
@@ -308,19 +451,21 @@ function Keyboard:Create()
         frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 260)
     end
     frame:Hide()
-    self:Apply(Addon.db.keyboardMode == "t9" and "t9" or "abc")
+    local mode = Addon.db.keyboardMode
+    self:Apply((mode == "t9" or mode == "t9p") and mode or "abc")
 end
 
 function Keyboard:Show(auto)
     if not self.frame then self:Create() end
     self.auto = auto and true or false
-    self.shift, self.tap = false, nil
+    self.shift, self.tap, self.pred = false, nil, nil
     self.frame:Show()
     self:SyncPad()
     self:Refresh()
 end
 
 function Keyboard:Hide()
+    self.pred = nil
     if self.frame then self.frame:Hide() end
     if self.pad and self.pad:IsShown() and not InCombatLockdown() then self.pad:Hide() end
 end
@@ -410,6 +555,12 @@ function Keyboard:Move(direction)
     self:Select(best)
 end
 
+function Keyboard:ZeroKey()
+    for _, key in ipairs(self.keys) do
+        if key.digit == "0" then return key end
+    end
+end
+
 function Keyboard:PadPress(token)
     if not (self.frame and self.frame:IsShown()) then return end
     if token == "up" or token == "down" or token == "left" or token == "right" then
@@ -419,13 +570,26 @@ function Keyboard:PadPress(token)
     elseif token == "b" then
         self:Press(self.special.back)
     elseif token == "x" then
-        self:Press(self.special.space)
+        -- The full keyboard has a space key; the phone layouts spell it with 0.
+        local space = self.special.space
+        if space then
+            self:Press(space)
+        elseif self.mode == "t9p" then
+            self:Press(self:ZeroKey())
+        else
+            local box = EditBox()
+            if box then self.tap = nil; box:Insert(" ") end
+        end
     elseif token == "y" then
         self:Press(self.special.shift)
     elseif token == "start" then
         self:Press(self.special.enter)
     elseif token == "select" then
         self:Hide()
+    elseif token == "previous" then
+        self:Cycle(-1)
+    elseif token == "next" then
+        self:Cycle(1)
     end
 end
 

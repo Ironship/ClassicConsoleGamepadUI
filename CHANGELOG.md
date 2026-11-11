@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.54
+
+- T9 with word suggestions: the `Smart` key on the phone layout (or `/cgp keyboard smart`; `/cgp keyboard tap`
+  returns to plain multi-tap). Press each key once per letter (4 2 5 5 6 for "hallo"); the best match is
+  shown in the chat line, five more are in the top row (click one, or LB / RB on the controller). 0 or a
+  chosen suggestion adds a space, 1 is punctuation, B removes the last key, Y toggles the capital letter.
+- The word list is learned, not shipped: a few dozen common English, German and Polish words to start, then
+  the words of chat you read, of what you send and of quest and gossip texts, in the language you play. Only
+  single words with counts are stored (SavedVariables, up to about 6000); `/cgp keyboard forget` clears them.
+  Words with an apostrophe or a digit are not learned.
+
 ## 0.1.0-alpha.53
 
 - On-screen keyboard for typing in chat (`/cgp keyboard`, or the button in the settings). It works with the

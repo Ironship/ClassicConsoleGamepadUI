@@ -4,7 +4,7 @@
 ## Author: Oleg
 ## X-License: All Rights Reserved
 ## X-Website: https://github.com/Ironship/ClassicConsoleGamepadUI
-## Version: 0.1.0-alpha.53
+## Version: 0.1.0-alpha.54
 ## Dependencies: Blizzard_GamepadActionBars
 ## OptionalDeps: Blizzard_EditMode, Blizzard_UnitFrame, Blizzard_StaticPopup_Game
 ## SavedVariables: ClassicConsoleGamepadUIDB
@@ -16,5 +16,6 @@ HUD.lua
 MenuHints.lua
 Options.lua
 ItemDelete.lua
+Words.lua
 Keyboard.lua
 Core.lua
