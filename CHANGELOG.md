@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.62
+
+- Keyboard: the T9 layouts compose a word in a buffer of their own, shown in a strip above the keys, and put it in the chat line only when it is accepted (Y adds a space, X sends, Done, the 0 key of the smart layout). Multi-tap no longer depends on the chat text, so repeated presses cycle through the letters; a pause of 1.5 s, a move of the selection or RB (multi-tap layout) ends a letter.
+
 ## 0.1.0-alpha.61
 
 - Keyboard: Blizzard-style look (dialog frame, tooltip-border keys with a gold edge on the selected key) and lower on the screen by default.

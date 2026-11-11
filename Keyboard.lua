@@ -59,14 +59,15 @@ local function Rows(mode)
     return rows, { 0, 20, 30, 0, 0 }
 end
 
-local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW = 560, 16, 24
+local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW, PREVIEW_HEIGHT = 560, 16, 24, 28
 
 -- The button prompts under the keys: an icon of the pad button and what it does.
 local LEGENDS = {
     abc = { { "dpad", "Move" }, { "A", "Key" }, { "X", "Send" }, { "B", "Close" }, { "Y", "Space" },
         { "LT", "Shift" }, { "RT", "Delete" }, { "Start", "Done" } },
-    t9 = { { "dpad", "Move" }, { "A", "Press (again: next letter)" }, { "X", "Send" }, { "B", "Close" },
-        { "Y", "Space" }, { "LT", "Shift" }, { "RT", "Delete" }, { "Start", "Done" } },
+    t9 = { { "dpad", "Move" }, { "A", "Press (again: next letter)" }, { "RB", "Next letter" },
+        { "Y", "Accept word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" },
+        { "Start", "Done" } },
     t9p = { { "dpad", "Move" }, { "A", "Key" }, { "Y", "Accept word" }, { "LB", "Previous word" },
         { "RB", "Next word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Capital" }, { "RT", "Delete" },
         { "Start", "Done" } },
@@ -277,43 +278,75 @@ function Keyboard:Paint(key, pressed)
     end
 end
 
--- Multi-tap: a key's characters take turns while it is pressed again within a second; any other key
--- or a pause starts the next character.
-local TAP_SECONDS = 1.0
-function Keyboard:Tap(box, key)
-    local now, text, tap = GetTime(), box:GetText() or "", self.tap
-    local chars = key.chars
-    local index, upper, base
-    if tap and tap.key == key and now - tap.time < TAP_SECONDS and text == tap.text then
-        index, upper, base = tap.index % #chars + 1, tap.upper, WithoutLastCharacter(text)
+-- The phone layouts compose a word in a buffer of their own, shown in the strip above the keys. Nothing
+-- reaches the chat line until the word is accepted (Y, the 0 key, X to send, Done), so the chat never sees
+-- half-typed letters.
+function Keyboard:Pending()
+    local pred = self.pred
+    if pred then return pred.shown or "" end
+    return self.buffer or ""
+end
+
+function Keyboard:ShowPreview()
+    if not self.preview then return end
+    local text = self:Pending()
+    if text == "" then
+        self.preview:SetText("|cff888888Press keys to spell a word, Y puts it in the chat|r")
     else
-        index, upper, base = 1, self.shift, text
+        self.preview:SetText(text .. "|cffffd100_|r")
+    end
+end
+
+-- Multi-tap: a key's characters take turns while it is pressed again within a moment; a move to another key,
+-- another key or a pause starts the next character.
+local TAP_SECONDS = 1.5
+function Keyboard:Tap(key)
+    local now, tap = GetTime(), self.tap
+    local buffer, chars = self.buffer or "", key.chars
+    local index, upper, base
+    if tap and tap.key == key and now - tap.time < TAP_SECONDS and buffer ~= "" then
+        index, upper, base = tap.index % #chars + 1, tap.upper, WithoutLastCharacter(buffer)
+    else
+        index, upper, base = 1, self.shift, buffer
         if self.shift then self.shift = false; self:Refresh() end
     end
     local character = chars[index]
     if upper then character = Upper(character) end
-    box:SetText(base .. character)
-    self.tap = { key = key, index = index, upper = upper, time = now, text = box:GetText() or "" }
+    self.buffer = base .. character
+    self.tap = { key = key, index = index, upper = upper, time = now }
+    self:ShowPreview()
 end
 
--- Suggestions: the keys pressed so far stand for a word, shown in the chat line as the best match. The
--- other matches are in the top row; LB/RB or a click picks one. A space, a punctuation key, Enter or a
--- chosen suggestion accepts the word and teaches it to the word list.
-function Keyboard:ShowWord(box)
+-- Suggestions: the keys pressed so far stand for a word, shown in the strip as the best match. The other
+-- matches are in the top row; LB/RB or a click picks one. Accepting teaches the word to the word list.
+function Keyboard:ShowWord()
     local pred = self.pred
     local word = pred.cands[pred.idx] or ""
     if pred.cap then word = CapitalizeFirst(word) end
     pred.shown = word
-    box:SetText(pred.prefix .. word)
+    self:ShowPreview()
     self:Refresh()
 end
 
-function Keyboard:Commit()
+-- Put the word in progress into the chat line, with a space after it if wanted. Without a word, the space alone.
+-- False when there is no chat line to put it in (the word stays in the buffer).
+function Keyboard:Flush(space)
+    local text = self:Pending()
+    if text == "" and not space then return true end
+    local box = EditBox()
+    if not box then return false end
     local pred = self.pred
-    if not pred then return end
-    self.pred = nil
-    if not pred.fallback and pred.shown and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
+    if pred and not pred.fallback and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
+    self.pred, self.buffer, self.tap = nil, "", nil
+    box:Insert(text .. (space and " " or ""))
+    self:ShowPreview()
     self:Refresh()
+    return true
+end
+
+function Keyboard:Discard()
+    self.pred, self.buffer, self.tap = nil, "", nil
+    self:ShowPreview()
 end
 
 function Keyboard:Lookup(pred)
@@ -323,57 +356,56 @@ function Keyboard:Lookup(pred)
     pred.idx = 1
 end
 
-function Keyboard:Predict(box, key)
-    local text, pred = box:GetText() or "", self.pred
-    -- The line changed behind our back (typed on a keyboard, sent, cleared): a new word starts here.
-    if pred and text ~= pred.prefix .. pred.shown then pred = nil end
+function Keyboard:Predict(key)
+    local pred = self.pred
     if not pred then
-        pred = { prefix = text, digits = "", idx = 1, shown = "", cands = {}, cap = self.shift }
+        pred = { digits = "", idx = 1, shown = "", cands = {}, cap = self.shift }
         if self.shift then self.shift = false end
         self.pred = pred
     end
     pred.digits = pred.digits .. key.digit
     self:Lookup(pred)
-    self:ShowWord(box)
+    self:ShowWord()
 end
 
 function Keyboard:Cycle(step)
     local pred = self.pred
     if not pred or #pred.cands < 2 then return end
-    local box = EditBox()
-    if not box then return end
     pred.idx = (pred.idx - 1 + step) % #pred.cands + 1
-    self:ShowWord(box)
+    self:ShowWord()
 end
 
 function Keyboard:Choose(index)
     local pred = self.pred
     if not pred or not pred.cands[index] then return end
-    local box = EditBox()
-    if not box then return end
     pred.idx = index
-    self:ShowWord(box)
-    self:Commit()
-    box:Insert(" ")
+    self:ShowWord()
+    self:Flush(true)
 end
 
--- Delete: one pressed key of the word in progress, else one character of the line.
-function Keyboard:Delete(box)
+-- Delete: one pressed key of the word in progress, else one character of the buffer, else of the chat line.
+function Keyboard:Delete()
     local pred = self.pred
-    if pred and (box:GetText() or "") == pred.prefix .. pred.shown then
+    if pred then
         if #pred.digits > 1 then
             pred.digits = pred.digits:sub(1, -2)
             self:Lookup(pred)
-            self:ShowWord(box)
+            self:ShowWord()
         else
-            box:SetText(pred.prefix)
             self.pred = nil
+            self:ShowPreview()
             self:Refresh()
         end
         return
     end
-    self.pred = nil
-    box:SetText(WithoutLastCharacter(box:GetText() or ""))
+    self.tap = nil
+    if (self.buffer or "") ~= "" then
+        self.buffer = WithoutLastCharacter(self.buffer)
+        self:ShowPreview()
+        return
+    end
+    local box = EditBox()
+    if box then box:SetText(WithoutLastCharacter(box:GetText() or "")) end
 end
 
 function Keyboard:Press(key)
@@ -384,8 +416,7 @@ function Keyboard:Press(key)
         if pred then
             -- A word in progress: capital letter or not.
             pred.cap = not pred.cap
-            local box = EditBox()
-            if box then self:ShowWord(box) end
+            self:ShowWord()
         else
             self.shift = not self.shift
             self:Refresh()
@@ -403,42 +434,41 @@ function Keyboard:Press(key)
     elseif key.cand then
         self:Choose(key.cand)
         return
+    elseif special == "back" then
+        self:Delete()
+        return
+    elseif special == "clear" then
+        local had = self:Pending() ~= ""
+        self:Discard()
+        self:Refresh()
+        if not had then
+            local box = EditBox()
+            if box then box:SetText("") end
+        end
+        return
+    elseif special == "enter" then
+        -- Done typing: the word goes to the chat line, the game's own send button (A, or Enter) sends it.
+        if self:Flush(false) then self:Hide() end
+        return
     end
-    local box = EditBox()
-    if not box then return end
-    if self.mode == "t9p" and key.digit then
-        local digit = key.digit
-        if digit == "0" then
-            self:Commit()
+    if self.mode ~= "abc" and key.digit then
+        if self.mode == "t9p" and key.digit == "0" then
+            self:Flush(true)
+        elseif self.mode == "t9p" and key.digit ~= "1" then
             self.tap = nil
-            box:Insert(" ")
-        elseif digit == "1" then
-            self:Commit()
-            self:Tap(box, key)
+            if (self.buffer or "") ~= "" and not self:Flush(false) then return end
+            self:Predict(key)
         else
-            self.tap = nil
-            self:Predict(box, key)
+            -- Multi-tap (and the punctuation key of the smart layout): a word in progress goes to the chat first.
+            if self.pred and not self:Flush(false) then return end
+            self:Tap(key)
         end
         return
     end
-    if key.chars then
-        self:Tap(box, key)
-        return
-    end
-    self.tap = nil
-    if special == "back" then
-        self:Delete(box)
-        return
-    end
-    self:Commit()
-    if special == "clear" then
-        box:SetText("")
-    elseif special == "space" then
+    local box = EditBox()
+    if not box then return end
+    if special == "space" then
         box:Insert(" ")
-    elseif special == "enter" then
-        -- Done typing: the game's own send button (A, or Enter) sends the line.
-        self:Hide()
-        return
     else
         box:Insert(self:Label(key))
     end
@@ -463,7 +493,7 @@ function Keyboard:Build(mode)
     local widest = 0
     for _, w in ipairs(widths) do widest = math.max(widest, w) end
     local width = math.max(MIN_WIDTH, widest + PAD * 2)
-    local y = PAD
+    local y = PAD + (phone and PREVIEW_HEIGHT + GAP or 0)
     for r, row in ipairs(rows) do
         local x = phone and (width - widths[r]) / 2 or (PAD + offsets[r])
         local rowHeight = KEY
@@ -544,13 +574,16 @@ function Keyboard:Build(mode)
     end
     legend:Hide()
     set.legend, set.legendHeight = legend, #rowsOfEntries * LEGEND_ROW
-    set.width, set.height = width, PAD * 2 + total - GAP + STATUS_HEIGHT + set.legendHeight + 4
+    set.phone = phone
+    set.width, set.height = width, PAD * 2 + total - GAP + (phone and PREVIEW_HEIGHT + GAP or 0) + STATUS_HEIGHT
+        + set.legendHeight + 4
     set.home = set.home or set.keys[1]
     return set
 end
 
 function Keyboard:Apply(mode)
-    self:Commit()
+    -- Switching layouts: a word in progress goes to the chat line if there is one, else it is dropped.
+    if self.frame and self:Pending() ~= "" and not (FindEditBox() and self:Flush(false)) then self:Discard() end
     self.mode = mode
     self.sets = self.sets or {}
     for _, set in pairs(self.sets) do
@@ -563,9 +596,12 @@ function Keyboard:Apply(mode)
         self.sets[mode] = set
     end
     self.keys, self.special, self.sel, self.tap, self.pred, self.shift = set.keys, set.special, set.home, nil, nil, false
+    self.buffer = ""
     for _, key in ipairs(set.keys) do key:Show() end
     self.frame:SetSize(set.width, set.height)
     set.legend:Show()
+    self.previewFrame:SetShown(set.phone)
+    self:ShowPreview()
     self.status:ClearAllPoints()
     self.status:SetPoint("BOTTOM", self.frame, "BOTTOM", 0, PAD + 4 + set.legendHeight)
     self:Refresh()
@@ -603,6 +639,17 @@ function Keyboard:Create()
         background:SetColorTexture(0, 0, 0, 0.8)
     end
     self.frame = frame
+    local strip = CreateFrame("Frame", nil, frame)
+    strip:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -PAD)
+    strip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -PAD)
+    strip:SetHeight(PREVIEW_HEIGHT)
+    local stripBackground = strip:CreateTexture(nil, "BACKGROUND")
+    stripBackground:SetAllPoints()
+    stripBackground:SetTexture(WHITE)
+    stripBackground:SetVertexColor(0.02, 0.02, 0.02, 0.9)
+    self.preview = strip:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    self.preview:SetPoint("LEFT", strip, "LEFT", 8, 0)
+    self.previewFrame = strip
     -- Only to see whether raw pad buttons reach us while the chat line has the focus (shown by /cgp keyboard debug).
     if frame.EnableGamePadButton then frame:EnableGamePadButton(true) end
     if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
@@ -630,7 +677,8 @@ function Keyboard:Show(auto)
     if not self.frame then self:Create() end
     self.auto = auto and true or false
     self.shownAt = GetTime()
-    self.shift, self.tap, self.pred = false, nil, nil
+    self.shift, self.tap, self.pred, self.buffer = false, nil, nil, ""
+    self:ShowPreview()
     self.frame:Show()
     self:SyncPad()
     self:UpdateStatus()
@@ -639,7 +687,7 @@ end
 
 function Keyboard:Hide()
     Trace("Keyboard:Hide")
-    self.pred = nil
+    self.pred, self.buffer, self.tap = nil, "", nil
     if self.frame then self.frame:Hide() end
     if self.pad and self.pad:IsShown() and not InCombatLockdown() then self.pad:Hide() end
 end
@@ -737,6 +785,7 @@ end
 function Keyboard:Move(direction)
     local sel = self.sel
     if not sel then return end
+    self.tap = nil
     if direction == "left" or direction == "right" then
         local rowKeys, index = {}, 1
         for _, key in ipairs(self.keys) do
@@ -769,8 +818,7 @@ end
 function Keyboard:Send()
     local box = EditBox()
     if not box then return end
-    self:Commit()
-    self.tap = nil
+    if not self:Flush(false) then return end
     Trace("Keyboard:Send")
     if box.SendMessage then
         if securecallfunction then securecallfunction(box.SendMessage, box) else box:SendMessage() end
@@ -797,16 +845,11 @@ function Keyboard:PadPress(token)
     elseif token == "delete" then
         self:Press(self.special.back)
     elseif token == "y" then
-        -- Smart T9: take the word shown (and add the space). Elsewhere: a space; the phone layouts spell it with 0.
-        if self.mode == "t9p" and self.pred and self.pred.cands[self.pred.idx] then
-            self:Choose(self.pred.idx)
+        -- Accept the word and add a space. The full keyboard has a space key.
+        if self.mode ~= "abc" then
+            self:Flush(true)
         elseif self.special.space then
             self:Press(self.special.space)
-        elseif self.mode == "t9p" then
-            self:Press(self:ZeroKey())
-        else
-            local box = EditBox()
-            if box then self.tap = nil; box:Insert(" ") end
         end
     elseif token == "shift" then
         self:Press(self.special.shift)
@@ -815,7 +858,7 @@ function Keyboard:PadPress(token)
     elseif token == "previous" then
         self:Cycle(-1)
     elseif token == "next" then
-        self:Cycle(1)
+        if self.mode == "t9" then self.tap = nil else self:Cycle(1) end
     end
 end
 
