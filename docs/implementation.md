@@ -180,7 +180,10 @@ matching the exported source commit's build **1.60.1 (70450)**.
   Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a `SecureActionButtonTemplate` while the keyboard
   is shown in Gamepad Mode; its wrapped `OnClick` only bumps `padcount`/`padtoken`, which an `OnAttributeChanged`
   hook reads. The `[combat]` state driver clears the bindings, and the keyboard's 0.25 s `OnUpdate` shows the
-  header again after combat.
+  header again after combat. The T9 layout is a second set of buttons on the same frame (`Keyboard:Apply`
+  hides one set and shows the other, `db.keyboardMode` keeps the choice). A key press within one second of the
+  previous press of the same key replaces the last character of the line with the next one in its cycle,
+  provided the line is unchanged since. No dictionary: predictive T9 is not implemented.
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the

@@ -9,6 +9,10 @@
   line only (insert, delete, send) and can be dragged anywhere. The German layout swaps Y and Z and adds
   the umlauts and ß. Setting "On-screen keyboard when typing in chat" opens it with the chat line in
   Gamepad Mode (off by default).
+- T9 layout (multi-tap, like an old phone keypad): 3 by 4 big keys, press 2 once for a, twice for b,
+  three times for c, a fourth press for the digit; a pause or another key accepts the letter. 0 is space,
+  1 holds punctuation and `/`. Switch with the `T9` / `ABC` key or `/cgp keyboard t9` / `/cgp keyboard abc`;
+  the choice is remembered. Same controller buttons as the full keyboard.
 - Messages sent from it are chat messages; commands that need protected actions (`/cast`, `/target` in combat)
   are the game's to refuse when they are not typed by hand.
 

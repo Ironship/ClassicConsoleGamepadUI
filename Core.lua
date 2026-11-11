@@ -398,7 +398,13 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         Addon.Options:OpenBindings()
         return
     elseif command == "keyboard" or command == "kb" then
-        Addon.Keyboard:Toggle()
+        local mode = input:lower():match("^%s*%S+%s+(%S+)")
+        if mode == "t9" or mode == "abc" then
+            Addon.Keyboard:SetMode(mode)
+            Addon.Keyboard:Show(false)
+        else
+            Addon.Keyboard:Toggle()
+        end
         return
     elseif command == "edit" then
         Addon.Options:EditActions()

@@ -52,7 +52,8 @@ The setting "Classic player, target and focus frames" turns this handling off.
 The game has no on-screen keyboard of its own and an addon cannot open the system's, so the addon has one:
 `/cgp keyboard` (or Options > AddOns > ClassicConsoleGamepadUI > On-screen keyboard). Open the chat line, click
 the keys with the mouse or the controller (D-pad moves, A types, B deletes, X space, Y Shift, Start sends,
-Back closes). Drag it to move it. The setting "On-screen keyboard when typing in chat" opens it
+Back closes). Drag it to move it. The `T9` key switches to a phone keypad (press 2 for a, again for b, c;
+a pause accepts the letter), `/cgp keyboard t9` or `abc` picks the layout directly. The choice is remembered. The setting "On-screen keyboard when typing in chat" opens it
 with the chat line in Gamepad Mode. On Steam Deck, Steam + X also works.
 
 ## Steam Deck

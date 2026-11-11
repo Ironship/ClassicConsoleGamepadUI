@@ -14,23 +14,44 @@ local SHIFTED = {
     ["ä"] = "Ä", ["ö"] = "Ö", ["ü"] = "Ü", ["ß"] = "ß",
 }
 
-local function Rows()
+-- A key of the multi-tap layout: the digit, and the characters its presses cycle through.
+local function T(digit, chars) return { digit = digit, chars = chars, width = 110, height = 48 } end
+
+local function Rows(mode)
+    local de = GetLocale() == "deDE"
+    if mode == "t9" then
+        return {
+            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }), T("2", de and { "a", "b", "c", "ä", "2" } or { "a", "b", "c", "2" }),
+                T("3", { "d", "e", "f", "3" }) },
+            { T("4", { "g", "h", "i", "4" }), T("5", { "j", "k", "l", "5" }),
+                T("6", de and { "m", "n", "o", "ö", "6" } or { "m", "n", "o", "6" }) },
+            { T("7", de and { "p", "q", "r", "s", "ß", "7" } or { "p", "q", "r", "s", "7" }),
+                T("8", de and { "t", "u", "v", "ü", "8" } or { "t", "u", "v", "8" }), T("9", { "w", "x", "y", "z", "9" }) },
+            { { "shift", 110, height = 48 }, T("0", { " ", "0" }), { "back", 110, height = 48 } },
+            { { "close", 80, height = 48 }, { "clear", 80, height = 48 }, { "mode", 80, height = 48 },
+                { "enter", 110, height = 48 } },
+        }, { 0, 0, 0, 0, 0 }
+    end
     local rows = {
         { "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", { "back", 80 } },
         { "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\" },
         { "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'" },
         { { "shift", 80 }, "z", "x", "c", "v", "b", "n", "m", ",", ".", "/" },
-        { { "close", 70 }, { "clear", 70 }, { "space", 280 }, { "enter", 100 } },
+        { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "space", 220 }, { "enter", 100 } },
     }
-    if GetLocale() == "deDE" then
+    if de then
         rows[2][6], rows[4][2] = "z", "y"
         table.insert(rows[3], "ä"); table.insert(rows[3], "ö")
         table.insert(rows[4], "ü"); table.insert(rows[4], "ß")
     end
-    return rows
+    return rows, { 0, 20, 30, 0, 0 }
 end
 
-local OFFSETS = { 0, 20, 30, 0, 0 }
+local MIN_WIDTH, LEGEND_HEIGHT = 560, 34
+local LEGENDS = {
+    abc = "D-pad: move   A: key   B: delete   X: space   Y: shift   Start: send   Back: close",
+    t9 = "D-pad: move   A: press (press again to change the letter)   B: delete   X: space   Y: shift   Start: send   Back: close",
+}
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
 -- item deletion helper does (see ItemDelete.lua), and tells this file which one was pressed. It removes its
@@ -76,8 +97,16 @@ local function EditBox()
     return box
 end
 
+local function Upper(text)
+    return (text:upper():gsub("ä", "Ä"):gsub("ö", "Ö"):gsub("ü", "Ü"))
+end
+
+local SPECIAL_LABELS = { back = "<-", shift = "Shift", close = "X", clear = "Clear", space = "Space", enter = "Enter" }
+
 function Keyboard:Label(key)
-    if key.special then return key.label end
+    if key.special == "mode" then return self.mode == "t9" and "ABC" or "T9" end
+    if key.special then return SPECIAL_LABELS[key.special] end
+    if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
     if not self.shift then return key.base end
     return SHIFTED[key.base] or key.base:upper()
 end
@@ -97,6 +126,30 @@ function Keyboard:Paint(key, pressed)
     key.bg:SetColorTexture(c[1], c[2], c[3], 0.95)
 end
 
+local function WithoutLastCharacter(text)
+    -- One whole UTF-8 character.
+    return (text:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""))
+end
+
+-- Multi-tap: a key's characters take turns while it is pressed again within a second; any other key
+-- or a pause starts the next character.
+local TAP_SECONDS = 1.0
+function Keyboard:Tap(box, key)
+    local now, text, tap = GetTime(), box:GetText() or "", self.tap
+    local chars = key.chars
+    local index, upper, base
+    if tap and tap.key == key and now - tap.time < TAP_SECONDS and text == tap.text then
+        index, upper, base = tap.index % #chars + 1, tap.upper, WithoutLastCharacter(text)
+    else
+        index, upper, base = 1, self.shift, text
+        if self.shift then self.shift = false; self:Refresh() end
+    end
+    local character = chars[index]
+    if upper then character = Upper(character) end
+    box:SetText(base .. character)
+    self.tap = { key = key, index = index, upper = upper, time = now, text = box:GetText() or "" }
+end
+
 function Keyboard:Press(key)
     local special = key.special
     if special == "shift" then
@@ -106,13 +159,19 @@ function Keyboard:Press(key)
     elseif special == "close" then
         self:Hide()
         return
+    elseif special == "mode" then
+        self:SetMode(self.mode == "t9" and "abc" or "t9")
+        return
     end
     local box = EditBox()
     if not box then return end
+    if key.chars then
+        self:Tap(box, key)
+        return
+    end
+    self.tap = nil
     if special == "back" then
-        local text = box:GetText() or ""
-        -- Remove one whole UTF-8 character.
-        box:SetText((text:gsub("[%z\1-\127\194-\244][\128-\191]*$", "")))
+        box:SetText(WithoutLastCharacter(box:GetText() or ""))
     elseif special == "clear" then
         box:SetText("")
     elseif special == "space" then
@@ -128,6 +187,93 @@ function Keyboard:Press(key)
         self.shift = false
         self:Refresh()
     end
+end
+
+-- The buttons of one layout, built once and shown or hidden when the mode changes.
+function Keyboard:Build(mode)
+    local frame, rows, offsets = self.frame, Rows(mode)
+    local set = { keys = {}, special = {} }
+    local widths, tallest = {}, 0
+    for r, row in ipairs(rows) do
+        local w = -GAP
+        for _, entry in ipairs(row) do w = w + (type(entry) == "table" and entry.width or entry[2] or KEY) + GAP end
+        widths[r] = w
+    end
+    local widest = 0
+    for _, w in ipairs(widths) do widest = math.max(widest, w) end
+    local width = math.max(MIN_WIDTH, widest + PAD * 2)
+    local y = PAD
+    for r, row in ipairs(rows) do
+        local x = mode == "t9" and (width - widths[r]) / 2 or (PAD + offsets[r])
+        local rowHeight = KEY
+        for _, entry in ipairs(row) do
+            local special = type(entry) == "table" and not entry.chars and entry[1] or nil
+            local size = type(entry) == "table" and (entry.width or entry[2]) or KEY
+            local height = type(entry) == "table" and entry.height or KEY
+            rowHeight = math.max(rowHeight, height)
+            local button = CreateFrame("Button", nil, frame)
+            button:SetSize(size, height)
+            button:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -y)
+            button.bg = button:CreateTexture(nil, "BACKGROUND")
+            button.bg:SetAllPoints()
+            button.text = button:CreateFontString(nil, "OVERLAY",
+                entry.chars and "GameFontHighlight" or "GameFontHighlightLarge")
+            button.text:SetPoint("CENTER")
+            button.special = special
+            if entry.chars then
+                button.chars, button.digit = entry.chars, entry.digit
+                local hint = {}
+                for _, c in ipairs(entry.chars) do
+                    if c ~= entry.digit then hint[#hint + 1] = c == " " and "space" or c end
+                end
+                button.hint = table.concat(hint)
+                if entry.digit == "0" then button.hint = "space" end
+            elseif not special then
+                button.base = entry
+            end
+            button.row, button.cx = r, x + size / 2
+            if special then set.special[special] = button end
+            button:SetScript("OnEnter", function() button.hover = true; self:Paint(button) end)
+            button:SetScript("OnLeave", function() button.hover = false; self:Paint(button) end)
+            button:SetScript("OnMouseDown", function() self:Paint(button, true) end)
+            button:SetScript("OnMouseUp", function() self:Paint(button) end)
+            button:SetScript("OnClick", function() self:Press(button) end)
+            button:Hide()
+            set.keys[#set.keys + 1] = button
+            if (mode == "t9" and button.digit == "5") or button.base == "h" then set.home = button end
+            x = x + size + GAP
+        end
+        tallest = tallest + rowHeight + GAP
+        y = y + rowHeight + GAP
+    end
+    set.width, set.height = width, PAD * 2 + tallest - GAP + LEGEND_HEIGHT
+    set.home = set.home or set.keys[1]
+    return set
+end
+
+function Keyboard:Apply(mode)
+    self.mode = mode
+    self.sets = self.sets or {}
+    for _, set in pairs(self.sets) do
+        for _, key in ipairs(set.keys) do key:Hide() end
+    end
+    local set = self.sets[mode]
+    if not set then
+        set = self:Build(mode)
+        self.sets[mode] = set
+    end
+    self.keys, self.special, self.sel, self.tap, self.shift = set.keys, set.special, set.home, nil, false
+    for _, key in ipairs(set.keys) do key:Show() end
+    self.frame:SetSize(set.width, set.height)
+    self.legend:SetWidth(set.width - PAD * 2)
+    self.legend:SetText(LEGENDS[mode])
+    self:Refresh()
+end
+
+function Keyboard:SetMode(mode)
+    mode = mode == "t9" and "t9" or "abc"
+    Addon.db.keyboardMode = mode
+    if self.frame then self:Apply(mode) end
 end
 
 function Keyboard:Create()
@@ -146,50 +292,14 @@ function Keyboard:Create()
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints()
     background:SetColorTexture(0, 0, 0, 0.8)
-    self.frame, self.keys, self.special = frame, {}, {}
-
-    local rows, width = Rows(), 0
-    for r, row in ipairs(rows) do
-        local x = PAD + OFFSETS[r]
-        for _, entry in ipairs(row) do
-            local special = type(entry) == "table" and entry[1] or nil
-            local size = special and entry[2] or KEY
-            local button = CreateFrame("Button", nil, frame)
-            button:SetSize(size, KEY)
-            button:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -(PAD + (r - 1) * (KEY + GAP)))
-            button.bg = button:CreateTexture(nil, "BACKGROUND")
-            button.bg:SetAllPoints()
-            button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-            button.text:SetPoint("CENTER")
-            button.special, button.base = special, not special and entry or nil
-            button.row, button.cx = r, x + size / 2
-            if special then self.special[special] = button end
-            if special then
-                button.label = ({ back = "<-", shift = "Shift", close = "X", clear = "Clear", space = "Space",
-                    enter = "Enter" })[special]
-            end
-            button:SetScript("OnEnter", function() button.hover = true; self:Paint(button) end)
-            button:SetScript("OnLeave", function() button.hover = false; self:Paint(button) end)
-            button:SetScript("OnMouseDown", function() self:Paint(button, true) end)
-            button:SetScript("OnMouseUp", function() self:Paint(button) end)
-            button:SetScript("OnClick", function() self:Press(button) end)
-            self.keys[#self.keys + 1] = button
-            x = x + size + GAP
-        end
-        width = math.max(width, x - GAP + PAD)
-    end
-    frame:SetSize(width, PAD * 2 + #rows * KEY + (#rows - 1) * GAP + 24)
-    local legend = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    legend:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
-    legend:SetText("D-pad: move   A: key   B: delete   X: space   Y: shift   Start: send   Back: close")
+    self.frame = frame
+    self.legend = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    self.legend:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
+    self.legend:SetJustifyH("CENTER")
     frame:SetScript("OnUpdate", function(_, elapsed)
         self.idle = (self.idle or 0) + elapsed
         if self.idle >= 0.25 then self.idle = 0; self:SyncPad() end
     end)
-    for _, key in ipairs(self.keys) do
-        if key.base == "h" then self.sel = key end
-    end
-    self.sel = self.sel or self.keys[1]
     local saved = Addon.db.keyboardPos
     frame:ClearAllPoints()
     if type(saved) == "table" and saved[1] then
@@ -198,13 +308,13 @@ function Keyboard:Create()
         frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 260)
     end
     frame:Hide()
-    self:Refresh()
+    self:Apply(Addon.db.keyboardMode == "t9" and "t9" or "abc")
 end
 
 function Keyboard:Show(auto)
     if not self.frame then self:Create() end
     self.auto = auto and true or false
-    self.shift = false
+    self.shift, self.tap = false, nil
     self.frame:Show()
     self:SyncPad()
     self:Refresh()
