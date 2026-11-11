@@ -170,7 +170,12 @@ matching the exported source commit's build **1.60.1 (70450)**.
   `SaveLayouts` commits it to `gamepadHUD`, a revert drops it. The classic place is then
   `moves` > `gamepadHUD` > `keyboardHUD` > preset. The frames are not restored to the gamepad layout while
   Edit Mode is open. The hooks are post-hooks: nothing in Edit Mode's tables is written.
-- No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation).
+- No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation), so
+  `Keyboard.lua` draws one from plain unprotected frames. `Blizzard_ChatFrameBase/Shared/ChatFrameUtil.lua`:
+  `ChatFrameUtil.GetActiveWindow` / `OpenChat` (legacy `ChatEdit_*` as fallback) give the edit box;
+  `ChatFrameEditBox.lua`: `ChatFrameEditBoxMixin:SendMessage` sends and clears the line. Keys only call
+  `Insert`, `SetText`, `SetFocus` and `SendMessage` on that box. `ChatFrame.OnEditBoxFocusGained` (EventRegistry)
+  opens it with the chat line when the setting is on.
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the

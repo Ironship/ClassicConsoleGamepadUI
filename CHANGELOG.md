@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.53
+
+- On-screen keyboard for typing in chat (`/cgp keyboard`, or the button in the settings). Click the keys with
+  the mouse; Shift applies to the next key, `<-` removes a character, Enter sends. It acts on the open chat
+  line only (insert, delete, send) and can be dragged anywhere. The German layout swaps Y and Z and adds
+  the umlauts and ß. Setting "On-screen keyboard when typing in chat" opens it with the chat line in
+  Gamepad Mode (off by default).
+- Messages sent from it are chat messages; commands that need protected actions (`/cast`, `/target` in combat)
+  are the game's to refuse when they are not typed by hand.
+
 ## 0.1.0-alpha.52
 
 - The player, target and focus frames can be moved in Edit Mode while in Gamepad Mode. Drag them and save the

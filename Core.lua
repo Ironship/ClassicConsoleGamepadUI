@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.52"
+Addon.version = "0.1.0-alpha.53"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -330,6 +330,7 @@ local function Initialize()
         Addon.Options:Register()
         Addon:CheckNativeTaint("Options:Register")
         Addon.ItemDelete:Observe()
+        Addon.Keyboard:Observe()
         local native = GamepadMainActionBarFrame
         if native then
             hooksecurefunc(native, "OnShow", function() Addon:QueueRefresh() end)
@@ -395,6 +396,9 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         return
     elseif command == "bindings" then
         Addon.Options:OpenBindings()
+        return
+    elseif command == "keyboard" or command == "kb" then
+        Addon.Keyboard:Toggle()
         return
     elseif command == "edit" then
         Addon.Options:EditActions()
@@ -474,7 +478,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)

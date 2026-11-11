@@ -94,6 +94,9 @@ local extraText = ({
         bindPending = "Zamknij ustawienia, aby rozpocząć przypisywanie.",
         editRouteKey = "Natywny edytor akcji otworzysz przyciskiem: %s",
         editRouteCommand = "Wpisz na czacie /click GamepadActionBarEditFrameEnterEditMode, aby otworzyć natywny edytor akcji.",
+        keyboard = "Klawiatura ekranowa", autoKeyboard = "Klawiatura ekranowa przy pisaniu na chacie",
+        autoKeyboardTip = "W trybie pada otwiera klawiaturę ekranową, gdy zaczynasz pisać na chacie. Klawiaturę otwierasz też komendą /cgp keyboard lub przyciskiem w Skróty klawiszowe.",
+        keyboardTip = "Pokaż lub ukryj klawiaturę ekranową do pisania na chacie. Klikaj klawisze myszą; przeciągnij ją, aby zmienić miejsce.",
         items = "Przedmioty", easyDelete = "Łatwe usuwanie: X, X, A, A",
         easyDeleteTip = "W oknie usuwania wymagającym sekwencji przycisków użyj X, X, A, A. Czwarty przycisk zatwierdza usunięcie. B nadal anuluje, błędny przycisk zeruje sekwencję. Działa poza walką w trybie pada.",
     },
@@ -123,6 +126,9 @@ local extraText = ({
         bindPending = "Einstellungen schließen, um mit dem Zuweisen zu beginnen.",
         editRouteKey = "Den nativen Aktionseditor öffnest du mit: %s",
         editRouteCommand = "Im Chat /click GamepadActionBarEditFrameEnterEditMode eingeben, um den nativen Aktionseditor zu öffnen.",
+        keyboard = "Bildschirmtastatur", autoKeyboard = "Bildschirmtastatur beim Chatten",
+        autoKeyboardTip = "Öffnet im Gamepad-Modus die Bildschirmtastatur, sobald du im Chat schreibst. Auch mit /cgp keyboard oder über die Schaltfläche bei den Tastenbelegungen.",
+        keyboardTip = "Bildschirmtastatur zum Schreiben im Chat ein- oder ausblenden. Tasten mit der Maus anklicken; zum Verschieben ziehen.",
         items = "Gegenstände", easyDelete = "Einfaches Zerstören: X, X, A, A",
         easyDeleteTip = "Im Zerstörungsdialog mit Tastenkombination X, X, A, A drücken. Die vierte Taste bestätigt das Zerstören. B bricht weiterhin ab; eine falsche Taste setzt die Folge zurück. Nur außerhalb des Kampfes im Gamepad-Modus.",
     },
@@ -151,6 +157,9 @@ local extraText = ({
     bindPending = "Close the settings to start assigning keys.",
     editRouteKey = "Open the native action editor with: %s",
     editRouteCommand = "Type /click GamepadActionBarEditFrameEnterEditMode in chat to open the native action editor.",
+    keyboard = "On-screen keyboard", autoKeyboard = "On-screen keyboard when typing in chat",
+    autoKeyboardTip = "In Gamepad Mode, open the on-screen keyboard when you start typing in chat. You can also open it with /cgp keyboard or the button under key bindings.",
+    keyboardTip = "Show or hide an on-screen keyboard for typing in chat. Click the keys with the mouse; drag it to move it.",
     items = "Items", easyDelete = "Easy deletion: X, X, A, A",
     easyDeleteTip = "Use X, X, A, A in item deletion dialogs that require a button sequence. The fourth press confirms deletion. B still cancels; a wrong button resets the sequence. Available outside combat in Gamepad Mode.",
 }
@@ -176,6 +185,7 @@ local controls = {
     { key = "chatBottom", default = 0, min = 0, max = 800, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "raiseChat", default = true },
     { key = "chatGap", default = 12, min = 0, max = 100, step = 2, parent = "raiseChat" },
+    { key = "autoKeyboard", default = false },
     { key = "easyDelete", default = false, section = "items" },
 }
 
@@ -495,6 +505,7 @@ function Options:Register()
     end
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(SETTINGS_KEYBINDINGS_LABEL))
     for _, info in ipairs({
+        { text.keyboard, text.keyboardTip, function() Addon.Keyboard:Toggle() end },
         { text.bind, text.bindTip, function() self:BindFromBars() end },
         { SETTINGS_KEYBINDINGS_LABEL, text.bindingsTip, function() self:OpenBindings() end },
         { text.actions, text.actionsTip, function() self:EditActions() end },
