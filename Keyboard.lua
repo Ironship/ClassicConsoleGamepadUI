@@ -245,7 +245,7 @@ function Keyboard:Label(key)
         return word and (pred.cap and CapitalizeFirst(word) or word) or ""
     end
     if key.special == "mode" then return self.mode == "abc" and "T9" or "ABC" end
-    if key.special == "predict" then return self.mode == "t9p" and "Tap" or "Smart" end
+    if key.special == "predict" then return "Smart" end
     if key.special then return SPECIAL_LABELS[key.special] end
     if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
     if not self.shift then return key.base end
@@ -257,7 +257,7 @@ function Keyboard:Refresh()
     for _, key in ipairs(self.keys) do
         key.text:SetText(self:Label(key))
         key.active = (key.special == "shift" and (self.shift or (pred and pred.cap))) or
-            (key.cand and pred and pred.idx == key.cand) or false
+            (key.cand and pred and pred.idx == key.cand) or (key.special == "predict" and self.mode == "t9p") or false
         self:Paint(key)
     end
 end
@@ -291,7 +291,13 @@ function Keyboard:ShowPreview()
     if not self.preview then return end
     local text = self:Pending()
     if text == "" then
-        self.preview:SetText("|cff888888Press keys to spell a word, Y puts it in the chat|r")
+        if self.mode == "t9p" then
+            self.preview:SetText("|cff888888Smart: press each key once, LB/RB changes the word, Y accepts|r")
+        else
+            self.preview:SetText("|cff888888Tap: press a key again for its next letter, RB ends a letter, Y accepts|r")
+        end
+    elseif self.pred and self.pred.fallback then
+        self.preview:SetText(text .. "|cffffd100_|r  |cffff9933no word matches: the Smart key switches to Tap|r")
     else
         self.preview:SetText(text .. "|cffffd100_|r")
     end
