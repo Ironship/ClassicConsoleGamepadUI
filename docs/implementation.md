@@ -183,7 +183,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
   header again after combat. The T9 layout is a second set of buttons on the same frame (`Keyboard:Apply`
   hides one set and shows the other, `db.keyboardMode` keeps the choice). A key press within one second of the
   previous press of the same key replaces the last character of the line with the next one in its cycle,
-  provided the line is unchanged since. No dictionary: predictive T9 is not implemented.
+  provided the line is unchanged since. The "t9p" layout keeps the digits of the word in progress, asks
+  `Words.lua` for matches (exact digit sequence by use count, then longer words that start with it) and writes
+  the chosen one into the line after the text that was already there, so the line is the only state shared with
+  the game. Words come from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events and a
+  post-hook on `SendChatMessage`; item links and colours are stripped and only letters are kept.
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the

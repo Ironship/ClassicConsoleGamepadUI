@@ -38,7 +38,7 @@ Commands: `/cgp` (or `/classicconsolegamepadui`)
 *   `/cgp native`, `/cgp classic`: switch the action bars for this session.
 *   `/cgp bindings`, `/cgp edit`: how to open the key bindings and the action editor.
 *   `/cgp status`: current state and the last problem found.
-*   `/cgp keyboard`: show or hide the on-screen keyboard.
+*   `/cgp keyboard`: show or hide the on-screen keyboard (`abc`, `t9`, `smart`, `tap` or `forget` as argument).
 *   `/cgp resetframes`: put the player, target and focus frames back at their classic places.
 
 ## Moving frames
@@ -53,7 +53,10 @@ The game has no on-screen keyboard of its own and an addon cannot open the syste
 `/cgp keyboard` (or Options > AddOns > ClassicConsoleGamepadUI > On-screen keyboard). Open the chat line, click
 the keys with the mouse or the controller (D-pad moves, A types, B deletes, X space, Y Shift, Start sends,
 Back closes). Drag it to move it. The `T9` key switches to a phone keypad (press 2 for a, again for b, c;
-a pause accepts the letter), `/cgp keyboard t9` or `abc` picks the layout directly. The choice is remembered. The setting "On-screen keyboard when typing in chat" opens it
+a pause accepts the letter), `/cgp keyboard t9` or `abc` picks the layout directly. The choice is remembered.
+`Smart` on the phone keypad (or `/cgp keyboard smart`) suggests words: press each key once per letter and pick
+the word in the top row (LB / RB on the controller). The word list learns from the chat you read and write and
+from quest texts, and starts small; `/cgp keyboard forget` clears it. The setting "On-screen keyboard when typing in chat" opens it
 with the chat line in Gamepad Mode. On Steam Deck, Steam + X also works.
 
 ## Steam Deck
