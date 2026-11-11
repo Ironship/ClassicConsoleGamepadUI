@@ -173,8 +173,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
 - No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation), so
   `Keyboard.lua` draws one from plain unprotected frames. `Blizzard_ChatFrameBase/Shared/ChatFrameUtil.lua`:
   `ChatFrameUtil.GetActiveWindow` / `OpenChat` (legacy `ChatEdit_*` as fallback) give the edit box;
-  `ChatFrameEditBox.lua`: `ChatFrameEditBoxMixin:SendMessage` sends and clears the line. Keys only call
-  `Insert`, `SetText`, `SetFocus` and `SendMessage` on that box. `ChatFrame.OnEditBoxFocusGained` (EventRegistry)
+  `ChatFrameEditBox.lua`: `OnEditFocusGained` / `SendMessage` run `FrameControlsManager` and the
+  `InputBindingManager` binding sets (chat footer PAD1 / PAD3), so the keyboard never opens, focuses or sends the
+  line: called from addon code they leave those binding tables tainted and the game menu's `SetOverrideBindingClick`
+  is then blocked in combat. Keys only call `Insert` and `SetText` on a line the player has already opened; Done
+  closes the keyboard and the native send button sends. `ChatFrame.OnEditBoxFocusGained` (EventRegistry)
   opens it with the chat line when the setting is on. Controller: like `ItemDelete.lua`, a
   `SecureHandlerShowHideTemplate,SecureHandlerStateTemplate` header binds the D-pad, face buttons and
   Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a `SecureActionButtonTemplate` while the keyboard

@@ -56,9 +56,9 @@ end
 
 local MIN_WIDTH, LEGEND_HEIGHT = 560, 34
 local LEGENDS = {
-    abc = "D-pad: move   A: key   B: delete   X: space   Y: shift   Start: send   Back: close",
-    t9 = "D-pad: move   A: press (press again to change the letter)   B: delete   X: space   Y: shift   Start: send   Back: close",
-    t9p = "D-pad: move   A: key   LB/RB: other word   B: delete   X: space   Y: capital   Start: send   Back: close",
+    abc = "D-pad: move   A: key   B: delete   X: space   Y: shift   Start: done (then A sends)   Back: close",
+    t9 = "D-pad: move   A: press (press again to change the letter)   B: delete   X: space   Y: shift   Start: done (then A sends)   Back: close",
+    t9p = "D-pad: move   A: key   LB/RB: other word   B: delete   X: space   Y: capital   Start: done (then A sends)   Back: close",
 }
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
@@ -93,16 +93,19 @@ local function ChatFunction(name, legacy)
     return (namespace and namespace[name]) or _G[legacy]
 end
 
--- The edit box that has the chat line open, opening chat when none is.
+-- The edit box that has the chat line open. Opening, focusing or sending the chat line from here would run
+-- the game's chat focus and gamepad binding code inside this addon's call, and the bindings it sets up would
+-- be tainted: opening the game menu in combat is then blocked. The player opens and sends the line natively.
 local function EditBox()
     local active = ChatFunction("GetActiveWindow", "ChatEdit_GetActiveWindow")
     local box = active and active()
     if not box then
-        local open = ChatFunction("OpenChat", "ChatFrame_OpenChat")
-        if open then open("") end
-        box = active and active()
+        local now = GetTime()
+        if not Keyboard.noticeTime or now - Keyboard.noticeTime > 3 then
+            Keyboard.noticeTime = now
+            Addon:Print("Open the chat line first (Enter or the chat button), then use the keyboard.")
+        end
     end
-    if box and not box:HasFocus() then box:SetFocus() end
     return box
 end
 
@@ -122,7 +125,7 @@ local function WithoutLastCharacter(text)
     return (text:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""))
 end
 
-local SPECIAL_LABELS = { back = "<-", shift = "Shift", close = "X", clear = "Clear", space = "Space", enter = "Enter" }
+local SPECIAL_LABELS = { back = "<-", shift = "Shift", close = "X", clear = "Clear", space = "Space", enter = "Done" }
 
 function Keyboard:Label(key)
     if key.cand then
@@ -313,8 +316,8 @@ function Keyboard:Press(key)
     elseif special == "space" then
         box:Insert(" ")
     elseif special == "enter" then
-        if box.SendMessage then box:SendMessage() end
-        if self.auto then self:Hide() end
+        -- Done typing: the game's own send button (A, or Enter) sends the line.
+        self:Hide()
         return
     else
         box:Insert(self:Label(key))

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.55
+
+- Fix: using the on-screen keyboard could make opening the game menu in combat fail with
+  "ClassicConsoleGamepadUI tried to call the protected function SetOverrideBindingClick()". The keyboard opened,
+  focused and sent the chat line itself, which ran the game's chat focus and gamepad binding code inside the
+  addon and left 60+ native binding fields tainted (`/cgp taint`: `InputBindingManager.activeBindings.PAD1`, ...).
+  It now only inserts and deletes text in a chat line that is already open. Open the chat line the normal way
+  (Enter, the chat button or the controller), type, press Start (Done) and send with the game's own A / Enter.
+  Without an open chat line a message says so instead of opening one.
+
 ## 0.1.0-alpha.54
 
 - T9 with word suggestions: the `Smart` key on the phone layout (or `/cgp keyboard smart`; `/cgp keyboard tap`
