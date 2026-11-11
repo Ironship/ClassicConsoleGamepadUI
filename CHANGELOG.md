@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.57
+
+- Keyboard: X accepts the suggested word (and adds a space) in the smart T9 layout; RT deletes in every layout (X deletes in the others).
+- Keyboard: finds the open chat line even when the game does not report it as active, and shows "No chat line is open" on the keyboard when there is none.
+
 ## 0.1.0-alpha.56
 
 - Keyboard controller buttons: B closes the keyboard, X deletes, Y is space, LT is Shift (capital letter),

@@ -59,11 +59,11 @@ local function Rows(mode)
     return rows, { 0, 20, 30, 0, 0 }
 end
 
-local MIN_WIDTH, LEGEND_HEIGHT = 560, 34
+local MIN_WIDTH, LEGEND_HEIGHT = 560, 58
 local LEGENDS = {
-    abc = "D-pad: move   A: key   B: close   X: delete   Y: space   LT: shift   Start: done (then A sends)",
-    t9 = "D-pad: move   A: press (again: next letter)   B: close   X: delete   Y: space   LT: shift   Start: done (then A sends)",
-    t9p = "D-pad: move   A: key   LB/RB: other word   B: close   X: delete   Y: space   LT: capital   Start: done (then A sends)",
+    abc = "D-pad: move   A: key   B: close   X: delete   Y: space   LT: shift   RT: delete   Start: done (then A sends)",
+    t9 = "D-pad: move   A: press (again: next letter)   B: close   X: delete   Y: space   LT: shift   RT: delete   Start: done (then A sends)",
+    t9p = "D-pad: move   A: key   X: accept word   LB/RB: other word   RT: delete   B: close   Y: space   LT: capital   Start: done",
 }
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
@@ -76,7 +76,7 @@ local PAD_TOKENS = {
     [GAMEPAD_FACE_LEFT or "PAD3"] = "x", [GAMEPAD_FACE_TOP or "PAD4"] = "y",
     [GAMEPAD_MENU_RIGHT or "PADFORWARD"] = "start", [GAMEPAD_MENU_LEFT or "PADBACK"] = "select",
     [GAMEPAD_SHOULDER_LEFT or "PADLSHOULDER"] = "previous", [GAMEPAD_SHOULDER_RIGHT or "PADRSHOULDER"] = "next",
-    [GAMEPAD_TRIGGER_LEFT or "PADLTRIGGER"] = "shift",
+    [GAMEPAD_TRIGGER_LEFT or "PADLTRIGGER"] = "shift", [GAMEPAD_TRIGGER_RIGHT or "PADRTRIGGER"] = "delete",
 }
 
 local PAD_BIND = [[
@@ -102,10 +102,26 @@ end
 -- The edit box that has the chat line open. Opening, focusing or sending the chat line from here would run
 -- the game's chat focus and gamepad binding code inside this addon's call, and the bindings it sets up would
 -- be tainted: opening the game menu in combat is then blocked. The player opens and sends the line natively.
-local function EditBox()
+local function FindEditBox()
     local active = ChatFunction("GetActiveWindow", "ChatEdit_GetActiveWindow")
     local box = active and active()
+    if box then return box end
+    -- The game may not report its chat line as the active one in Gamepad Mode: take any open one.
+    for i = 1, NUM_CHAT_WINDOWS or 10 do
+        local candidate = _G["ChatFrame" .. i .. "EditBox"]
+        if candidate and candidate:IsShown() and candidate.HasFocus and candidate:HasFocus() then return candidate end
+    end
+    for i = 1, NUM_CHAT_WINDOWS or 10 do
+        local candidate = _G["ChatFrame" .. i .. "EditBox"]
+        if candidate and candidate:IsShown() then return candidate end
+    end
+end
+
+local function EditBox()
+    local box = FindEditBox()
     if not box then
+        Trace("Keyboard: no open chat line")
+        Keyboard:UpdateStatus()
         local now = GetTime()
         if not Keyboard.noticeTime or now - Keyboard.noticeTime > 3 then
             Keyboard.noticeTime = now
@@ -113,6 +129,16 @@ local function EditBox()
         end
     end
     return box
+end
+
+-- A line on the keyboard itself that tells whether there is a chat line to type into.
+function Keyboard:UpdateStatus()
+    if not self.status then return end
+    if FindEditBox() then
+        self.status:SetText("")
+    else
+        self.status:SetText("No chat line is open: open it first (Enter or the chat button)")
+    end
 end
 
 local function Upper(text)
@@ -449,9 +475,12 @@ function Keyboard:Create()
     self.legend = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     self.legend:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
     self.legend:SetJustifyH("CENTER")
+    self.status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    self.status:SetPoint("BOTTOM", frame, "BOTTOM", 0, 36)
+    self.status:SetTextColor(1, 0.35, 0.3)
     frame:SetScript("OnUpdate", function(_, elapsed)
         self.idle = (self.idle or 0) + elapsed
-        if self.idle >= 0.25 then self.idle = 0; self:SyncPad() end
+        if self.idle >= 0.25 then self.idle = 0; self:SyncPad(); self:UpdateStatus() end
     end)
     local saved = Addon.db.keyboardPos
     frame:ClearAllPoints()
@@ -472,6 +501,7 @@ function Keyboard:Show(auto)
     self.shift, self.tap, self.pred = false, nil, nil
     self.frame:Show()
     self:SyncPad()
+    self:UpdateStatus()
     self:Refresh()
 end
 
@@ -582,6 +612,13 @@ function Keyboard:PadPress(token)
     elseif token == "b" or token == "select" then
         self:Hide()
     elseif token == "x" then
+        -- With suggestions, X takes the word shown (and adds the space); otherwise it deletes.
+        if self.mode == "t9p" and self.pred and self.pred.cands[self.pred.idx] then
+            self:Choose(self.pred.idx)
+        else
+            self:Press(self.special.back)
+        end
+    elseif token == "delete" then
         self:Press(self.special.back)
     elseif token == "y" then
         -- The full keyboard has a space key; the phone layouts spell it with 0.
