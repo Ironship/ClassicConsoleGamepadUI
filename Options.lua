@@ -97,6 +97,11 @@ local extraText = ({
         keyboard = "Klawiatura ekranowa", autoKeyboard = "Klawiatura ekranowa przy pisaniu na chacie",
         autoKeyboardTip = "W trybie pada otwiera klawiaturę ekranową, gdy zaczynasz pisać na chacie. Klawiaturę otwierasz też komendą /cgp keyboard lub przyciskiem w Skróty klawiszowe.",
         keyboardTip = "Pokaż lub ukryj klawiaturę ekranową do pisania na chacie. Klikaj klawisze myszą; przeciągnij ją, aby zmienić miejsce.",
+        keyboardLanguage = "Język klawiatury ekranowej",
+        keyboardLanguageTip = "Układ klawiatury ekranowej i litery pod klawiszami T9: EN (QWERTY), DE (QWERTZ z ä ö ü ß), PL (QWERTY z polskimi literami). Wybór jest zapamiętywany.",
+        keyboardInput = "Tryb T9 klawiatury ekranowej",
+        keyboardInputTip = "Tap: naciskaj klawisz kilka razy, aby wybrać literę. Smart: naciskaj każdy klawisz raz i wybierz słowo z podpowiedzi. Hybrid: pisz literami jak w Tap, a podpowiedzi uzupełniają słowo (LB/RB wybierają, Y akceptuje).",
+        inputTap = "Tap (wielokrotne naciśnięcia)", inputSmart = "Smart (podpowiedzi)", inputHybrid = "Hybrid (Tap + podpowiedzi)",
         items = "Przedmioty", easyDelete = "Łatwe usuwanie: X, X, A, A",
         easyDeleteTip = "W oknie usuwania wymagającym sekwencji przycisków użyj X, X, A, A. Czwarty przycisk zatwierdza usunięcie. B nadal anuluje, błędny przycisk zeruje sekwencję. Działa poza walką w trybie pada.",
     },
@@ -129,6 +134,11 @@ local extraText = ({
         keyboard = "Bildschirmtastatur", autoKeyboard = "Bildschirmtastatur beim Chatten",
         autoKeyboardTip = "Öffnet im Gamepad-Modus die Bildschirmtastatur, sobald du im Chat schreibst. Auch mit /cgp keyboard oder über die Schaltfläche bei den Tastenbelegungen.",
         keyboardTip = "Bildschirmtastatur zum Schreiben im Chat ein- oder ausblenden. Tasten mit der Maus anklicken; zum Verschieben ziehen.",
+        keyboardLanguage = "Sprache der Bildschirmtastatur",
+        keyboardLanguageTip = "Layout der Bildschirmtastatur und Buchstaben unter den T9-Tasten: EN (QWERTY), DE (QWERTZ mit ä ö ü ß), PL (QWERTY mit polnischen Buchstaben). Die Wahl wird gemerkt.",
+        keyboardInput = "T9-Modus der Bildschirmtastatur",
+        keyboardInputTip = "Tap: Taste mehrmals drücken, um den Buchstaben zu wählen. Smart: jede Taste einmal drücken und das Wort aus den Vorschlägen wählen. Hybrid: Buchstaben wie bei Tap tippen, Vorschläge ergänzen das Wort (LB/RB wählen, Y übernimmt).",
+        inputTap = "Tap (mehrfach drücken)", inputSmart = "Smart (Vorschläge)", inputHybrid = "Hybrid (Tap + Vorschläge)",
         items = "Gegenstände", easyDelete = "Einfaches Zerstören: X, X, A, A",
         easyDeleteTip = "Im Zerstörungsdialog mit Tastenkombination X, X, A, A drücken. Die vierte Taste bestätigt das Zerstören. B bricht weiterhin ab; eine falsche Taste setzt die Folge zurück. Nur außerhalb des Kampfes im Gamepad-Modus.",
     },
@@ -160,6 +170,11 @@ local extraText = ({
     keyboard = "On-screen keyboard", autoKeyboard = "On-screen keyboard when typing in chat",
     autoKeyboardTip = "In Gamepad Mode, open the on-screen keyboard when you start typing in chat. You can also open it with /cgp keyboard or the button under key bindings.",
     keyboardTip = "Show or hide an on-screen keyboard for typing in chat. Click the keys with the mouse; drag it to move it.",
+    keyboardLanguage = "On-screen keyboard language",
+    keyboardLanguageTip = "Layout of the on-screen keyboard and the letters under the T9 keys: EN (QWERTY), DE (QWERTZ with ä ö ü ß), PL (QWERTY with Polish letters). The choice is remembered.",
+    keyboardInput = "On-screen keyboard T9 mode",
+    keyboardInputTip = "Tap: press a key repeatedly to pick the letter. Smart: press each key once and pick the word from the suggestions. Hybrid: tap the letters as in Tap and let the suggestions complete the word (LB/RB choose, Y accepts).",
+    inputTap = "Tap (repeated presses)", inputSmart = "Smart (suggestions)", inputHybrid = "Hybrid (Tap + suggestions)",
     items = "Items", easyDelete = "Easy deletion: X, X, A, A",
     easyDeleteTip = "Use X, X, A, A in item deletion dialogs that require a button sequence. The fourth press confirms deletion. B still cancels; a wrong button resets the sequence. Available outside combat in Gamepad Mode.",
 }
@@ -192,7 +207,18 @@ local controls = {
 local geometrySettings = { compact = true, contextGap = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
+local KEYBOARD_LANGUAGES = { "EN", "DE", "PL" }
+local KEYBOARD_INPUTS = { "t9", "t9p", "t9h" }
+
+local function Contains(list, value)
+    for _, item in ipairs(list) do
+        if item == value then return true end
+    end
+end
+
 function Options:InitializeDefaults()
+    if not Contains(KEYBOARD_LANGUAGES, Addon.db.keyboardLanguage) then Addon.db.keyboardLanguage = "EN" end
+    if not Contains(KEYBOARD_INPUTS, Addon.db.keyboardPhone) then Addon.db.keyboardPhone = "t9" end
     for _, info in ipairs(controls) do
         local value = Addon.db[info.key]
         if type(value) ~= type(info.default) or (info.min and (value ~= value or value < info.min or value > info.max)) then
@@ -503,6 +529,52 @@ function Options:Register()
         initializers[key] = initializer
         if info.parent then initializer:SetParentInitializer(initializers[info.parent]) end
     end
+    -- A choice from a short list, kept in the addon's database; a drop-down where the Settings API has one, else
+    -- a button that steps to the next choice.
+    local function AddChoice(key, label, tip, choices, apply)
+        local function name(value)
+            for _, choice in ipairs(choices) do
+                if choice[1] == value then return choice[2] end
+            end
+            return tostring(value)
+        end
+        local ok = pcall(function()
+            local setting = Settings.RegisterAddOnSetting(category, "CLASSICCONSOLEGAMEPADUI_" .. key:upper(), key,
+                Addon.db, Settings.VarType.String, label, Addon.db[key])
+            setting:SetValueChangedCallback(function() apply(Addon.db[key]) end)
+            local function options()
+                local container = Settings.CreateControlTextContainer()
+                for _, choice in ipairs(choices) do container:Add(choice[1], choice[2]) end
+                return container:GetData()
+            end
+            local create = Settings.CreateDropdown or Settings.CreateDropDown
+            create(category, setting, options, tip)
+        end)
+        if not ok then
+            layout:AddInitializer(CreateSettingsButtonInitializer(label, name(Addon.db[key]), function()
+                for i, choice in ipairs(choices) do
+                    if choice[1] == Addon.db[key] then
+                        apply(choices[i % #choices + 1][1])
+                        return
+                    end
+                end
+                apply(choices[1][1])
+            end, tip, true))
+        end
+    end
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text.keyboard))
+    AddChoice("keyboardLanguage", text.keyboardLanguage, text.keyboardLanguageTip, {
+        { "EN", "English (QWERTY)" }, { "DE", "Deutsch (QWERTZ)" }, { "PL", "Polski (QWERTY)" },
+    }, function(value) Addon.Keyboard:SetLanguage(value) end)
+    AddChoice("keyboardPhone", text.keyboardInput, text.keyboardInputTip, {
+        { "t9", text.inputTap }, { "t9p", text.inputSmart }, { "t9h", text.inputHybrid },
+    }, function(value)
+        if (Addon.Keyboard.mode or Addon.db.keyboardMode) ~= "abc" then
+            Addon.Keyboard:SetMode(value)
+        else
+            Addon.db.keyboardPhone = value
+        end
+    end)
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(SETTINGS_KEYBINDINGS_LABEL))
     for _, info in ipairs({
         { text.keyboard, text.keyboardTip, function() Addon.Keyboard:Toggle() end },

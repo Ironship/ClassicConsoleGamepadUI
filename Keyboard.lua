@@ -2,7 +2,8 @@ local _, Addon = ...
 -- An on-screen keyboard for typing in chat. The game has none in Gamepad Mode and an addon cannot open the
 -- system's. The keys act on the active chat edit box with plain edit box calls (Insert, SetText, SendMessage);
 -- nothing native is replaced and no protected frame is touched, so it is also safe to leave open in combat.
--- Layouts: "abc" (full keyboard), "t9" (phone keypad, multi-tap) and "t9p" (phone keypad with word suggestions).
+-- Layouts: "abc" (full keyboard) and the phone keypad: "t9" (multi-tap), "t9p" (smart: one press per key, words
+-- suggested) and "t9h" (hybrid: multi-tap letters, suggestions complete the word).
 local Keyboard = {}
 Addon.Keyboard = Keyboard
 
@@ -51,17 +52,16 @@ local function Letters(language, digit)
 end
 
 local function Rows(mode, language)
-    if mode == "t9" or mode == "t9p" then
+    if mode ~= "abc" then
         local rows = {
             { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }), T("2", Letters(language, "2")),
                 T("3", Letters(language, "3")) },
             { T("4", Letters(language, "4")), T("5", Letters(language, "5")), T("6", Letters(language, "6")) },
             { T("7", Letters(language, "7")), T("8", Letters(language, "8")), T("9", Letters(language, "9")) },
             { Special("shift", 110), T("0", { " ", "0" }), Special("back", 110) },
-            { Special("close", 70), Special("clear", 70), Special("mode", 70), Special("predict", 70),
-                Special("lang", 70), Special("enter", 100) },
+            { Special("close", 80), Special("clear", 80), Special("mode", 80), Special("enter", 110) },
         }
-        if mode == "t9p" then
+        if mode ~= "t9" then
             local suggestions = {}
             for i = 1, 5 do suggestions[i] = { cand = i, width = 100, height = KEY } end
             table.insert(rows, 1, suggestions)
@@ -73,7 +73,7 @@ local function Rows(mode, language)
         { "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\" },
         { "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'" },
         { { "shift", 80 }, "z", "x", "c", "v", "b", "n", "m", ",", ".", "/" },
-        { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "lang", 60 }, { "space", 200 }, { "enter", 100 } },
+        { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "space", 220 }, { "enter", 100 } },
     }
     local offsets = { 0, 20, 30, 0, 0 }
     if language == "DE" then
@@ -119,6 +119,9 @@ local LEGENDS = {
         { "LT", "Shift" }, { "RT", "Delete" }, { "Start", "Done" } },
     t9 = { { "dpad", "Move" }, { "A", "Press (again: next letter)" }, { "RB", "Next letter" },
         { "Y", "Accept word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" },
+        { "Start", "Done" } },
+    t9h = { { "dpad", "Move" }, { "A", "Letter (again: next)" }, { "Y", "Accept" }, { "LB", "Previous word" },
+        { "RB", "Next word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Shift" }, { "RT", "Delete" },
         { "Start", "Done" } },
     t9p = { { "dpad", "Move" }, { "A", "Key" }, { "Y", "Accept word" }, { "LB", "Previous word" },
         { "RB", "Next word" }, { "X", "Send" }, { "B", "Close" }, { "LT", "Capital" }, { "RT", "Delete" },
@@ -292,13 +295,11 @@ local SPECIAL_LABELS = { back = "<-", shift = "Shift", close = "X", clear = "Cle
 
 function Keyboard:Label(key)
     if key.cand then
-        local pred = self.pred
-        local word = pred and pred.cands[key.cand]
-        return word and (pred.cap and CapitalizeFirst(word) or word) or ""
+        local cands, _, cap = self:Candidates()
+        local word = cands[key.cand]
+        return word and (cap and CapitalizeFirst(word) or word) or ""
     end
     if key.special == "mode" then return self.mode == "abc" and "T9" or "ABC" end
-    if key.special == "predict" then return "Smart" end
-    if key.special == "lang" then return self:Language() end
     if key.special then return SPECIAL_LABELS[key.special] end
     if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
     if not self.shift then return key.base end
@@ -310,7 +311,7 @@ function Keyboard:Refresh()
     for _, key in ipairs(self.keys) do
         key.text:SetText(self:Label(key))
         key.active = (key.special == "shift" and (self.shift or (pred and pred.cap))) or
-            (key.cand and pred and pred.idx == key.cand) or (key.special == "predict" and self.mode == "t9p") or false
+            (key.cand and select(2, self:Candidates()) == key.cand) or false
         self:Paint(key)
     end
 end
@@ -334,10 +335,37 @@ end
 -- The phone layouts compose a word in a buffer of their own, shown in the strip above the keys. Nothing
 -- reaches the chat line until the word is accepted (Y, the 0 key, X to send, Done), so the chat never sees
 -- half-typed letters.
+-- The suggestion buttons: the matches of the smart layout, or of the hybrid layout's typed letters; which one
+-- is chosen (0: none, the typed letters stay); whether the word is capitalised.
+function Keyboard:Candidates()
+    local pred, hints = self.pred, self.hints
+    if pred then return pred.cands, pred.idx, pred.cap end
+    if hints then return hints.cands, hints.idx, hints.cap end
+    return {}, 0, false
+end
+
 function Keyboard:Pending()
-    local pred = self.pred
+    local pred, hints = self.pred, self.hints
     if pred then return pred.shown or "" end
+    if hints and hints.idx > 0 then
+        local word = hints.cands[hints.idx]
+        return hints.cap and CapitalizeFirst(word) or word
+    end
     return self.buffer or ""
+end
+
+-- Hybrid layout: matches for the letters typed so far.
+function Keyboard:UpdateHints()
+    local hints = { cands = {}, idx = 0, cap = false }
+    local buffer = self.buffer or ""
+    if self.mode == "t9h" and buffer ~= "" then
+        hints.cands = Addon.Words:Prefix(buffer, 5)
+        local first = buffer:match("^[%z\1-\127\194-\244][\128-\191]*")
+        hints.cap = first ~= nil and first ~= first:lower() and Upper(first) == first
+    end
+    self.hints = hints
+    if self.keys then self:Refresh() end
+    self:ShowPreview()
 end
 
 function Keyboard:ShowPreview()
@@ -346,6 +374,8 @@ function Keyboard:ShowPreview()
     if text == "" then
         if self.mode == "t9p" then
             self.preview:SetText("|cff888888Smart: press each key once, LB/RB changes the word, Y accepts|r")
+        elseif self.mode == "t9h" then
+            self.preview:SetText("|cff888888Hybrid: tap the letters, LB/RB picks a suggestion, Y accepts|r")
         else
             self.preview:SetText("|cff888888Tap: press a key again for its next letter, RB ends a letter, Y accepts|r")
         end
@@ -373,7 +403,7 @@ function Keyboard:Tap(key)
     if upper then character = Upper(character) end
     self.buffer = base .. character
     self.tap = { key = key, index = index, upper = upper, time = now }
-    self:ShowPreview()
+    self:UpdateHints()
 end
 
 -- Suggestions: the keys pressed so far stand for a word, shown in the strip as the best match. The other
@@ -395,17 +425,20 @@ function Keyboard:Flush(space)
     local box = EditBox()
     if not box then return false end
     local pred = self.pred
-    if pred and not pred.fallback and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
+    if pred then
+        if not pred.fallback and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
+    elseif text:find("%a") then
+        Addon.Words:Learn(text, 1)
+    end
     self.pred, self.buffer, self.tap = nil, "", nil
     box:Insert(text .. (space and " " or ""))
-    self:ShowPreview()
-    self:Refresh()
+    self:UpdateHints()
     return true
 end
 
 function Keyboard:Discard()
     self.pred, self.buffer, self.tap = nil, "", nil
-    self:ShowPreview()
+    self:UpdateHints()
 end
 
 function Keyboard:Lookup(pred)
@@ -428,17 +461,28 @@ function Keyboard:Predict(key)
 end
 
 function Keyboard:Cycle(step)
-    local pred = self.pred
-    if not pred or #pred.cands < 2 then return end
-    pred.idx = (pred.idx - 1 + step) % #pred.cands + 1
-    self:ShowWord()
+    local pred, hints = self.pred, self.hints
+    if pred then
+        if #pred.cands < 2 then return end
+        pred.idx = (pred.idx - 1 + step) % #pred.cands + 1
+        self:ShowWord()
+    elseif hints and #hints.cands > 0 then
+        -- 0 is the letters as typed, then the suggestions.
+        hints.idx = (hints.idx + step) % (#hints.cands + 1)
+        self:ShowPreview()
+        self:Refresh()
+    end
 end
 
 function Keyboard:Choose(index)
-    local pred = self.pred
-    if not pred or not pred.cands[index] then return end
-    pred.idx = index
-    self:ShowWord()
+    local cands = self:Candidates()
+    if not cands[index] then return end
+    if self.pred then
+        self.pred.idx = index
+        self:ShowWord()
+    else
+        self.hints.idx = index
+    end
     self:Flush(true)
 end
 
@@ -460,7 +504,7 @@ function Keyboard:Delete()
     self.tap = nil
     if (self.buffer or "") ~= "" then
         self.buffer = WithoutLastCharacter(self.buffer)
-        self:ShowPreview()
+        self:UpdateHints()
         return
     end
     local box = EditBox()
@@ -487,12 +531,7 @@ function Keyboard:Press(key)
     elseif special == "mode" then
         self:SetMode(self.mode == "abc" and (Addon.db.keyboardPhone or "t9") or "abc")
         return
-    elseif special == "predict" then
-        self:SetMode(self.mode == "t9p" and "t9" or "t9p")
-        return
-    elseif special == "lang" then
-        self:NextLanguage()
-        return
+
     elseif key.cand then
         self:Choose(key.cand)
         return
@@ -660,6 +699,7 @@ function Keyboard:Apply(mode)
     end
     self.keys, self.special, self.sel, self.tap, self.pred, self.shift = set.keys, set.special, set.home, nil, nil, false
     self.buffer = ""
+    self:UpdateHints()
     for _, key in ipairs(set.keys) do key:Show() end
     self.frame:SetSize(set.width, set.height)
     set.legend:Show()
@@ -671,7 +711,7 @@ function Keyboard:Apply(mode)
 end
 
 function Keyboard:SetMode(mode)
-    if mode ~= "t9" and mode ~= "t9p" then mode = "abc" end
+    if mode ~= "t9" and mode ~= "t9p" and mode ~= "t9h" then mode = "abc" end
     Addon.db.keyboardMode = mode
     -- The phone layout to come back to from the full keyboard.
     if mode ~= "abc" then Addon.db.keyboardPhone = mode end
@@ -728,7 +768,7 @@ function Keyboard:Create()
     end
     frame:Hide()
     local mode = Addon.db.keyboardMode
-    self:Apply((mode == "t9" or mode == "t9p") and mode or "abc")
+    self:Apply((mode == "t9" or mode == "t9p" or mode == "t9h") and mode or "abc")
 end
 
 function Keyboard:Show(auto)
@@ -737,7 +777,7 @@ function Keyboard:Show(auto)
     self.auto = auto and true or false
     self.shownAt = GetTime()
     self.shift, self.tap, self.pred, self.buffer = false, nil, nil, ""
-    self:ShowPreview()
+    self:UpdateHints()
     self.frame:Show()
     self:SyncPad()
     self:UpdateStatus()
@@ -747,6 +787,7 @@ end
 function Keyboard:Hide()
     Trace("Keyboard:Hide")
     self.pred, self.buffer, self.tap = nil, "", nil
+    self.hints = nil
     if self.frame then self.frame:Hide() end
     if self.pad and self.pad:IsShown() and not InCombatLockdown() then self.pad:Hide() end
 end

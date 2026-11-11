@@ -137,6 +137,24 @@ function Words:Lookup(digits, limit)
     return result
 end
 
+-- Words that begin with the letters typed so far (longer than the prefix), most used first.
+function Words:Prefix(prefix, limit)
+    self:Load()
+    local word = self.Normalize(prefix)
+    if not word then return {} end
+    local found = {}
+    for known in pairs(self.known) do
+        if #known > #word and known:sub(1, #word) == word then found[#found + 1] = known end
+    end
+    table.sort(found, function(a, b)
+        local ca, cb = self:Count(a), self:Count(b)
+        if ca ~= cb then return ca > cb end
+        return a < b
+    end)
+    for i = #found, (limit or 5) + 1, -1 do found[i] = nil end
+    return found
+end
+
 -- Nothing matches: the first letter of each key (2 = a, 3 = d, ...), to show the keys were taken.
 function Words.Fallback(digits)
     local first = { ["2"] = "a", ["3"] = "d", ["4"] = "g", ["5"] = "j", ["6"] = "m", ["7"] = "p", ["8"] = "t", ["9"] = "w" }

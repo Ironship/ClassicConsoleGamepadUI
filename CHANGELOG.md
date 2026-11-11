@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.67
+
+- Keyboard: new Hybrid T9 mode (tap the letters, suggestions complete the word; LB/RB pick, Y accepts). Words typed in Tap mode are learned too.
+- The keyboard language and the T9 mode (Tap, Smart, Hybrid) moved from keys on the keyboard to the addon's settings (On-screen keyboard); both are remembered. `/cgp keyboard hybrid`.
+
 ## 0.1.0-alpha.66
 
 - Keyboard: a language key (EN, DE, PL) switches the layout and remembers the choice. EN is plain QWERTY, DE is QWERTZ with ä ö ü ß, PL is QWERTY with an extra row of Polish letters. The phone layouts get the letters of the language under their keys. `/cgp keyboard en|de|pl` sets it too.
