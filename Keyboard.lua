@@ -650,10 +650,6 @@ function Keyboard:Create()
     self.preview = strip:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     self.preview:SetPoint("LEFT", strip, "LEFT", 8, 0)
     self.previewFrame = strip
-    -- Only to see whether raw pad buttons reach us while the chat line has the focus (shown by /cgp keyboard debug).
-    if frame.EnableGamePadButton then frame:EnableGamePadButton(true) end
-    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
-    frame:SetScript("OnGamePadButtonDown", function(_, button) self.raw = button end)
     self.status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     self.status:SetTextColor(1, 0.35, 0.3)
     frame:SetScript("OnUpdate", function(_, elapsed)
@@ -763,10 +759,10 @@ end
 
 -- /cgp keyboard debug: what the pad buttons are bound to while the keyboard is up.
 function Keyboard:Debug()
-    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s raw=%s",
+    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s",
         tostring(self.frame and self.frame:IsShown()), tostring(self.pad and self.pad:IsShown()),
         tostring(Addon:IsGamepadMode()), tostring(FindEditBox() and FindEditBox():GetName()),
-        tostring(self.reclaims or 0), tostring(self.raw)))
+        tostring(self.reclaims or 0)))
     if not (GetBindingAction and self.pad) then return end
     for key, token in pairs(PAD_TOKENS) do
         Addon:Print(string.format("  %s (%s): %s", key, token, tostring(GetBindingAction(key, true))))
@@ -877,6 +873,9 @@ function Keyboard:Observe()
         if not (Addon.db.autoKeyboard and Addon:IsGamepadMode()) then return end
         if not self.worldTime or GetTime() - self.worldTime < 5 then return end
         if self.frame and self.frame:IsShown() then return end
-        if FindEditBox() then self:Show(true) end
+        -- Not inside the game's own call stack that is opening the chat line: a frame later, on our own.
+        C_Timer.After(0, function()
+            if FindEditBox() and not (self.frame and self.frame:IsShown()) then self:Show(true) end
+        end)
     end, self)
 end
