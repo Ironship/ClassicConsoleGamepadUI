@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.55"
+Addon.version = "0.1.0-alpha.56"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -118,8 +118,9 @@ function Addon:CheckNativeTaint(stage)
         { "focusedFrame", "isUIFocused" })
     Check("SmartNavigation", SmartNavigation, { "activeInfo", "currentDirections", "selectButtonSequence" })
     local bindings = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
-    Check("InputBindingManager", bindings, { "currentCoreBindingActive" })
-    Check("InputBindingManager.activeBindings", bindings and bindings.activeBindings, { "PAD1", "PAD2", "PADDUP" })
+    Check("InputBindingManager", bindings, { "currentCoreBindingActive", "bindingSetStack", "coreBindingListenerFunctions" })
+    Check("InputBindingManager.activeBindings", bindings and bindings.activeBindings,
+        { "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADFORWARD", "PADBACK" })
     local unit = GamepadMainActionBarFrame and GamepadMainActionBarFrame.PageUnit
     Check("PageUnit", unit, { "activeBar" })
     if #fields == 0 then return end

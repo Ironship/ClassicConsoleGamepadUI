@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.56
+
+- Keyboard controller buttons: B closes the keyboard, X deletes, Y is space, LT is Shift (capital letter),
+  LB / RB pick another suggested word, Start is Done and also closes it, A types the highlighted key.
+  Back / Select still closes it.
+- More diagnostics for blocked-action reports: the saved trace now lists what the keyboard did (`Keyboard:Press`,
+  `Keyboard:Show`, pad bindings on / off), and the first-taint check also watches the binding stack and more
+  `InputBindingManager.activeBindings` entries.
+
 ## 0.1.0-alpha.55
 
 - Fix: using the on-screen keyboard could make opening the game menu in combat fail with

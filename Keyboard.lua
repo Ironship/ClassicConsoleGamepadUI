@@ -8,6 +8,11 @@ Addon.Keyboard = Keyboard
 
 local KEY, GAP, PAD = 40, 3, 10
 
+-- Saved with every blocked-action report, so the report shows what the keyboard did just before.
+local function Trace(message)
+    if Addon.Trace then Addon:Trace(message) end
+end
+
 local SHIFTED = {
     ["`"] = "~", ["1"] = "!", ["2"] = "@", ["3"] = "#", ["4"] = "$", ["5"] = "%", ["6"] = "^", ["7"] = "&",
     ["8"] = "*", ["9"] = "(", ["0"] = ")", ["-"] = "_", ["="] = "+", ["["] = "{", ["]"] = "}", ["\\"] = "|",
@@ -56,9 +61,9 @@ end
 
 local MIN_WIDTH, LEGEND_HEIGHT = 560, 34
 local LEGENDS = {
-    abc = "D-pad: move   A: key   B: delete   X: space   Y: shift   Start: done (then A sends)   Back: close",
-    t9 = "D-pad: move   A: press (press again to change the letter)   B: delete   X: space   Y: shift   Start: done (then A sends)   Back: close",
-    t9p = "D-pad: move   A: key   LB/RB: other word   B: delete   X: space   Y: capital   Start: done (then A sends)   Back: close",
+    abc = "D-pad: move   A: key   B: close   X: delete   Y: space   LT: shift   Start: done (then A sends)",
+    t9 = "D-pad: move   A: press (again: next letter)   B: close   X: delete   Y: space   LT: shift   Start: done (then A sends)",
+    t9p = "D-pad: move   A: key   LB/RB: other word   B: close   X: delete   Y: space   LT: capital   Start: done (then A sends)",
 }
 
 -- Controller: while the keyboard is open in Gamepad Mode a secure header binds these buttons, the way the
@@ -71,6 +76,7 @@ local PAD_TOKENS = {
     [GAMEPAD_FACE_LEFT or "PAD3"] = "x", [GAMEPAD_FACE_TOP or "PAD4"] = "y",
     [GAMEPAD_MENU_RIGHT or "PADFORWARD"] = "start", [GAMEPAD_MENU_LEFT or "PADBACK"] = "select",
     [GAMEPAD_SHOULDER_LEFT or "PADLSHOULDER"] = "previous", [GAMEPAD_SHOULDER_RIGHT or "PADRSHOULDER"] = "next",
+    [GAMEPAD_TRIGGER_LEFT or "PADLTRIGGER"] = "shift",
 }
 
 local PAD_BIND = [[
@@ -259,6 +265,7 @@ end
 
 function Keyboard:Press(key)
     local special = key.special
+    Trace("Keyboard:Press " .. tostring(special or key.base or key.digit or key.cand))
     if special == "shift" then
         local pred = self.pred
         if pred then
@@ -459,6 +466,7 @@ function Keyboard:Create()
 end
 
 function Keyboard:Show(auto)
+    Trace("Keyboard:Show")
     if not self.frame then self:Create() end
     self.auto = auto and true or false
     self.shift, self.tap, self.pred = false, nil, nil
@@ -468,6 +476,7 @@ function Keyboard:Show(auto)
 end
 
 function Keyboard:Hide()
+    Trace("Keyboard:Hide")
     self.pred = nil
     if self.frame then self.frame:Hide() end
     if self.pad and self.pad:IsShown() and not InCombatLockdown() then self.pad:Hide() end
@@ -515,8 +524,8 @@ function Keyboard:SyncPad()
     if InCombatLockdown() then return end
     if wanted and not self.pad then self:CreatePad() end
     if not self.pad then return end
-    if wanted and not self.pad:IsShown() then self.pad:Show()
-    elseif not wanted and self.pad:IsShown() then self.pad:Hide() end
+    if wanted and not self.pad:IsShown() then Trace("Keyboard pad on"); self.pad:Show()
+    elseif not wanted and self.pad:IsShown() then Trace("Keyboard pad off"); self.pad:Hide() end
 end
 
 function Keyboard:Select(key)
@@ -570,9 +579,11 @@ function Keyboard:PadPress(token)
         self:Move(token)
     elseif token == "a" then
         if self.sel then self:Press(self.sel) end
-    elseif token == "b" then
-        self:Press(self.special.back)
+    elseif token == "b" or token == "select" then
+        self:Hide()
     elseif token == "x" then
+        self:Press(self.special.back)
+    elseif token == "y" then
         -- The full keyboard has a space key; the phone layouts spell it with 0.
         local space = self.special.space
         if space then
@@ -583,12 +594,10 @@ function Keyboard:PadPress(token)
             local box = EditBox()
             if box then self.tap = nil; box:Insert(" ") end
         end
-    elseif token == "y" then
+    elseif token == "shift" then
         self:Press(self.special.shift)
     elseif token == "start" then
         self:Press(self.special.enter)
-    elseif token == "select" then
-        self:Hide()
     elseif token == "previous" then
         self:Cycle(-1)
     elseif token == "next" then
