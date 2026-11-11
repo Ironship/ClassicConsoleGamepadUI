@@ -257,7 +257,13 @@ end
 
 function Options:InitializeDefaults()
     if not Contains(KEYBOARD_LANGUAGES, Addon.db.keyboardLanguage) then Addon.db.keyboardLanguage = "EN" end
-    if not Contains(KEYBOARD_INPUTS, Addon.db.keyboardPhone) then Addon.db.keyboardPhone = "t9" end
+    -- Hybrid is the default T9 mode; whatever was saved while it did not exist yet is replaced once.
+    if not Addon.db.hybridDefault then
+        Addon.db.hybridDefault = true
+        Addon.db.keyboardPhone = "t9h"
+        if Addon.db.keyboardMode ~= "abc" then Addon.db.keyboardMode = "t9h" end
+    end
+    if not Contains(KEYBOARD_INPUTS, Addon.db.keyboardPhone) then Addon.db.keyboardPhone = "t9h" end
     for _, info in ipairs(controls) do
         local value = Addon.db[info.key]
         if type(value) ~= type(info.default) or (info.min and (value ~= value or value < info.min or value > info.max)) then

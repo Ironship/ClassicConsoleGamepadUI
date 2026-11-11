@@ -529,7 +529,7 @@ function Keyboard:Press(key)
         self:Hide()
         return
     elseif special == "mode" then
-        self:SetMode(self.mode == "abc" and (Addon.db.keyboardPhone or "t9") or "abc")
+        self:SetMode(self.mode == "abc" and (Addon.db.keyboardPhone or "t9h") or "abc")
         return
 
     elseif key.cand then

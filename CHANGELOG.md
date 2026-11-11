@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.69
+
+- Keyboard: Hybrid is the default T9 mode (a saved Tap or Smart choice is replaced once).
+
 ## 0.1.0-alpha.68
 
 - Settings: a window of its own (`/cgp`) with tabs General, Hints, Chat, Keyboard and Tools, replacing the long list in the game's Settings panel. Plain frames, so it opens in combat and in Gamepad Mode; with a controller D-pad up/down select, left/right adjust, A activates, LB/RB switch tabs, B closes. Options > AddOns > ClassicConsoleGamepadUI keeps one button that opens it. The window position is remembered.
