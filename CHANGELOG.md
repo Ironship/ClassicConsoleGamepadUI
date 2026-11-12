@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.0-alpha.73
+
+- The Shaman's totem bar now sits above the classic bars. It is a mouse bar (`MultiCastActionBarFrame`) that the game shows in
+  Gamepad Mode too, in the place its gamepad layout gives it (128 points up, just left of the middle), which is on top of the
+  upper row and the shoulder indicators. It goes above the bars, indented past the end cap, the way the keyboard layout stacks
+  it, outside combat. A bar moved in Edit Mode stays where it was put, and leaving the classic bars puts the game's place back.
+  Totems have no selection radial in this client (the game's class radials are the druid's forms, the paladin's auras and the
+  warrior's stances), so the radial fix of alpha.72 does not concern them.
+
+## 0.1.0-alpha.72
+
+- Fix: the classic bars no longer give way to the game's own HUD while a selection radial is open (the warrior's
+  stances, the druid's forms, the paladin's auras, the pet commands, a bar button's flyout). The radial is the game's
+  own and is drawn over the classic bars, which fade while it is open, like the game's own bars do. Before, the bars,
+  bags, micro menu, status bars and chat all went back to their stock places for as long as the radial was open, and in
+  combat they stayed there until the fight ended (the classic bars cannot be built in combat). The radial itself is not
+  moved: it is a protected frame, centred on the game's own button. Only the action editor's radials still use the
+  native view.
+
 ## 0.1.0-alpha.71
 
 - X sends the line again, and this time the game does the sending. While the chat line has the focus, the chat's footer

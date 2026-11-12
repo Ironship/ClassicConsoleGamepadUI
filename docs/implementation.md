@@ -78,6 +78,31 @@ matching the exported source commit's build **1.60.1 (70450)**.
   presses from physical mouse clicks before forwarding the effective left button.
   Keyboard casts follow the native key-down setting; mouse casts wait for release.
   Native flyout visibility securely hides/resumes hitboxes and their bindings.
+- `Blizzard_GamepadActionBars/FlyoutRadial.lua`, `PageUnit.lua`, `Camelot/ClassSpellFlyout.lua` and
+  `Blizzard_Flyout/Flyout.lua`: a selection radial is a `GamepadFlyoutTemplate` frame (`SecureFrameTemplate`, so
+  protected; DIALOG strata, toplevel). The warrior's stances, the druid's forms and the paladin's auras are flyouts 269,
+  262 and 270 on `RightClassAction` / `LeftClassAction`; the pet commands and any bar button's flyout work the same way.
+  `AttachToButton` hangs the flyout off UIParent, moves the button into it and centres it on the button's stock place;
+  the right stick selects (`UpdateSelection`) and a release in the dead zone clicks the choice. Only a bar button's
+  flyout makes `PageUnit:OnFlyoutOpened` fade the page unit to 0.35 (a class action has no `parentActionBar`). The radial
+  therefore shows over the faded stock HUD, and `Display:Refresh` keeps the classic bars up under it, faded to the same
+  alpha, instead of switching to the native view: that switch moved the bags, micro menu, status bars and chat back to
+  their stock places while the radial was open, and in combat it could not be undone until the fight ended. The radial
+  is not moved (a protected frame cannot be anchored in combat). The action editor's radials still use the native view,
+  because the bars are drawn above the editor's dimmed screen there.
+- `Blizzard_ActionBar/Shared/MultiCastActionBarFrame.lua`, `Blizzard_ActionBarController/ActionBarController.lua`,
+  `Blizzard_EditMode/Camelot/EditModeUtil.lua` and `Mainline/EditModePresetLayouts.lua`: the Shaman's totems are a mouse bar
+  (four slots with a flyout on hover, the summon and recall spells), not a selection radial: `ClassSpellFlyout.lua` knows
+  only the druid, paladin and warrior, and `Blizzard_GamepadActionBars` has nothing about totems. `TotemActionBarMixin:
+  UpdateShownState` does not ask `InputUtil.IsMKBUIEnabled()` (the stance bar's `ShouldShow` does), so the bar is shown in
+  Gamepad Mode, at the gamepad layout's anchor for it (`EDIT_MODE_GAMEPAD_SYSTEM_MAP` copies the modern one: `RIGHT` of the
+  bottom middle, -28 and 128 up). The gamepad layouts have no bottom bar stack (`EditModeUtil.GetBottomActionBars` returns an
+  empty list), so nothing lifts it over the classic bars. `Layout:PlaceTotemBar` anchors it with `SetPointBase` to the left
+  end of the bottom row plus the 30 point indent (`BOTTOM_ACTION_BAR_DEFAULT_OFFSET_X`), above the top of the upper row, the
+  class actions and the shoulder indicators plus `BOTTOM_ACTION_BARS_SPACER_Y`, outside combat and only while
+  `IsInDefaultPosition()` holds (a bar dragged in Edit Mode stays). `Layout:Restore` puts the game's anchor back, and the
+  `ApplySystemAnchor` hook it shares with the other bars places it again after the game re-anchors it. The keyboard place of
+  the bar is not saved with the others.
 - The upper row stays fixed: L2 uses slots 13-20 and R2 uses slots 25-32.
   Compact mode hides 21-24 and 33-36, moves the right section left by four stock
   button pitches and shortens the main border by the same amount. The upper row is
@@ -257,7 +282,7 @@ matching the exported source commit's build **1.60.1 (70450)**.
 
 Native action HUD changes: temporarily set its root alpha to zero and disable
 invisible mouse hitboxes outside combat, recording click/motion flags separately.
-Restore the exact alpha/input state for native view, bindings and flyouts. The visual
+Restore the exact alpha/input state for native view and bindings. The visual
 mirror is intentionally not an extra set of spell-casting buttons.
 
 All addon state is stored in its private table or `ClassicConsoleGamepadUIDB`. Native page

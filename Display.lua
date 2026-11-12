@@ -233,6 +233,8 @@ function Display:RefreshGeometry()
     Addon.Layout:Place(self.pageLabel, self.pageSource, nil, MainActionBar.ActionBarPageNumber)
     self.pageLabel:SetFont(self.pageSource:GetFont())
     self:AlignCompactChrome()
+    -- An extra: a failure here must not switch the classic bars off.
+    pcall(self.PlaceTotemBar, self)
     self.layoutRevision = Addon.Layout.revision
     return true
 end
@@ -375,6 +377,22 @@ function Display:AlignCompactChrome()
     self:PlaceMicroMenuRight()
 end
 
+-- The slots the totem bar has to clear: the upper row, with the class actions and the shoulder indicators over it. A
+-- fixed set, so its place does not depend on which of them are showing.
+local TOTEM_CLEARANCE = { 9, 10 }
+for i = 13, 38 do TOTEM_CLEARANCE[#TOTEM_CLEARANCE + 1] = i end
+
+-- The totem bar goes above the classic bars, at the left end of the bottom row (Layout:PlaceTotemBar).
+function Display:PlaceTotemBar()
+    local left = UIBox(self.slots[1])
+    local top
+    for _, i in ipairs(TOTEM_CLEARANCE) do
+        local _, _, bottom, height = UIBox(self.slots[i])
+        if bottom and (not top or bottom + height > top) then top = bottom + height end
+    end
+    if left and top then Addon.Layout:PlaceTotemBar(left, top) end
+end
+
 -- The micro menu otherwise covers the quest tracker or the bottom row.
 -- Keep it on the right edge, flush with the bottom unless the user adds a gap.
 function Display:PlaceMicroMenuRight()
@@ -425,9 +443,13 @@ function Display:IsEditing()
     return EditModeManagerFrame ~= nil and EditModeManagerFrame:IsEditModeActive()
 end
 
-function Display:NeedsNativeView(bars, unit)
-    if self:IsEditing() then return true end
-    -- Flyouts stay entirely native, including their focus, selection and placement.
+-- The stock page unit fades to this alpha while a bar button's selection radial is open
+-- (Blizzard_GamepadActionBars/PageUnit.lua, FLYOUT_INACTIVE_ALPHA). The classic bars follow it.
+local FLYOUT_ALPHA = 0.35
+
+-- True while a selection radial (a flyout) is open: the warrior's stances, the druid's forms, the paladin's auras
+-- and the pet commands hang off a class action, any other radial off a bar button.
+function Display:IsFlyoutOpen(bars, unit)
     for _, bar in ipairs(bars) do
         for _, source in ipairs(bar.actionButtons or {}) do
             if source.IsPopupOpen and source:IsPopupOpen() then return true end
@@ -438,6 +460,17 @@ function Display:NeedsNativeView(bars, unit)
         if source and source.IsPopupOpen and source:IsPopupOpen() then return true end
     end
     return false
+end
+
+-- Edit Mode stays native. A radial needs no native view: the game draws, focuses and drives it itself and shows it
+-- over whatever HUD is up (its frame hangs off UIParent and the button it belongs to moves into it, so the faded
+-- stock bar hides neither). The classic bars stay and fade while it is open (Refresh). Going native for it put the
+-- bags, micro menu, status bars and chat back in their stock places for as long as it was open, and in combat for
+-- the rest of the fight, because the classic bars cannot be built then. Only the action editor's own radials stay
+-- native: its bars are drawn above the editor's dimmed screen (SetLayer), which would put them over the radial.
+function Display:NeedsNativeView(bars, unit, editing)
+    if self:IsEditing() then return true end
+    return editing and self:IsFlyoutOpen(bars, unit) or false
 end
 
 function Display:GetDragAction(slot)
@@ -856,7 +889,7 @@ function Display:RestoreNative()
     pcall(Addon.Input.Refresh, Addon.Input, false)
     for frame, alpha in pairs(self.suppressed or {}) do frame:SetAlpha(alpha) end
     self.suppressed, self.native, self.barEditing = nil, nil, nil
-    if self.root then self:SetLayer(false); self.root:Hide() end
+    if self.root then self:SetLayer(false); self.root:SetAlpha(1); self.root:Hide() end
 end
 
 local function SetStrata(frame, strata)
@@ -939,7 +972,11 @@ function Display:Refresh(wanted)
     local native, unit, bars, editing = self:GetBars()
     if not wanted then self.reason = "disabled"; self:RestoreNative(); return false end
     if not native then self.reason = "native missing"; self:RestoreNative(); return false end
-    if self:NeedsNativeView(bars, unit) then self.reason = "edit mode or flyout"; self:RestoreNative(); return false end
+    if self:NeedsNativeView(bars, unit, editing) then
+        self.reason = self:IsEditing() and "edit mode" or "editor flyout"
+        self:RestoreNative()
+        return false
+    end
     -- Initial setup and secure input geometry wait for combat to end.
     if InCombatLockdown() and not self.native and not self.mouseState then
         self.reason = "combat"
@@ -957,6 +994,8 @@ function Display:Refresh(wanted)
     self.reason = editing and "shown (action editor)" or "shown"
     self.barEditing = editing
     self:Update(unit)
+    -- Like the game's own bars, everything but the radial fades while one is open.
+    self.root:SetAlpha(self:IsFlyoutOpen(bars, unit) and FLYOUT_ALPHA or 1)
     -- The visual HUD must not depend on the optional secure click layer.
     if editing then
         -- The editor's crossbar and the main HUD are both replaced by the classic bars.

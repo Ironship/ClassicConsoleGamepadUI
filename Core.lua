@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.71"
+Addon.version = "0.1.0-alpha.73"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -273,7 +273,7 @@ function Addon:Refresh()
     self:CheckNativeTaint("ItemDelete:Refresh")
     if not gamepad and not changed then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
     self:Note(not ok and "Display:Refresh" or "refresh", not ok and visible or nil)
-    -- Keep observing while flyouts/cursor/editor temporarily expose the native HUD.
+    -- Keep observing while Edit Mode or the action editor temporarily expose the native HUD.
     local watchDelete = gamepad and self.db.easyDelete and self.ItemDelete.dialog
     driver:SetScript("OnUpdate", (wanted or watchDelete) and Poll or nil)
 end
