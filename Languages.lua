@@ -59,9 +59,10 @@ function Languages.Characters(text)
 end
 
 -- ---------------------------------------------------------------------------------------------
--- The languages. rows: the letter rows of the full keyboard under the digits (the second one is shifted a little right, the
--- third carries the Shift key); extra: one more row of accented letters. phone: letters under the phone keys where they
--- differ from the plain ones. locales: the game locales of the WordHunterWoW dictionaries for it.
+-- The languages. rows: the three letter rows of the full keyboard under the digits (Keyboard.lua adds the keys that are
+-- not letters to each and makes every row as wide as the digit row); extra: one more row of accented letters. phone:
+-- letters under the phone keys where they differ from the plain ones. locales: the game locales of the WordHunterWoW
+-- dictionaries for it.
 -- ---------------------------------------------------------------------------------------------
 
 local function Row(letters)

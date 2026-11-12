@@ -28,6 +28,7 @@ local controls = {
     { key = "chatGap", default = 12, min = 0, max = 100, step = 2, parent = "raiseChat" },
     { key = "keyboardEnabled", default = true },
     { key = "autoKeyboard", default = false, parent = "keyboardEnabled" },
+    { key = "keyboardTransparency", default = 0, min = 0, max = 0.9, step = 0.05, parent = "keyboardEnabled" },
     { key = "wordHunter", default = true, parent = "keyboardEnabled" },
     { key = "easyDelete", default = false, section = "items" },
 }
@@ -76,6 +77,8 @@ function Options:Changed(key)
         Addon.Keyboard:SetMode(Addon.db[key])
     elseif key == "keyboardEnabled" then
         Addon.Keyboard:SetEnabled(Addon.db[key])
+    elseif key == "keyboardTransparency" then
+        Addon.Keyboard:ApplyTransparency()
     elseif key == "wordHunter" then
         Addon.WordSources:Changed()
     else

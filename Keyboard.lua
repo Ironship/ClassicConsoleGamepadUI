@@ -22,6 +22,14 @@ local function Trace(message)
     if Addon.Trace then Addon:Trace(message) end
 end
 
+-- The word list is a convenience: whatever goes wrong inside it must never stop typing or sending. A failure is reported
+-- once (in the chat and in the saved diagnostics) and the key press goes on without suggestions.
+local function Suggest(method, first, second)
+    local ok, result = pcall(function() return Addon.Words[method](Addon.Words, first, second) end)
+    if ok then return result end
+    Addon:Note("Words:" .. method, result)
+end
+
 -- Shifted symbols of the full keyboard; letters (accents included) are capitalised by Languages.Upper.
 local SHIFTED = {
     ["`"] = "~", ["1"] = "!", ["2"] = "@", ["3"] = "#", ["4"] = "$", ["5"] = "%", ["6"] = "^", ["7"] = "&",
@@ -32,6 +40,97 @@ local SHIFTED = {
 -- A key of the phone layouts: the digit, and the characters its presses cycle through.
 local function T(digit, chars) return { digit = digit, chars = chars, width = 110, height = 48 } end
 local function Special(name, width) return { name, width, height = 48 } end
+
+-- The least width, in pixels, of the keys of the full keyboard that are not letters. They take what their row has left.
+local MIN_KEY = { back = 80, shift = 84, clear = 72, mode = 72, close = 60, enter = 84 }
+local SPACE_WIDTH = 7 * (KEY + GAP) - GAP
+-- The accented letters of a language get a row of their own: as wide as the other rows, the keys at most this wide.
+local MAX_ACCENT = 72
+
+-- The full keyboard is laid out like a real one: every row is as wide as the digit row, the letter keys all have one size
+-- and the keys that are not letters (Back, Shift, Done, ...) are as wide as their row needs. A row with so many letters that
+-- a key does not fit beside them (German, French, Spanish, Portuguese) hands that key to the row of the space bar.
+local function FullRows(spec)
+    local plan = {
+        { letters = { "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }, right = "back" },
+        { letters = spec.rows[1], left = "clear", grow = true, optional = "left" },
+        { letters = spec.rows[2], left = "mode", right = "enter", optional = "left" },
+        { letters = spec.rows[3], left = "shift", right = "close", optional = "right" },
+    }
+    local function Least(row)
+        local count = #row.letters + (row.left and 1 or 0) + (row.right and 1 or 0)
+        local least = #row.letters * KEY + GAP * (count - 1)
+        if row.left then least = least + MIN_KEY[row.left] end
+        if row.right then least = least + MIN_KEY[row.right] end
+        return least
+    end
+    local width = 15 * (KEY + GAP) - GAP
+    local moved = { left = {}, right = {} }
+    for _, row in ipairs(plan) do
+        local side = row.optional
+        if Least(row) > width and side then
+            moved[side][#moved[side] + 1] = row[side]
+            row[side] = nil
+        end
+        width = math.max(width, Least(row))
+    end
+    local rows, offsets = {}, {}
+    for _, row in ipairs(plan) do
+        -- What a row has left over goes to the keys that are not letters (and to the last letter of the second row).
+        local flex = {}
+        if row.left then flex[#flex + 1] = "left" end
+        if row.right then flex[#flex + 1] = "right" end
+        if row.grow then flex[#flex + 1] = "last" end
+        local slack = width - Least(row)
+        local each = math.floor(slack / #flex)
+        local extra = { left = each, right = each, last = each }
+        extra[flex[#flex]] = extra[flex[#flex]] + slack - each * #flex
+        local entries = {}
+        if row.left then entries[1] = { row.left, MIN_KEY[row.left] + extra.left } end
+        for i, letter in ipairs(row.letters) do
+            if row.grow and i == #row.letters then
+                entries[#entries + 1] = { letter = letter, width = KEY + extra.last }
+            else
+                entries[#entries + 1] = letter
+            end
+        end
+        if row.right then entries[#entries + 1] = { row.right, MIN_KEY[row.right] + extra.right } end
+        rows[#rows + 1], offsets[#offsets + 1] = entries, 0
+    end
+    -- The widths of `count` keys that share a row: as wide as the row, whole pixels (the first keys get the pixels over), but
+    -- not wider than `most`; a row of fewer or narrower keys is centred.
+    local function Share(count, most)
+        local room = width - (count - 1) * GAP
+        local size = math.floor(room / count)
+        local over = room - size * count
+        if most and size >= most then size, over = most, 0 end
+        local sizes = {}
+        for i = 1, count do sizes[i] = size + (i <= over and 1 or 0) end
+        return sizes
+    end
+    -- The suggestions for the word being typed, above the keys, as wide as they.
+    local suggestions, sizes = {}, Share(5)
+    for i = 1, 5 do suggestions[i] = { cand = i, width = sizes[i], height = KEY } end
+    table.insert(rows, 1, suggestions)
+    table.insert(offsets, 1, "center")
+    -- The accented letters of the language, under the letters.
+    if spec.extra then
+        local accents = {}
+        sizes = Share(#spec.extra, MAX_ACCENT)
+        for i, letter in ipairs(spec.extra) do accents[i] = { letter = letter, width = sizes[i] } end
+        rows[#rows + 1], offsets[#offsets + 1] = accents, "center"
+    end
+    -- The space bar, in the middle of the keyboard, with the keys that did not fit above beside it.
+    local bottom, before = {}, 0
+    for _, name in ipairs(moved.left) do
+        bottom[#bottom + 1] = { name, MIN_KEY[name] }
+        before = before + MIN_KEY[name] + GAP
+    end
+    bottom[#bottom + 1] = { "space", SPACE_WIDTH }
+    for _, name in ipairs(moved.right) do bottom[#bottom + 1] = { name, MIN_KEY[name] } end
+    rows[#rows + 1], offsets[#offsets + 1] = bottom, math.max(0, math.floor((width - SPACE_WIDTH) / 2) - before)
+    return rows, offsets
+end
 
 -- The keys of a layout, row by row, and how far each row is moved to the right (the full keyboard; "center" puts a row
 -- under the middle of the widest one).
@@ -54,32 +153,7 @@ local function Rows(mode, language)
         end
         return rows, { 0, 0, 0, 0, 0, 0 }
     end
-    local spec = Languages[language]
-    -- A copy of a row of letters (the language's own list is never changed), with a key in front if given.
-    local function Letters(row, first)
-        local keys = {}
-        if first then keys[1] = first end
-        for _, letter in ipairs(row) do keys[#keys + 1] = letter end
-        return keys
-    end
-    local rows = {
-        { "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", { "back", 80 } },
-        Letters(spec.rows[1]),
-        Letters(spec.rows[2]),
-        Letters(spec.rows[3], { "shift", 80 }),
-        { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "space", 220 }, { "enter", 100 } },
-    }
-    local offsets = { 0, 20, 30, 0, 0 }
-    if spec.extra then
-        table.insert(rows, 5, Letters(spec.extra))
-        offsets = { 0, 20, 30, 0, "center", 0 }
-    end
-    -- The suggestions for the word being typed, above the keys.
-    local suggestions = {}
-    for i = 1, 5 do suggestions[i] = { cand = i, width = 120, height = KEY } end
-    table.insert(rows, 1, suggestions)
-    table.insert(offsets, 1, "center")
-    return rows, offsets
+    return FullRows(Languages[language])
 end
 
 function Keyboard:Language()
@@ -133,6 +207,9 @@ end
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+-- How opaque the frame, the faces of the keys and the strip above them are at "Keyboard transparency" 0, and the most the
+-- setting can take away (so the keyboard never vanishes).
+local FRAME_ALPHA, KEY_ALPHA, STRIP_ALPHA, PLAIN_ALPHA, MAX_TRANSPARENCY = 0.95, 0.95, 0.9, 0.8, 0.9
 local FACE = {
     A = { 0.4, 0.85, 0.4 }, B = { 1, 0.4, 0.35 }, X = { 0.45, 0.65, 1 }, Y = { 1, 0.85, 0.25 },
 }
@@ -340,11 +417,32 @@ function Keyboard:Paint(key, pressed)
     elseif selected then bg, edge = { 0.3, 0.22, 0.05 }, { 1, 0.82, 0 }
     elseif key.active then bg, edge = { 0.38, 0.28, 0.05 }, { 0.9, 0.72, 0.1 }
     elseif key.hover then bg, edge = { 0.2, 0.17, 0.12 }, { 0.8, 0.7, 0.45 } end
+    local alpha = KEY_ALPHA * self:Opacity()
     if key.SetBackdropColor then
-        key:SetBackdropColor(bg[1], bg[2], bg[3], 0.95)
+        key:SetBackdropColor(bg[1], bg[2], bg[3], alpha)
         key:SetBackdropBorderColor(edge[1], edge[2], edge[3], 1)
     elseif key.bg then
-        key.bg:SetColorTexture(bg[1], bg[2], bg[3], 0.95)
+        key.bg:SetColorTexture(bg[1], bg[2], bg[3], alpha)
+    end
+end
+
+-- How much of the game shows through the keyboard (the setting "Keyboard transparency", 0 = solid): the background and the
+-- faces of the keys get less opaque, the letters and the borders of the keys stay as they are.
+function Keyboard:Opacity()
+    local transparency = Addon.db and Addon.db.keyboardTransparency
+    if type(transparency) ~= "number" or transparency ~= transparency then return 1 end
+    return 1 - math.max(0, math.min(MAX_TRANSPARENCY, transparency))
+end
+
+function Keyboard:ApplyTransparency()
+    local frame = self.frame
+    if not frame then return end
+    local opacity = self:Opacity()
+    if frame.SetBackdropColor then frame:SetBackdropColor(1, 1, 1, FRAME_ALPHA * opacity) end
+    if self.background then self.background:SetColorTexture(0, 0, 0, PLAIN_ALPHA * opacity) end
+    if self.stripBackground then self.stripBackground:SetVertexColor(0.02, 0.02, 0.02, STRIP_ALPHA * opacity) end
+    for _, set in pairs(self.sets or {}) do
+        for _, key in ipairs(set.keys) do self:Paint(key) end
     end
 end
 
@@ -394,7 +492,7 @@ function Keyboard:UpdateHints()
         self.typed = word or ""
     end
     if word then
-        hints.cands = Addon.Words:Prefix(word, 5)
+        hints.cands = Suggest("Prefix", word, 5) or {}
         local first = word:match("^[%z\1-\127\194-\244][\128-\191]*")
         hints.cap = first ~= nil and first ~= Languages.Lower(first) and Upper(first) == first
     end
@@ -490,9 +588,9 @@ function Keyboard:Flush(space)
     end
     local pred = self.pred
     if pred then
-        if not pred.fallback and pred.shown ~= "" then Addon.Words:Learn(pred.shown, 1) end
+        if not pred.fallback and pred.shown ~= "" then Suggest("LearnOwn", pred.shown) end
     elseif text:find("%a") then
-        Addon.Words:Learn(text, 1)
+        Suggest("LearnOwn", text)
     end
     self.pred, self.buffer, self.tap = nil, "", nil
     box:Insert(text .. (space and " " or ""))
@@ -535,7 +633,7 @@ function Keyboard:Discard()
 end
 
 function Keyboard:Lookup(pred)
-    pred.cands = Addon.Words:Lookup(pred.digits, 5)
+    pred.cands = Suggest("Lookup", pred.digits, 5) or {}
     pred.fallback = #pred.cands == 0
     if pred.fallback then pred.cands = { Addon.Words.Fallback(pred.digits) } end
     pred.idx = 1
@@ -595,7 +693,7 @@ function Keyboard:Complete(index)
     if not typed then return end
     if hints.cap then word = CapitalizeFirst(word) end
     box:SetText(line:sub(1, #line - #typed) .. word .. " ")
-    Addon.Words:Learn(word, 1)
+    Suggest("LearnOwn", word)
     self:UpdateHints()
 end
 
@@ -763,7 +861,8 @@ function Keyboard:Build(mode)
             elseif isTable and entry.cand then
                 button.cand = entry.cand
             elseif not special then
-                button.base = entry
+                -- A letter, or a letter with a width of its own ({ letter = "ą", width = 68 }).
+                button.base = isTable and entry.letter or entry
             end
             button.row, button.cx = r, x + size / 2
             if special then set.special[special] = button end
@@ -870,11 +969,11 @@ function Keyboard:Create()
         frame:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
             edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 16,
             insets = { left = 4, right = 4, top = 4, bottom = 4 } })
-        frame:SetBackdropColor(1, 1, 1, 0.95)
+        frame:SetBackdropColor(1, 1, 1, FRAME_ALPHA)
     else
-        local background = frame:CreateTexture(nil, "BACKGROUND")
-        background:SetAllPoints()
-        background:SetColorTexture(0, 0, 0, 0.8)
+        self.background = frame:CreateTexture(nil, "BACKGROUND")
+        self.background:SetAllPoints()
+        self.background:SetColorTexture(0, 0, 0, PLAIN_ALPHA)
     end
     self.frame = frame
     local strip = CreateFrame("Frame", nil, frame)
@@ -884,7 +983,8 @@ function Keyboard:Create()
     local stripBackground = strip:CreateTexture(nil, "BACKGROUND")
     stripBackground:SetAllPoints()
     stripBackground:SetTexture(WHITE)
-    stripBackground:SetVertexColor(0.02, 0.02, 0.02, 0.9)
+    stripBackground:SetVertexColor(0.02, 0.02, 0.02, STRIP_ALPHA)
+    self.stripBackground = stripBackground
     -- What is typed (large) or, when nothing is, a hint (small). A text that is too long for the strip is cut short.
     self.preview = Fonts:String(strip, "OVERLAY", "KeyLarge")
     self.preview:SetPoint("LEFT", strip, "LEFT", 8, 0)
@@ -914,6 +1014,7 @@ function Keyboard:Create()
     frame:Hide()
     local mode = Addon.db.keyboardMode
     self:Apply((mode == "t9" or mode == "t9p" or mode == "t9h") and mode or "abc")
+    self:ApplyTransparency()
 end
 
 -- The setting "Use the on-screen keyboard" (db.keyboardEnabled, on by default) turns the keyboard off for good: it never
@@ -1093,26 +1194,57 @@ local NATIVE_SEND = "InputFunctionBindingButton_" .. (GAMEPAD_FACE_BOTTOM or "PA
 -- keyboard's buffer, X is bound straight to that button, so the send runs in the game's own code. Calling the
 -- chat's SendMessage from here would run it (closing the line, the footer's binding sets, secure slash commands)
 -- with this addon's taint, and securecallfunction does not remove that.
+-- Returns true, or false and the first condition that is not met (for /cgp keyboard debug and the saved diagnostics).
 function Keyboard:WantsNativeSend()
-    if InCombatLockdown() or not (self.frame and self.frame:IsShown()) or not Addon:IsGamepadMode() then return false end
-    if self:Pending() ~= "" or not _G[NATIVE_SEND] then return false end
+    if InCombatLockdown() then return false, "in combat" end
+    if not (self.frame and self.frame:IsShown()) then return false, "the keyboard is not shown" end
+    if not Addon:IsGamepadMode() then return false, "not in Gamepad Mode" end
+    if self:Pending() ~= "" then return false, "a word waits in the keyboard's buffer" end
+    if not _G[NATIVE_SEND] then return false, NATIVE_SEND .. " does not exist" end
     local box = FindEditBox()
-    if not (box and box.HasFocus and box:HasFocus()) then return false end
+    if not box then return false, "no chat line is open" end
+    if not (box.HasFocus and box:HasFocus()) then return false, "the chat line has no focus" end
     -- The footer is a mixin table whose metatable throws on a field it does not have: read it raw.
     local chatFrame = box.chatFrame
     local footer = type(chatFrame) == "table" and rawget(chatFrame, "footer") or nil
-    return type(footer) == "table" and rawget(footer, "isShown") == true
+    if type(footer) ~= "table" then return false, "the chat frame has no footer" end
+    if rawget(footer, "isShown") ~= true then return false, "the chat footer is not shown" end
+    return true
+end
+
+-- The answer of WantsNativeSend as a text: "yes", or why not.
+function Keyboard:SendReason()
+    local ok, want, why = pcall(self.WantsNativeSend, self)
+    if not ok then return "error: " .. tostring(want) end
+    return want and "yes" or why
 end
 
 function Keyboard:SyncSend()
     local pad = self.pad
     if not pad or InCombatLockdown() or not SecureHandlerExecute then return end
-    local ok, want = pcall(self.WantsNativeSend, self)
-    local desired = ok and want and NATIVE_SEND or nil
+    local reason = self:SendReason()
+    local desired = reason == "yes" and NATIVE_SEND or nil
+    if Addon.diagnostics then Addon.diagnostics.keyboardSend = reason end
     if pad:GetAttribute("sendbutton") == desired then return end
     pad:SetAttribute("sendbutton", desired)
-    Trace("Keyboard: X is " .. (desired and "the game's send button" or "the keyboard's"))
+    Trace("Keyboard: X is " .. (desired and "the game's send button" or ("the keyboard's: " .. reason)))
     if pad:IsShown() then SecureHandlerExecute(pad, PAD_BIND) end
+end
+
+-- X reached the keyboard, so it was not the game's send button: keep why, and what the pad buttons were bound to, in the
+-- saved diagnostics (flushed to disk right away), so a send that does nothing can be explained afterwards.
+function Keyboard:ReportSend()
+    local diag = Addon.diagnostics
+    if type(diag) ~= "table" then return end
+    local bound = {}
+    if GetBindingAction then
+        for key in pairs(PAD_TOKENS) do bound[#bound + 1] = key .. "=" .. tostring(GetBindingAction(key, true)) end
+        table.sort(bound)
+    end
+    diag.xPress = { time = date("%Y-%m-%d %H:%M:%S"), why = self:SendReason(),
+        attribute = self.pad and self.pad:GetAttribute("sendbutton"), reclaims = self.reclaims or 0,
+        bindings = table.concat(bound, "; ") }
+    if C_AddOns and C_AddOns.SaveAddOns then pcall(C_AddOns.SaveAddOns) end
 end
 
 -- The state of X can change with every key (the buffer fills and empties): look at it once, on the next frame.
@@ -1140,10 +1272,10 @@ end
 
 -- /cgp keyboard debug: what the pad buttons are bound to while the keyboard is up.
 function Keyboard:Debug()
-    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s send=%s",
+    Addon:Print(string.format("keyboard: shown=%s pad=%s gamepad=%s chat=%s reclaims=%s send=%s (X is the game's send button: %s)",
         tostring(self.frame and self.frame:IsShown()), tostring(self.pad and self.pad:IsShown()),
         tostring(Addon:IsGamepadMode()), tostring(FindEditBox() and FindEditBox():GetName()),
-        tostring(self.reclaims or 0), tostring(self.pad and self.pad:GetAttribute("sendbutton"))))
+        tostring(self.reclaims or 0), tostring(self.pad and self.pad:GetAttribute("sendbutton")), self:SendReason()))
     if not (GetBindingAction and self.pad) then return end
     for key, token in pairs(PAD_TOKENS) do
         Addon:Print(string.format("  %s (%s): %s", key, token, tostring(GetBindingAction(key, true))))
@@ -1210,6 +1342,7 @@ function Keyboard:PadPress(token)
         if self:Pending() ~= "" then
             self:Flush(false)
         elseif EditBox() then
+            self:ReportSend()
             self:SyncSend()
         end
     elseif token == "delete" then
