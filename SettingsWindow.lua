@@ -6,15 +6,16 @@ local _, Addon = ...
 -- tabs, B closes. Pad input is switched on out of combat only (the calls are protected in combat).
 local Window = {}
 Addon.SettingsWindow = Window
+local Fonts = Addon.Fonts
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local WIDTH, BODY_HEIGHT = 640, 430
 local HEADER, TAB_HEIGHT, MARGIN, SCROLL_WIDTH, HINT_HEIGHT = 40, 26, 10, 16, 30
 local ROW_WIDTH = WIDTH - 2 * MARGIN - SCROLL_WIDTH - 12
 
+-- The text of a key in the language in use (Locales/).
 local function Text(key)
-    local texts = Addon.Options and Addon.Options.text
-    return texts and texts[key] or key
+    return Addon.L[key]
 end
 
 local function Control(key)
@@ -23,16 +24,62 @@ local function Control(key)
     end
 end
 
+-- The game's tooltip draws with its own font, which has no Polish letters. While the interface is in Polish the window shows
+-- its tips in a small tooltip of its own, made with the addon's fonts (Fonts.lua).
+local TIP_WIDTH = 300
+
+local function OwnTip()
+    if Window.tip then return Window.tip end
+    local tip = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    tip:SetFrameStrata("TOOLTIP")
+    tip:SetClampedToScreen(true)
+    tip:EnableMouse(false)
+    if tip.SetBackdrop then
+        tip:SetBackdrop({ bgFile = WHITE, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+        tip:SetBackdropColor(0.03, 0.03, 0.05, 0.96)
+        tip:SetBackdropBorderColor(0.7, 0.7, 0.7, 1)
+    end
+    tip.title = Fonts:String(tip, "OVERLAY", "Normal")
+    tip.title:SetPoint("TOPLEFT", 10, -9)
+    tip.title:SetWidth(TIP_WIDTH)
+    tip.title:SetJustifyH("LEFT")
+    tip.body = Fonts:String(tip, "OVERLAY", "Highlight")
+    tip.body:SetPoint("TOPLEFT", tip.title, "BOTTOMLEFT", 0, -4)
+    tip.body:SetWidth(TIP_WIDTH)
+    tip.body:SetJustifyH("LEFT")
+    tip:Hide()
+    Window.tip = tip
+    return tip
+end
+
 local function Tooltip(frame, title, body)
+    if Fonts.InterfaceWide() then
+        local tip = OwnTip()
+        tip.title:SetText(title or "")
+        tip.body:SetText(body or "")
+        local height = 9 + math.ceil(tonumber(tip.title:GetStringHeight()) or 14) + 10
+        if body and body ~= "" then height = height + 4 + math.ceil(tonumber(tip.body:GetStringHeight()) or 14) end
+        tip:SetSize(TIP_WIDTH + 20, height)
+        tip:ClearAllPoints()
+        tip:SetPoint("LEFT", frame, "RIGHT", 8, 0)
+        tip:Show()
+        return
+    end
     GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
     GameTooltip:SetText(title, 1, 0.82, 0)
     if body and body ~= "" then GameTooltip:AddLine(body, 1, 1, 1, true) end
     GameTooltip:Show()
 end
 
+local function HideTip()
+    GameTooltip:Hide()
+    if Window.tip then Window.tip:Hide() end
+end
+
 local function AddTooltip(frame, title, body)
     frame:SetScript("OnEnter", function(self) Tooltip(self, title, body) end)
-    frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame:SetScript("OnLeave", HideTip)
 end
 
 local function SetEnabled(frame, enabled)
@@ -43,8 +90,9 @@ end
 
 -- ---------------------------------------------------------------------------------------------
 -- What the tabs hold. {"header", text}, {"control", key} (a check box or a slider, by its entry in the
--- options), {"choice", key[, parent]}, {"button", label, tooltip, function[, parent]}, {"note", text}. A row with a
--- parent (the key of a check box) is dimmed while that box is off.
+-- options), {"choice", key[, parent]}, {"button", label, tooltip, function[, parent]}, {"note", text},
+-- {"status", function that returns a text[, parent]} (a line that is kept up to date while the window is open). A row
+-- with a parent (the key of a check box) is dimmed while that box is off.
 -- ---------------------------------------------------------------------------------------------
 
 -- A destructive button asks twice: the first click changes its label, a second one within four seconds does it.
@@ -73,6 +121,8 @@ local function Tabs()
     local options = Addon.Options
     return {
         { id = "general", label = Text("tabGeneral"), items = {
+            { "header", "languageHeader" },
+            { "choice", "language" },
             { "header", "layout" },
             { "control", "enabled" }, { "control", "compact" }, { "control", "groupBoth" }, { "control", "moveUnitFrames" },
             { "control", "contextGap" },
@@ -95,7 +145,9 @@ local function Tabs()
             { "header", "keyboard" },
             { "control", "keyboardEnabled" },
             { "control", "autoKeyboard" },
-            { "choice", "keyboardLanguage", "keyboardEnabled" }, { "choice", "keyboardPhone", "keyboardEnabled" },
+            { "choice", "keyboardLanguage", "keyboardEnabled" }, { "choice", "keyboardMode", "keyboardEnabled" },
+            { "control", "wordHunter" },
+            { "status", function() return Addon.WordSources:Status() end, "wordHunter" },
             { "button", Text("keyboard"), Text("keyboardTip"), function() Addon.Keyboard:Toggle() end, "keyboardEnabled" },
             { "button", Text("forgetWords"), Text("forgetWordsTip"), Confirmed(function()
                 Addon.Words:Forget()
@@ -134,7 +186,7 @@ local function Header(page, y, key)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y - 6)
     row:SetSize(ROW_WIDTH, 18)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local label = Fonts:String(row, "OVERLAY", "NormalSmall")
     label:SetPoint("LEFT", 0, 0)
     label:SetText(Text(key))
     local rule = row:CreateTexture(nil, "ARTWORK")
@@ -147,7 +199,7 @@ local function Header(page, y, key)
 end
 
 local function Note(page, y, key)
-    local label = page.content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local label = Fonts:String(page.content, "OVERLAY", "DisableSmall")
     label:SetPoint("TOPLEFT", page.content, "TOPLEFT", 8, -y)
     label:SetWidth(ROW_WIDTH - 4)
     label:SetJustifyH("LEFT")
@@ -168,6 +220,27 @@ local function Register(page, row, node, y, height, refresh, parent)
     end
 end
 
+-- A line the window keeps up to date by itself (once a second while it is open), for what changes without the player.
+local STATUS_HEIGHT = 32
+
+local function Status(page, y, fn, parent)
+    local indent = 22
+    local label = Fonts:String(page.content, "OVERLAY", "DisableSmall")
+    label:SetPoint("TOPLEFT", page.content, "TOPLEFT", 8 + indent, -y)
+    label:SetWidth(ROW_WIDTH - 4 - indent)
+    label:SetJustifyH("LEFT")
+    label:SetJustifyV("TOP")
+    local function Update()
+        label:SetText(fn() or "")
+        local dimmed = parent and not Addon.db[parent] or false
+        label:SetAlpha(dimmed and 0.45 or 1)
+    end
+    page.refresh[#page.refresh + 1] = Update
+    page.live[#page.live + 1] = Update
+    Update()
+    return y + STATUS_HEIGHT
+end
+
 local function Check(page, y, info)
     local key, indent = info.key, info.parent and 22 or 0
     local row = CreateFrame("Frame", nil, page.content)
@@ -179,7 +252,7 @@ local function Check(page, y, info)
     box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
     box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
     box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local label = Fonts:String(row, "OVERLAY", "Highlight")
     label:SetPoint("LEFT", box, "RIGHT", 4, 0)
     local labelWidth = ROW_WIDTH - 34 - indent
     label:SetWidth(labelWidth)
@@ -204,7 +277,7 @@ local function Slider(page, y, info)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6 + indent, -y)
     row:SetSize(ROW_WIDTH - indent, 48)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local label = Fonts:String(row, "OVERLAY", "Highlight")
     label:SetPoint("TOPLEFT", 0, -2)
     label:SetText(Text(key))
     local bar = CreateFrame("Slider", nil, row)
@@ -221,7 +294,7 @@ local function Slider(page, y, info)
     track:SetPoint("LEFT")
     track:SetPoint("RIGHT")
     track:SetHeight(6)
-    local value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local value = Fonts:String(row, "OVERLAY", "HighlightSmall")
     value:SetPoint("LEFT", bar, "RIGHT", 10, 0)
     local percent = info.max <= 3
     local function Show(v) value:SetText(percent and (math.floor(v * 100 + 0.5) .. "%") or tostring(math.floor(v + 0.5))) end
@@ -248,16 +321,18 @@ local function Choice(page, y, key, parent)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
     row:SetSize(ROW_WIDTH, 34)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local label = Fonts:String(row, "OVERLAY", "Highlight")
     label:SetPoint("LEFT", 2, 0)
     label:SetText(Text(key))
     local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    Fonts:Button(button)
     button:SetSize(230, 24)
     button:SetPoint("LEFT", row, "LEFT", 300, 0)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    -- A choice names itself ({ value, name }) or has the key of a text ({ value, nil, key }).
     local function Name()
         for _, choice in ipairs(choices) do
-            if choice[1] == Addon.db[key] then return choice[2] end
+            if choice[1] == Addon.db[key] then return choice[3] and Text(choice[3]) or choice[2] end
         end
         return tostring(Addon.db[key])
     end
@@ -282,6 +357,7 @@ local function Button(page, y, label, tip, action, parent)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
     row:SetSize(ROW_WIDTH, 34)
     local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    Fonts:Button(button)
     button:SetSize(300, 24)
     button:SetPoint("LEFT", 2, 0)
     button:SetText(label)
@@ -301,7 +377,7 @@ local function BuildPage(window, tab)
     page:SetPoint("TOPLEFT", MARGIN, -(HEADER + TAB_HEIGHT + 4))
     page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + HINT_HEIGHT)
     page:Hide()
-    page.nodes, page.refresh = {}, {}
+    page.nodes, page.refresh, page.live = {}, {}, {}
     local scroll = CreateFrame("ScrollFrame", nil, page)
     scroll:SetPoint("TOPLEFT", 0, 0)
     scroll:SetPoint("BOTTOMRIGHT", -SCROLL_WIDTH, 0)
@@ -364,6 +440,7 @@ local function BuildPage(window, tab)
         if kind == "header" then y = Header(page, y, item[2])
         elseif kind == "note" then y = Note(page, y, item[2])
         elseif kind == "choice" then y = Choice(page, y, item[2], item[3])
+        elseif kind == "status" then y = Status(page, y, item[2], item[3])
         elseif kind == "button" then y = Button(page, y, item[2], item[3], item[4], item[5])
         else
             local info = Control(item[2])
@@ -483,6 +560,44 @@ end
 -- The window
 -- ---------------------------------------------------------------------------------------------
 
+-- The tab buttons with the labels of the language in use, side by side.
+function Window:LayoutTabs()
+    local x = MARGIN + 2
+    for index, tab in ipairs(self.tabs) do
+        local button = self.tabButtons[index]
+        button:SetText(tab.label)
+        local label = button.GetFontString and button:GetFontString()
+        local width = label and tonumber(label:GetStringWidth()) or 60
+        button:SetSize(math.max(64, math.ceil(width) + 24), TAB_HEIGHT - 2)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", x, -HEADER)
+        x = x + button:GetWidth() + 4
+    end
+end
+
+function Window:UpdateHint()
+    self.hint:SetText(Addon:IsGamepadMode() and string.format(Text("padHint"), Key("PADDUP"), Key("PADDDOWN"),
+        Key("PADDLEFT"), Key("PADDRIGHT"), Key("PAD1"), Key("PAD2"), Key("PADLSHOULDER"), Key("PADRSHOULDER")) or "")
+end
+
+-- A new language: every label, tip and row is made again from the texts of the language now in use. The pages are
+-- built from scratch (their rows have the old texts and sizes), the selection on the pad stays on the same row.
+function Window:Relocalize()
+    if not self.frame then return end
+    local selected
+    for i, node in ipairs(self.page and self.page.nodes or {}) do
+        if node == self.selected then selected = i end
+    end
+    for _, page in pairs(self.pages) do page:Hide() end
+    if self.tip then self.tip:Hide() end
+    self.tabs, self.pages = Tabs(), {}
+    self:LayoutTabs()
+    self:UpdateHint()
+    self:SelectTab(self.index or 1)
+    local nodes = self.page and self.page.nodes
+    if selected and nodes and nodes[selected] and self.frame:IsShown() then self:Mark(nodes[selected]) end
+end
+
 function Window:SelectTab(index)
     local tab = self.tabs[index]
     if not tab then return end
@@ -497,6 +612,8 @@ function Window:SelectTab(index)
         if not (select and pcall(i == index and select or deselect, button)) then
             if i == index then button:Disable() else button:Enable() end
         end
+        -- The template sets its own fonts when a tab is selected.
+        Fonts:Button(button, true)
     end
     self:Mark(nil)
 end
@@ -543,35 +660,43 @@ function Window:Create()
     tinsert(UISpecialFrames, "ClassicConsoleGamepadUISettings")
 
     self.tabs, self.pages, self.tabButtons = Tabs(), {}, {}
-    local x = MARGIN + 2
-    for index, tab in ipairs(self.tabs) do
+    for index in ipairs(self.tabs) do
         local created, button = pcall(CreateFrame, "Button", nil, frame, "PanelTopTabButtonTemplate")
         if not created then button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate") end
-        button:SetText(tab.label)
-        local label = button.GetFontString and button:GetFontString()
-        local width = label and tonumber(label:GetStringWidth()) or 60
-        button:SetSize(math.max(64, math.ceil(width) + 24), TAB_HEIGHT - 2)
-        button:SetPoint("TOPLEFT", x, -HEADER)
+        Fonts:Button(button, true)
         button:SetScript("OnClick", function() self:SelectTab(index) end)
-        x = x + button:GetWidth() + 4
         self.tabButtons[index] = button
     end
+    self:LayoutTabs()
 
     -- The pad hint under the pages, only while a controller is in use.
-    self.hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    self.hint = Fonts:String(frame, "OVERLAY", "NormalSmall")
     self.hint:SetPoint("BOTTOMLEFT", 14, 10)
     self.hint:SetPoint("BOTTOMRIGHT", -14, 10)
     self.hint:SetJustifyH("LEFT")
     frame:HookScript("OnShow", function()
-        self.hint:SetText(Addon:IsGamepadMode() and string.format(Text("padHint"), Key("PADDUP"), Key("PADDDOWN"),
-            Key("PADDLEFT"), Key("PADDRIGHT"), Key("PAD1"), Key("PAD2"), Key("PADLSHOULDER"), Key("PADRSHOULDER")) or "")
+        self:UpdateHint()
         if self.page then
             self.page.Refresh()
             self.page.SyncBar()
         end
         self:EnablePad()
     end)
-    frame:HookScript("OnHide", function() self:Mark(nil) end)
+    frame:HookScript("OnHide", function()
+        self:Mark(nil)
+        if self.tip then self.tip:Hide() end
+    end)
+    -- Lines that follow something outside the window (the word lists being read) are looked at once a second.
+    local sinceLive = 0
+    frame:HookScript("OnUpdate", function(_, elapsed)
+        sinceLive = sinceLive + elapsed
+        if sinceLive < 1 then return end
+        sinceLive = 0
+        local page = self.page
+        if page and page.live then
+            for _, update in ipairs(page.live) do update() end
+        end
+    end)
     local events = CreateFrame("Frame")
     events:RegisterEvent("PLAYER_REGEN_ENABLED")
     events:SetScript("OnEvent", function() self:EnablePad() end)

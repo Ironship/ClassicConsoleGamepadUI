@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.1.0-alpha.76
+
+- Interface language. Every text of the addon now lives in language files (`Locales/`): English, German, Polish, French,
+  Spanish, Italian and Portuguese. A new setting (General tab, or `/cgp language`) picks the language of the settings, the
+  hints and the on-screen keyboard. English is the default whatever language the game runs in; "Game language" follows the
+  client. The French, Spanish, Italian and Portuguese texts are new and no native speaker has read them yet.
+- On-screen keyboard, space and sentences: the phone layouts have a Space key in the bottom row, and Y or the 0 key end the
+  word with a space. In Tap and Hybrid the 0 key used to put the space into the word being typed, so the suggestions
+  stopped after the first word of a sentence; it now ends the word like the Space key does (pressed twice quickly it types a 0,
+  three times a space again). The strip above the keys shows a short hint of what the layout does and cuts a text that is
+  too long instead of letting it run out of the keyboard.
+- On-screen keyboard, layout: a new setting "On-screen keyboard layout" (Keyboard tab) lists the full keyboard and the three
+  phone keypads together and replaces "T9 mode". The key next to Clear names the layout it leads to (QWERTY, QWERTZ, AZERTY
+  or T9) instead of "ABC".
+- On-screen keyboard languages: French (AZERTY), Spanish, Italian and Portuguese join English, German and Polish, with their
+  accents on the full keyboard and under the phone keys. Every language has its own common words, and a learned word with an
+  accent the language has no key for is no longer suggested in it.
+- Word suggestions from WordHunterWoW. With English Quest Panel installed the English quest texts are a word base for the
+  suggestions (every word is counted, names rank a little lower). With a WordHunterWoW dictionary (German, French, Spanish,
+  Italian or Portuguese) that the game has loaded, its words are suggested too. They come after the player's own words and the
+  common ones, they are read a few milliseconds per frame and not in combat, and nothing in those add-ons is changed or
+  loaded. A setting turns it off, a line in the Keyboard tab says where the suggestions come from, and `/cgp keyboard words`
+  prints it.
+- Fix: Polish letters showed as boxes on the Polish keyboard. The game's interface font (Friz Quadrata) has only ó and ł of them,
+  not ą ć ę ń ś ź ż. The addon now draws its texts with font objects of its own (`Fonts.lua`, copies of the game's fonts) and puts
+  the chat's font under them while the keyboard types Polish (keys, the strip, suggestions) and while the interface is in Polish
+  (windows, hints). In Polish the settings window shows its tips in a tooltip of its own, because the game's tooltip has the same
+  font; the two Polish texts that the game's own tooltips show are written without the missing letters. `/cgp fonts` prints what
+  the font fix is doing.
+- On-screen keyboard, full layout: a row of word suggestions above the keys, for the word at the end of the chat line (the same
+  words as Hybrid: the player's own, the common ones, the WordHunterWoW lists). LB/RB choose; Y, the Space key or a click puts
+  the chosen one in place of the letters typed so far and adds a space. Nothing is suggested while a slash command is being typed.
+
 ## 0.1.0-alpha.75
 
 - New setting "Keep the L2+R2 buttons together (12 slots)" (General tab, off by default). In the 12-slot layout the stock bars

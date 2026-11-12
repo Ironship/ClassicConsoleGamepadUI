@@ -1,42 +1,27 @@
 local _, Addon = ...
--- The word list behind the predictive (T9) layout of the on-screen keyboard. It ships only a few dozen common
--- words per language and learns the rest, in the language the player actually uses: from chat the player
--- sees and sends, and from quest and gossip texts. Only single words and their counts are kept, in
--- ClassicConsoleGamepadUIDB.words (`/cgp keyboard forget` clears them).
+-- The word list behind the predictive layouts of the on-screen keyboard (Hybrid and Smart). Three layers stand behind a
+-- suggestion, best first:
+--   * the player's own words, learned from the chat they see and send and from quest and gossip texts: single words and
+--     their counts in ClassicConsoleGamepadUIDB.words (`/cgp keyboard forget` clears them),
+--   * a few hundred common words for the language the keyboard types in (Languages.lua),
+--   * the word list of an installed WordHunterWoW add-on (WordSources.lua), which is only read and never changed.
+-- Which words fit the keys typed so far is decided by the player's language (Addon.db.keyboardLanguage).
 local Words = { size = 0 }
 Addon.Words = Words
+local Languages = Addon.Languages
 
 local MAX_WORDS, KEEP_WORDS, MAX_LENGTH = 6000, 4500, 24
+local CHARACTER = Languages.CHARACTER
+local DIGIT = Languages.DIGIT
 
-local DIGIT = {
-    a = "2", b = "2", c = "2", d = "3", e = "3", f = "3", g = "4", h = "4", i = "4", j = "5", k = "5", l = "5",
-    m = "6", n = "6", o = "6", p = "7", q = "7", r = "7", s = "7", t = "8", u = "8", v = "8", w = "9", x = "9",
-    y = "9", z = "9",
-    ["ä"] = "2", ["ö"] = "6", ["ü"] = "8", ["ß"] = "7",
-    ["ą"] = "2", ["ć"] = "2", ["ę"] = "3", ["ł"] = "5", ["ń"] = "6", ["ó"] = "6", ["ś"] = "7", ["ź"] = "9", ["ż"] = "9",
-}
-
-local LOWER = {
-    ["Ä"] = "ä", ["Ö"] = "ö", ["Ü"] = "ü", ["Ą"] = "ą", ["Ć"] = "ć", ["Ę"] = "ę", ["Ł"] = "ł", ["Ń"] = "ń",
-    ["Ó"] = "ó", ["Ś"] = "ś", ["Ź"] = "ź", ["Ż"] = "ż",
-}
-
-local SEEDS = {
-    "a i the and you for that with this have are not but what all can your was will just they get out how now "
-        .. "here there who when good thanks please help need group guild join run dungeon quest level going want "
-        .. "anyone yes no ok hello hi bye sorry wait ready tank heal dps loot come let see one two",
-    "und der die das ist nicht ich du wir ihr ein eine mit für auf ja nein danke bitte hallo hilfe suche gilde "
-        .. "gruppe jemand noch auch aber wie was wer wo wann kann kannst will bin bist hab habe gut schon mal "
-        .. "komm komme los warte bereit tschüss",
-    "i w nie na to jest się z do że co ale jak tak czy ja ty on my wy cześć dzięki proszę pomoc gildia grupa "
-        .. "ktoś szukam mogę chcę dobra dobrze hej czekaj gotowy pa już tu tam kto gdzie kiedy",
-}
-
-local CHARACTER = "[%z\1-\127\194-\244][\128-\191]*"
+-- What a word is worth when suggestions are ranked: the weight its source gives it (0-31, WordSources.lua), a bonus for
+-- the common words of the language, and a bonus that grows with how often the player used it (up to OWN_CAP).
+local SEED_BONUS, OWN_STEP, OWN_CAP = 8, 6, 24
+local LN2 = math.log(2)
 
 -- Lowercase, and the digit sequence of the word on a phone keypad; nil when it holds anything but letters.
 function Words.Normalize(word)
-    word = word:lower():gsub("[\195-\197][\128-\191]", function(c) return LOWER[c] end)
+    word = Languages.Lower(word)
     local digits = {}
     for character in word:gmatch(CHARACTER) do
         local digit = DIGIT[character]
@@ -52,7 +37,12 @@ local function Readable(value)
 end
 
 function Words:Count(word)
-    return (self.db[word] or 0) + (self.seed[word] or 0)
+    return (self.db and self.db[word] or 0) + (self.seed and self.seed[word] or 0)
+end
+
+-- The language the keyboard types in, and the words of the layers above in it.
+function Words:Language()
+    return Languages.Valid(Addon.db and Addon.db.keyboardLanguage)
 end
 
 function Words:Index(word, digits)
@@ -63,20 +53,53 @@ function Words:Index(word, digits)
     list[#list + 1] = word
 end
 
+-- The common words and the player's own that fit the language; built again when the language changes.
 function Words:Load()
-    if self.index then return end
+    local language = self:Language()
+    if self.index and self.language == language then return end
+    self.language = language
     self.index, self.known, self.seed = {}, {}, {}
-    for _, seeds in ipairs(SEEDS) do
-        for token in seeds:gmatch("%S+") do
-            local word, digits = self.Normalize(token)
-            if word then self.seed[word] = 1; self:Index(word, digits) end
-        end
+    for token in Languages[language].seeds:gmatch("[^ ]+") do
+        local word, digits = self.Normalize(token)
+        if word then self.seed[word] = 1; self:Index(word, digits) end
     end
     self.size = 0
-    for word in pairs(self.db) do
+    for word in pairs(self.db or {}) do
         local normal, digits = self.Normalize(word)
-        if normal == word then self:Index(word, digits); self.size = self.size + 1 else self.db[word] = nil end
+        if normal == word then
+            self.size = self.size + 1
+            if Languages.Fits(language, word) then self:Index(word, digits) end
+        else
+            self.db[word] = nil
+        end
     end
+end
+
+-- The word list of a WordHunterWoW add-on for this language, when one is installed and turned on (nil otherwise).
+function Words:Lexicon()
+    if Addon.db and Addon.db.wordHunter == false then return nil end
+    local sources = Addon.WordSources
+    return sources and sources:Lexicon(self.language)
+end
+
+-- What a word is worth for suggestions: see the constants above.
+function Words:Score(word, lexicon)
+    local score = lexicon and lexicon.score[word] or 0
+    if self.seed[word] then score = score + SEED_BONUS end
+    local own = self.db and self.db[word]
+    if own then score = score + math.min(OWN_CAP, math.floor(OWN_STEP * math.log(1 + own) / LN2)) end
+    return score
+end
+
+-- Best first: worth, then the shorter word, then alphabetical.
+function Words:Rank(list, lexicon)
+    local scores = {}
+    for _, word in ipairs(list) do scores[word] = self:Score(word, lexicon) end
+    table.sort(list, function(a, b)
+        if scores[a] ~= scores[b] then return scores[a] > scores[b] end
+        if #a ~= #b then return #a < #b end
+        return a < b
+    end)
 end
 
 -- Over the limit: keep the most used words (ties keep the alphabetically first), so a list full of words that were
@@ -100,7 +123,7 @@ function Words:Add(token, weight)
     if not word or #word < 2 then return end
     if not self.db[word] then self.size = self.size + 1 end
     self.db[word] = (self.db[word] or 0) + weight
-    self:Index(word, digits)
+    if Languages.Fits(self.language, word) then self:Index(word, digits) end
 end
 
 -- Learn every word of a text (chat line, quest text). Links and colours are removed first.
@@ -114,50 +137,63 @@ function Words:Learn(text, weight)
     if self.size > MAX_WORDS then self:Prune() end
 end
 
--- Words that spell the key sequence, most used first, then longer words that begin with it.
+-- Words that spell the key sequence, best first, then longer words that begin with it. `limit` suggestions at most.
 function Words:Lookup(digits, limit)
     self:Load()
     limit = limit or 5
-    local function ByCount(a, b)
-        local ca, cb = self:Count(a), self:Count(b)
-        if ca ~= cb then return ca > cb end
-        return a < b
+    local length, seen = #digits, {}
+    local exact, longer = {}, {}
+    for _, word in ipairs(self.index[digits] or {}) do
+        seen[word] = true
+        exact[#exact + 1] = word
     end
-    local result, seen = {}, {}
-    local exact = {}
-    for i, word in ipairs(self.index[digits] or {}) do exact[i] = word end
-    table.sort(exact, ByCount)
-    for _, word in ipairs(exact) do
-        if #result < limit then result[#result + 1] = word; seen[word] = true end
-    end
-    if #result < limit then
-        local longer, length = {}, #digits
-        for word, wordDigits in pairs(self.known) do
-            if #wordDigits > length and wordDigits:sub(1, length) == digits then longer[#longer + 1] = word end
+    for word, wordDigits in pairs(self.known) do
+        if #wordDigits > length and wordDigits:sub(1, length) == digits then
+            seen[word] = true
+            longer[#longer + 1] = word
         end
-        table.sort(longer, ByCount)
-        for _, word in ipairs(longer) do
-            if #result < limit and not seen[word] then result[#result + 1] = word end
+    end
+    local lexicon = self:Lexicon()
+    if lexicon then
+        local more, beyond = lexicon:Digits(digits, limit * 3)
+        for _, word in ipairs(more) do
+            if not seen[word] then seen[word] = true; exact[#exact + 1] = word end
+        end
+        for _, word in ipairs(beyond) do
+            if not seen[word] then seen[word] = true; longer[#longer + 1] = word end
+        end
+    end
+    local result = {}
+    for _, list in ipairs({ exact, longer }) do
+        self:Rank(list, lexicon)
+        for _, word in ipairs(list) do
+            if #result < limit then result[#result + 1] = word end
         end
     end
     return result
 end
 
--- Words that begin with the letters typed so far (longer than the prefix), most used first.
+-- Words that begin with the letters typed so far (longer than the prefix), best first.
 function Words:Prefix(prefix, limit)
     self:Load()
+    limit = limit or 5
     local word = self.Normalize(prefix)
     if not word then return {} end
-    local found = {}
+    local found, seen = {}, {}
     for known in pairs(self.known) do
-        if #known > #word and known:sub(1, #word) == word then found[#found + 1] = known end
+        if #known > #word and known:sub(1, #word) == word then
+            seen[known] = true
+            found[#found + 1] = known
+        end
     end
-    table.sort(found, function(a, b)
-        local ca, cb = self:Count(a), self:Count(b)
-        if ca ~= cb then return ca > cb end
-        return a < b
-    end)
-    for i = #found, (limit or 5) + 1, -1 do found[i] = nil end
+    local lexicon = self:Lexicon()
+    if lexicon then
+        for _, known in ipairs(lexicon:Prefix(word, limit * 3)) do
+            if not seen[known] then seen[known] = true; found[#found + 1] = known end
+        end
+    end
+    self:Rank(found, lexicon)
+    for i = #found, limit + 1, -1 do found[i] = nil end
     return found
 end
 

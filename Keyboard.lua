@@ -6,9 +6,14 @@ local _, Addon = ...
 -- own: X is bound to the game's send button while that works (Keyboard:SyncSend), else the native A sends.
 -- No protected frame is touched, so the keyboard is also safe to leave open in combat.
 -- Layouts: "abc" (full keyboard) and the phone keypad: "t9" (multi-tap), "t9p" (smart: one press per key, words
--- suggested) and "t9h" (hybrid: multi-tap letters, suggestions complete the word).
+-- suggested) and "t9h" (hybrid: multi-tap letters, suggestions complete the word). The keyboard types in one of the
+-- languages of Languages.lua (layout, letters under the phone keys, suggested words); its own texts follow the
+-- interface language (Locales/).
 local Keyboard = {}
 Addon.Keyboard = Keyboard
+local Languages = Addon.Languages
+local L = Addon.L
+local Fonts = Addon.Fonts
 
 local KEY, GAP, PAD = 40, 3, 10
 
@@ -17,99 +22,30 @@ local function Trace(message)
     if Addon.Trace then Addon:Trace(message) end
 end
 
--- Texts, in the client's language (English where a text is missing).
-local STRINGS = {
-    enUS = {
-        move = "Move", key = "Key", send = "Send", close = "Close", space = "Space", shift = "Shift",
-        delete = "Delete", done = "Done", capital = "Capital", accept = "Accept", acceptWord = "Accept word",
-        pressAgain = "Press (again: next letter)", nextLetter = "Next letter", letterAgain = "Letter (again: next)",
-        previousWord = "Previous word", nextWord = "Next word", clear = "Clear",
-        hintSmart = "Smart: press each key once, LB/RB changes the word, Y accepts",
-        hintHybrid = "Hybrid: tap the letters, LB/RB picks a suggestion, Y accepts",
-        hintTap = "Tap: press a key again for its next letter, RB ends a letter, Y accepts",
-        noMatch = "no word matches: Tap and Hybrid are in the settings",
-        noChat = "No chat line is open: open it first (Enter or the chat button)",
-        openChat = "Open the chat line first (Enter or the chat button), then use the keyboard.",
-        off = "The on-screen keyboard is turned off. Turn it on in the settings (/cgp, Keyboard tab).",
-    },
-    deDE = {
-        move = "Bewegen", key = "Taste", send = "Senden", close = "Schließen", space = "Leerzeichen",
-        shift = "Umschalt", delete = "Löschen", done = "Fertig", capital = "Großbuchstabe", accept = "Übernehmen",
-        acceptWord = "Wort übernehmen", pressAgain = "Drücken (nochmal: nächster Buchstabe)",
-        nextLetter = "Nächster Buchstabe", letterAgain = "Buchstabe (nochmal: nächster)",
-        previousWord = "Vorheriges Wort", nextWord = "Nächstes Wort", clear = "Leeren",
-        hintSmart = "Smart: jede Taste einmal drücken, LB/RB wechselt das Wort, Y übernimmt",
-        hintHybrid = "Hybrid: Buchstaben antippen, LB/RB wählt einen Vorschlag, Y übernimmt",
-        hintTap = "Tap: Taste nochmal drücken für den nächsten Buchstaben, RB beendet einen Buchstaben, Y übernimmt",
-        noMatch = "kein Wort passt: Tap und Hybrid gibt es in den Einstellungen",
-        noChat = "Keine Chatzeile offen: erst öffnen (Enter oder Chat-Taste)",
-        openChat = "Erst die Chatzeile öffnen (Enter oder Chat-Taste), dann die Tastatur benutzen.",
-        off = "Die Bildschirmtastatur ist ausgeschaltet. Einschalten in den Einstellungen (/cgp, Tab Tastatur).",
-    },
-    plPL = {
-        move = "Ruch", key = "Klawisz", send = "Wyślij", close = "Zamknij", space = "Spacja", shift = "Shift",
-        delete = "Usuń", done = "Gotowe", capital = "Wielka litera", accept = "Przyjmij", acceptWord = "Przyjmij słowo",
-        pressAgain = "Naciśnij (ponownie: kolejna litera)", nextLetter = "Kolejna litera",
-        letterAgain = "Litera (ponownie: kolejna)", previousWord = "Poprzednie słowo", nextWord = "Następne słowo",
-        clear = "Wyczyść",
-        hintSmart = "Smart: każdy klawisz raz, LB/RB zmienia słowo, Y przyjmuje",
-        hintHybrid = "Hybrid: wpisuj litery, LB/RB wybiera podpowiedź, Y przyjmuje",
-        hintTap = "Tap: naciśnij klawisz ponownie, by zmienić literę, RB kończy literę, Y przyjmuje",
-        noMatch = "brak pasującego słowa: Tap i Hybrid są w ustawieniach",
-        noChat = "Brak otwartej linii czatu: otwórz ją najpierw (Enter lub przycisk czatu)",
-        openChat = "Najpierw otwórz linię czatu (Enter lub przycisk czatu), potem użyj klawiatury.",
-        off = "Klawiatura ekranowa jest wyłączona. Włączysz ją w ustawieniach (/cgp, karta Klawiatura).",
-    },
-}
-local L = STRINGS[GetLocale()] or STRINGS.enUS
-if L ~= STRINGS.enUS then setmetatable(L, { __index = STRINGS.enUS }) end
-
+-- Shifted symbols of the full keyboard; letters (accents included) are capitalised by Languages.Upper.
 local SHIFTED = {
     ["`"] = "~", ["1"] = "!", ["2"] = "@", ["3"] = "#", ["4"] = "$", ["5"] = "%", ["6"] = "^", ["7"] = "&",
     ["8"] = "*", ["9"] = "(", ["0"] = ")", ["-"] = "_", ["="] = "+", ["["] = "{", ["]"] = "}", ["\\"] = "|",
     [";"] = ":", ["'"] = "\"", [","] = "<", ["."] = ">", ["/"] = "?",
-    ["ä"] = "Ä", ["ö"] = "Ö", ["ü"] = "Ü", ["ß"] = "ß",
 }
 
 -- A key of the phone layouts: the digit, and the characters its presses cycle through.
 local function T(digit, chars) return { digit = digit, chars = chars, width = 110, height = 48 } end
 local function Special(name, width) return { name, width, height = 48 } end
 
--- Keyboard languages: the full layout (QWERTY, QWERTZ for German) and the letters under the phone keys.
-local LANGUAGES = { "EN", "DE", "PL" }
-
-local PHONE_LETTERS = {
-    EN = { ["2"] = "abc", ["3"] = "def", ["4"] = "ghi", ["5"] = "jkl", ["6"] = "mno", ["7"] = "pqrs", ["8"] = "tuv",
-        ["9"] = "wxyz" },
-    DE = { ["2"] = { "a", "b", "c", "ä" }, ["3"] = "def", ["4"] = "ghi", ["5"] = "jkl", ["6"] = { "m", "n", "o", "ö" },
-        ["7"] = { "p", "q", "r", "s", "ß" }, ["8"] = { "t", "u", "v", "ü" }, ["9"] = "wxyz" },
-    PL = { ["2"] = { "a", "ą", "b", "c", "ć" }, ["3"] = { "d", "e", "ę", "f" }, ["4"] = "ghi",
-        ["5"] = { "j", "k", "l", "ł" }, ["6"] = { "m", "n", "ń", "o", "ó" }, ["7"] = { "p", "q", "r", "s", "ś" },
-        ["8"] = "tuv", ["9"] = { "w", "x", "y", "z", "ź", "ż" } },
-}
-
--- The letters of a phone key as a list of characters, ending with its digit.
-local function Letters(language, digit)
-    local letters = PHONE_LETTERS[language][digit]
-    local chars = {}
-    if type(letters) == "string" then
-        for letter in letters:gmatch(".") do chars[#chars + 1] = letter end
-    else
-        for _, letter in ipairs(letters) do chars[#chars + 1] = letter end
-    end
-    chars[#chars + 1] = digit
-    return chars
-end
-
+-- The keys of a layout, row by row, and how far each row is moved to the right (the full keyboard; "center" puts a row
+-- under the middle of the widest one).
 local function Rows(mode, language)
     if mode ~= "abc" then
+        local function Phone(digit) return T(digit, Languages.PhoneKey(language, digit)) end
         local rows = {
-            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }), T("2", Letters(language, "2")),
-                T("3", Letters(language, "3")) },
-            { T("4", Letters(language, "4")), T("5", Letters(language, "5")), T("6", Letters(language, "6")) },
-            { T("7", Letters(language, "7")), T("8", Letters(language, "8")), T("9", Letters(language, "9")) },
+            { T("1", { ".", ",", "'", "?", "!", "-", "/", "@", "1" }), Phone("2"), Phone("3") },
+            { Phone("4"), Phone("5"), Phone("6") },
+            { Phone("7"), Phone("8"), Phone("9") },
+            -- 0 is a space (twice in a row: a 0), the way it is on a phone.
             { Special("shift", 110), T("0", { " ", "0" }), Special("back", 110) },
-            { Special("close", 80), Special("clear", 80), Special("mode", 80), Special("enter", 110) },
+            { Special("close", 70), Special("clear", 100), Special("mode", 90), Special("space", 150),
+                Special("enter", 100) },
         }
         if mode ~= "t9" then
             local suggestions = {}
@@ -118,44 +54,57 @@ local function Rows(mode, language)
         end
         return rows, { 0, 0, 0, 0, 0, 0 }
     end
+    local spec = Languages[language]
+    -- A copy of a row of letters (the language's own list is never changed), with a key in front if given.
+    local function Letters(row, first)
+        local keys = {}
+        if first then keys[1] = first end
+        for _, letter in ipairs(row) do keys[#keys + 1] = letter end
+        return keys
+    end
     local rows = {
         { "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", { "back", 80 } },
-        { "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\" },
-        { "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'" },
-        { { "shift", 80 }, "z", "x", "c", "v", "b", "n", "m", ",", ".", "/" },
+        Letters(spec.rows[1]),
+        Letters(spec.rows[2]),
+        Letters(spec.rows[3], { "shift", 80 }),
         { { "close", 70 }, { "clear", 70 }, { "mode", 60 }, { "space", 220 }, { "enter", 100 } },
     }
     local offsets = { 0, 20, 30, 0, 0 }
-    if language == "DE" then
-        rows[2][6], rows[4][2] = "z", "y"
-        table.insert(rows[3], "ä"); table.insert(rows[3], "ö")
-        table.insert(rows[4], "ü"); table.insert(rows[4], "ß")
-    elseif language == "PL" then
-        table.insert(rows, 5, { "ą", "ć", "ę", "ł", "ń", "ó", "ś", "ź", "ż" })
-        offsets = { 0, 20, 30, 0, 40, 0 }
+    if spec.extra then
+        table.insert(rows, 5, Letters(spec.extra))
+        offsets = { 0, 20, 30, 0, "center", 0 }
     end
+    -- The suggestions for the word being typed, above the keys.
+    local suggestions = {}
+    for i = 1, 5 do suggestions[i] = { cand = i, width = 120, height = KEY } end
+    table.insert(rows, 1, suggestions)
+    table.insert(offsets, 1, "center")
     return rows, offsets
 end
 
 function Keyboard:Language()
-    local saved = Addon.db and Addon.db.keyboardLanguage
-    for _, language in ipairs(LANGUAGES) do
-        if saved == language then return language end
-    end
-    return "EN"
+    return Languages.Valid(Addon.db and Addon.db.keyboardLanguage)
+end
+
+local function Known(language)
+    return type(language) == "string" and type(Languages[language]) == "table" and Languages[language].rows ~= nil
 end
 
 function Keyboard:SetLanguage(language)
-    if not PHONE_LETTERS[language] then return end
+    if not Known(language) then return end
     Addon.db.keyboardLanguage = language
+    -- Polish needs another font (Fonts.lua).
+    Fonts:Update()
     if self.frame then self:Apply(self.mode) end
+    -- The word list of a WordHunterWoW add-on for the new language, if there is one.
+    if Addon.WordSources then Addon.WordSources:Request(language) end
 end
 
 function Keyboard:NextLanguage()
     local current = self:Language()
-    for i, language in ipairs(LANGUAGES) do
+    for i, language in ipairs(Languages.order) do
         if language == current then
-            self:SetLanguage(LANGUAGES[i % #LANGUAGES + 1])
+            self:SetLanguage(Languages.order[i % #Languages.order + 1])
             return
         end
     end
@@ -163,19 +112,24 @@ end
 
 local MIN_WIDTH, STATUS_HEIGHT, LEGEND_ROW, PREVIEW_HEIGHT = 560, 16, 24, 28
 
--- The button prompts under the keys: an icon of the pad button and what it does.
-local LEGENDS = {
-    abc = { { "dpad", L.move }, { "A", L.key }, { "X", L.send }, { "B", L.close }, { "Y", L.space },
-        { "LT", L.shift }, { "RT", L.delete }, { "Start", L.done } },
-    t9 = { { "dpad", L.move }, { "A", L.pressAgain }, { "RB", L.nextLetter }, { "Y", L.acceptWord },
-        { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete }, { "Start", L.done } },
-    t9h = { { "dpad", L.move }, { "A", L.letterAgain }, { "Y", L.accept }, { "LB", L.previousWord },
-        { "RB", L.nextWord }, { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete },
-        { "Start", L.done } },
-    t9p = { { "dpad", L.move }, { "A", L.key }, { "Y", L.acceptWord }, { "LB", L.previousWord },
+-- The button prompts under the keys: an icon of the pad button and what it does, in the language in use.
+local function Legend(mode)
+    if mode == "abc" then
+        return { { "dpad", L.move }, { "A", L.key }, { "Y", L.spaceOrAccept }, { "LB", L.previousWord },
+            { "RB", L.nextWord }, { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete },
+            { "Start", L.done } }
+    elseif mode == "t9" then
+        return { { "dpad", L.move }, { "A", L.pressAgain }, { "RB", L.nextLetter }, { "Y", L.acceptWord },
+            { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete }, { "Start", L.done } }
+    elseif mode == "t9h" then
+        return { { "dpad", L.move }, { "A", L.letterAgain }, { "Y", L.accept }, { "LB", L.previousWord },
+            { "RB", L.nextWord }, { "X", L.send }, { "B", L.close }, { "LT", L.shift }, { "RT", L.delete },
+            { "Start", L.done } }
+    end
+    return { { "dpad", L.move }, { "A", L.key }, { "Y", L.acceptWord }, { "LB", L.previousWord },
         { "RB", L.nextWord }, { "X", L.send }, { "B", L.close }, { "LT", L.capital }, { "RT", L.delete },
-        { "Start", L.done } },
-}
+        { "Start", L.done } }
+end
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
@@ -328,10 +282,7 @@ function Keyboard:UpdateStatus()
     self.status:SetText(open and "" or L.noChat)
 end
 
-local function Upper(text)
-    return (text:upper():gsub("ä", "Ä"):gsub("ö", "Ö"):gsub("ü", "Ü"):gsub("ą", "Ą"):gsub("ć", "Ć"):gsub("ę", "Ę")
-        :gsub("ł", "Ł"):gsub("ń", "Ń"):gsub("ó", "Ó"):gsub("ś", "Ś"):gsub("ź", "Ź"):gsub("ż", "Ż"))
-end
+local Upper = Languages.Upper
 
 local function CapitalizeFirst(text)
     local first = text:match("^[%z\1-\127\194-\244][\128-\191]*")
@@ -344,7 +295,15 @@ local function WithoutLastCharacter(text)
     return (text:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""))
 end
 
-local SPECIAL_LABELS = { back = "<-", shift = L.shift, close = "X", clear = L.clear, space = L.space, enter = L.done }
+-- The labels of the keys that are no letters, in the language in use.
+local SPECIAL_LABELS = {
+    back = function() return "<-" end,
+    shift = function() return L.shift end,
+    close = function() return "X" end,
+    clear = function() return L.clear end,
+    space = function() return L.space end,
+    enter = function() return L.done end,
+}
 
 function Keyboard:Label(key)
     if key.cand then
@@ -352,8 +311,12 @@ function Keyboard:Label(key)
         local word = cands[key.cand]
         return word and (cap and CapitalizeFirst(word) or word) or ""
     end
-    if key.special == "mode" then return self.mode == "abc" and "T9" or "ABC" end
-    if key.special then return SPECIAL_LABELS[key.special] end
+    -- The key that switches layout names the one it leads to: the phone keypad, or the keyboard of the language.
+    if key.special == "mode" then return self.mode == "abc" and "T9" or Languages[self:Language()].layout end
+    if key.special then
+        local label = SPECIAL_LABELS[key.special]
+        return label and label() or key.special
+    end
     if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
     if not self.shift then return key.base end
     return SHIFTED[key.base] or Upper(key.base)
@@ -398,6 +361,8 @@ function Keyboard:Candidates()
 end
 
 function Keyboard:Pending()
+    -- The full keyboard types straight into the chat line: nothing waits in a buffer, whatever is suggested.
+    if self.mode == "abc" then return "" end
     local pred, hints = self.pred, self.hints
     if pred then return pred.shown or "" end
     if hints and hints.idx > 0 then
@@ -407,14 +372,31 @@ function Keyboard:Pending()
     return self.buffer or ""
 end
 
--- Hybrid layout: matches for the letters typed so far.
+-- The word the cursor ends: the letters at the end of the chat line. None while the line is a slash command being typed, and
+-- none after a link or a colour ("|r", "|h" are no words).
+local function TypedWord(line)
+    if line:find("^/[^ ]*$") then return nil end
+    local word = line:match("([%a\128-\255]+)$")
+    if word and line:sub(-#word - 1, -#word - 1) == "|" then return nil end
+    return word
+end
+
+-- Suggestions: on the hybrid layout the matches for the letters typed so far (the buffer), on the full keyboard the matches
+-- for the word at the end of the chat line.
 function Keyboard:UpdateHints()
     local hints = { cands = {}, idx = 0, cap = false }
-    local buffer = self.buffer or ""
-    if self.mode == "t9h" and buffer ~= "" then
-        hints.cands = Addon.Words:Prefix(buffer, 5)
-        local first = buffer:match("^[%z\1-\127\194-\244][\128-\191]*")
-        hints.cap = first ~= nil and first ~= first:lower() and Upper(first) == first
+    local word
+    if self.mode == "t9h" and (self.buffer or "") ~= "" then
+        word = self.buffer
+    elseif self.mode == "abc" then
+        local box = FindEditBox()
+        word = box and TypedWord(box:GetText() or "")
+        self.typed = word or ""
+    end
+    if word then
+        hints.cands = Addon.Words:Prefix(word, 5)
+        local first = word:match("^[%z\1-\127\194-\244][\128-\191]*")
+        hints.cap = first ~= nil and first ~= Languages.Lower(first) and Upper(first) == first
     end
     self.hints = hints
     if self.keys then self:Refresh() end
@@ -422,20 +404,29 @@ function Keyboard:UpdateHints()
     if self.pad then self:QueueSendSync() end
 end
 
+-- On the full keyboard the line also changes by other means (a physical keyboard, a send): looked at with the 0.25 s check,
+-- and only a new word gives new suggestions, so a chosen one stays chosen.
+function Keyboard:WatchTyped()
+    if self.mode ~= "abc" then return end
+    local box = FindEditBox()
+    local word = box and TypedWord(box:GetText() or "") or ""
+    if word ~= (self.typed or "") then self:UpdateHints() end
+end
+
 function Keyboard:ShowPreview()
     if not self.preview then return end
     local text = self:Pending()
     if text == "" then
-        if self.mode == "t9p" then
-            self.preview:SetText("|cff888888" .. L.hintSmart .. "|r")
-        elseif self.mode == "t9h" then
-            self.preview:SetText("|cff888888" .. L.hintHybrid .. "|r")
-        else
-            self.preview:SetText("|cff888888" .. L.hintTap .. "|r")
-        end
+        -- Nothing typed: what the layout does, small, instead of an empty strip.
+        self.preview:SetText("")
+        local hint = L.hintTap
+        if self.mode == "t9p" then hint = L.hintSmart elseif self.mode == "t9h" then hint = L.hintHybrid end
+        self.hintLine:SetText(hint)
     elseif self.pred and self.pred.fallback then
+        self.hintLine:SetText("")
         self.preview:SetText(text .. "|cffffd100_|r  |cffff9933" .. L.noMatch .. "|r")
     else
+        self.hintLine:SetText("")
         self.preview:SetText(text .. "|cffffd100_|r")
     end
 end
@@ -473,17 +464,29 @@ end
 
 -- Put the word in progress into the chat line, with a space after it if wanted. Without a word, the space alone.
 -- A space is never the first character of the line (a line that starts with a space is no slash command any more)
--- and never follows another space. False when there is no chat line to put it in (the word stays in the buffer).
+-- and never follows another space. False when there is no chat line to put it in (the word stays in the buffer);
+-- else true, and whether a space was added to the line.
 function Keyboard:Flush(space)
     local text = self:Pending()
-    if text == "" and not space then return true end
+    if text == "" and not space then return true, false end
     local box = EditBox()
-    if not box then return false end
+    if not box then return false, false end
     local line = box:GetText() or ""
-    if line == "" then text = (text:gsub("^%s+", "")) end
+    if line == "" then text = (text:gsub("^ +", "")) end
+    -- A space is added once: a word that ends with a blank does not get a second one.
+    if space then text = (text:gsub(" +$", "")) end
     if text == "" then
-        if line ~= "" and line:sub(-1) ~= " " then box:Insert(" ") end
-        return true
+        local added = false
+        if space and line ~= "" and line:sub(-1) ~= " " then
+            box:Insert(" ")
+            added = true
+        end
+        -- A buffer of nothing but blanks is used up.
+        if self:Pending() ~= "" then
+            self.pred, self.buffer, self.tap = nil, "", nil
+            self:UpdateHints()
+        end
+        return true, added
     end
     local pred = self.pred
     if pred then
@@ -494,7 +497,36 @@ function Keyboard:Flush(space)
     self.pred, self.buffer, self.tap = nil, "", nil
     box:Insert(text .. (space and " " or ""))
     self:UpdateHints()
-    return true
+    return true, space and true or false
+end
+
+-- The 0 key: a space that ends the word, so a sentence goes on with the next word. The smart layout has no digits and
+-- only adds the space; in Tap and Hybrid a quick second press turns the space just added into a 0 (and a third into a
+-- space again), the way a phone does.
+function Keyboard:Zero(key)
+    if self.mode == "t9p" then
+        self:Flush(true)
+        return
+    end
+    local now, tap = GetTime(), self.tap
+    if tap and tap.key == key and now - tap.time < TAP_SECONDS then
+        if tap.space then
+            local box = EditBox()
+            if not box then return end
+            if tap.added then
+                local line = box:GetText() or ""
+                if line:sub(-1) == " " then box:SetText(line:sub(1, -2)) end
+            end
+            self.buffer = "0"
+            self.tap = { key = key, zero = true, time = now }
+            self:UpdateHints()
+            return
+        elseif tap.zero and self.buffer == "0" then
+            self.buffer = ""
+        end
+    end
+    local ok, added = self:Flush(true)
+    if ok then self.tap = { key = key, space = true, added = added, time = now } end
 end
 
 function Keyboard:Discard()
@@ -538,6 +570,10 @@ end
 function Keyboard:Choose(index)
     local cands = self:Candidates()
     if not cands[index] then return end
+    if self.mode == "abc" then
+        self:Complete(index)
+        return
+    end
     if self.pred then
         self.pred.idx = index
         self:ShowWord()
@@ -545,6 +581,22 @@ function Keyboard:Choose(index)
         self.hints.idx = index
     end
     self:Flush(true)
+end
+
+-- Full keyboard: a suggestion takes the place of the letters typed so far, and a space follows it.
+function Keyboard:Complete(index)
+    local hints = self.hints
+    local word = hints and hints.cands[index]
+    if not word then return end
+    local box = EditBox()
+    if not box then return end
+    local line = box:GetText() or ""
+    local typed = TypedWord(line)
+    if not typed then return end
+    if hints.cap then word = CapitalizeFirst(word) end
+    box:SetText(line:sub(1, #line - #typed) .. word .. " ")
+    Addon.Words:Learn(word, 1)
+    self:UpdateHints()
 end
 
 -- Delete: one pressed key of the word in progress, else one character of the buffer, else of the chat line.
@@ -569,7 +621,10 @@ function Keyboard:Delete()
         return
     end
     local box = EditBox()
-    if box then box:SetText(WithoutLastCharacter(box:GetText() or "")) end
+    if box then
+        box:SetText(WithoutLastCharacter(box:GetText() or ""))
+        self:UpdateHints()
+    end
 end
 
 function Keyboard:Press(key)
@@ -605,17 +660,24 @@ function Keyboard:Press(key)
         self:Refresh()
         if not had then
             local box = EditBox()
-            if box then box:SetText("") end
+            if box then
+                box:SetText("")
+                self:UpdateHints()
+            end
         end
         return
     elseif special == "enter" then
         -- Done typing: the word goes to the chat line, the game's own send button (A, or Enter) sends it.
         if self:Flush(false) then self:Hide() end
         return
+    elseif special == "space" and self.mode ~= "abc" then
+        -- The word in progress ends here: it goes to the chat line with a space, and the next word starts.
+        self:Flush(true)
+        return
     end
     if self.mode ~= "abc" and key.digit then
-        if self.mode == "t9p" and key.digit == "0" then
-            self:Flush(true)
+        if key.digit == "0" then
+            self:Zero(key)
         elseif self.mode == "t9p" and key.digit ~= "1" then
             self.tap = nil
             if (self.buffer or "") ~= "" and not self:Flush(false) then return end
@@ -630,6 +692,11 @@ function Keyboard:Press(key)
     local box = EditBox()
     if not box then return end
     if special == "space" then
+        -- A chosen suggestion takes the place of the letters typed so far, and a space follows it.
+        if self.hints and self.hints.idx > 0 then
+            self:Choose(self.hints.idx)
+            return
+        end
         box:Insert(" ")
     else
         box:Insert(self:Label(key))
@@ -638,6 +705,7 @@ function Keyboard:Press(key)
         self.shift = false
         self:Refresh()
     end
+    self:UpdateHints()
 end
 
 -- The buttons of one layout, built once and shown or hidden when the mode changes.
@@ -657,7 +725,14 @@ function Keyboard:Build(mode)
     local width = math.max(MIN_WIDTH, widest + PAD * 2)
     local y = PAD + (phone and PREVIEW_HEIGHT + GAP or 0)
     for r, row in ipairs(rows) do
-        local x = phone and (width - widths[r]) / 2 or (PAD + offsets[r])
+        local x
+        if phone then
+            x = (width - widths[r]) / 2
+        elseif offsets[r] == "center" then
+            x = PAD + (widest - widths[r]) / 2
+        else
+            x = PAD + offsets[r]
+        end
         local rowHeight = KEY
         for _, entry in ipairs(row) do
             local isTable = type(entry) == "table"
@@ -675,15 +750,14 @@ function Keyboard:Build(mode)
                 button.bg = button:CreateTexture(nil, "BACKGROUND")
                 button.bg:SetAllPoints()
             end
-            button.text = button:CreateFontString(nil, "OVERLAY",
-                (isTable and (entry.chars or entry.cand)) and "GameFontHighlight" or "GameFontHighlightLarge")
+            button.text = Fonts:String(button, "OVERLAY", (isTable and (entry.chars or entry.cand)) and "Key" or "KeyLarge")
             button.text:SetPoint("CENTER")
             button.special = special
             if isTable and entry.chars then
                 button.chars, button.digit = entry.chars, entry.digit
                 local hint = {}
                 for _, c in ipairs(entry.chars) do
-                    if c ~= entry.digit then hint[#hint + 1] = c == " " and L.space:lower() or c end
+                    if c ~= entry.digit then hint[#hint + 1] = c == " " and Languages.Lower(L.space) or c end
                 end
                 button.hint = table.concat(hint)
             elseif isTable and entry.cand then
@@ -709,9 +783,9 @@ function Keyboard:Build(mode)
     -- Button prompts, in as many rows as the width needs, each row centred.
     local legend = CreateFrame("Frame", nil, frame)
     local rowsOfEntries, row, used, available = {}, {}, 0, width - PAD * 2
-    for _, entry in ipairs(LEGENDS[mode]) do
+    for _, entry in ipairs(Legend(mode)) do
         local icon, iconWidth = Icon(legend, entry[1])
-        local label = legend:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local label = Fonts:String(legend, "OVERLAY", "HighlightSmall")
         label:SetText(entry[2])
         local labelWidth = tonumber(label:GetStringWidth()) or 60
         local item = { icon = icon, label = label, width = iconWidth + 4 + labelWidth }
@@ -811,14 +885,24 @@ function Keyboard:Create()
     stripBackground:SetAllPoints()
     stripBackground:SetTexture(WHITE)
     stripBackground:SetVertexColor(0.02, 0.02, 0.02, 0.9)
-    self.preview = strip:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    -- What is typed (large) or, when nothing is, a hint (small). A text that is too long for the strip is cut short.
+    self.preview = Fonts:String(strip, "OVERLAY", "KeyLarge")
     self.preview:SetPoint("LEFT", strip, "LEFT", 8, 0)
+    self.preview:SetPoint("RIGHT", strip, "RIGHT", -8, 0)
+    self.preview:SetJustifyH("LEFT")
+    self.hintLine = Fonts:String(strip, "OVERLAY", "DisableSmall")
+    self.hintLine:SetPoint("LEFT", strip, "LEFT", 8, 0)
+    self.hintLine:SetPoint("RIGHT", strip, "RIGHT", -8, 0)
+    self.hintLine:SetJustifyH("LEFT")
+    for _, line in ipairs({ self.preview, self.hintLine }) do
+        if line.SetWordWrap then line:SetWordWrap(false) end
+    end
     self.previewFrame = strip
-    self.status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    self.status = Fonts:String(frame, "OVERLAY", "NormalSmall")
     self.status:SetTextColor(1, 0.35, 0.3)
     frame:SetScript("OnUpdate", function(_, elapsed)
         self.idle = (self.idle or 0) + elapsed
-        if self.idle >= 0.25 then self.idle = 0; self:SyncPad(); self:UpdateStatus() end
+        if self.idle >= 0.25 then self.idle = 0; self:SyncPad(); self:UpdateStatus(); self:WatchTyped() end
     end)
     local saved = Addon.db.keyboardPos
     frame:ClearAllPoints()
@@ -842,6 +926,20 @@ function Keyboard:SetEnabled(enabled)
     if not enabled then self:Hide() end
 end
 
+-- A new interface language: the keys' labels and the button prompts are made again in it.
+function Keyboard:Relocalize()
+    if not self.frame then
+        self.sets = nil
+        return
+    end
+    for _, set in pairs(self.sets or {}) do
+        for _, key in ipairs(set.keys) do key:Hide() end
+        set.legend:Hide()
+    end
+    self.sets = {}
+    self:Apply(self.mode)
+end
+
 function Keyboard:Show(auto)
     if not self:IsEnabled() then
         -- Said when the player asked for it; the opening with the chat line stays quiet.
@@ -850,6 +948,8 @@ function Keyboard:Show(auto)
     end
     Trace("Keyboard:Show")
     if not self.frame then self:Create() end
+    -- The word list of a WordHunterWoW add-on for the language, if there is one (cheap when it is read already).
+    if Addon.WordSources then Addon.WordSources:Request(self:Language()) end
     self.auto = auto and true or false
     self.shownAt = GetTime()
     self.shift, self.tap, self.pred, self.buffer = false, nil, nil, ""
