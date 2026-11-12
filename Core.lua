@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.75"
+Addon.version = "0.1.0-alpha.76"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -314,7 +314,7 @@ local function Initialize()
     for _, other in ipairs({ "ControllerForever", "ConsolePort", "ClassicGamepad" }) do
         if C_AddOns.IsAddOnLoaded(other) then
             Addon.conflict = other
-            Addon:Print(other .. " controls this HUD. Disable it to use ClassicConsoleGamepadUI.")
+            Addon:Print(Addon.L.controlledBy:format(other))
         end
     end
     ready = true
@@ -340,6 +340,7 @@ local function Initialize()
     end)
     Try("ItemDelete", function() Addon.ItemDelete:Observe() end)
     Try("Words", function() Addon.Words:Observe() end)
+    Try("WordSources", function() Addon.WordSources:Observe() end)
     Try("Keyboard", function() Addon.Keyboard:Observe() end)
     Try("native hooks", function()
         local native = GamepadMainActionBarFrame
@@ -413,13 +414,16 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             Addon.Keyboard:Debug()
         elseif mode == "forget" then
             Addon.Words:Forget()
-            Addon:Print("Learned words forgotten.")
-        elseif mode == "en" or mode == "de" or mode == "pl" then
-            Addon.Keyboard:SetLanguage(mode:upper())
+            Addon:Print(Addon.L.wordsForgotten)
+        elseif mode == "words" then
+            Addon:Print(Addon.WordSources:Status())
         elseif mode == "t9" or mode == "abc" or mode == "tap" or mode == "smart" or mode == "hybrid" then
             Addon.Keyboard:SetMode(mode == "smart" and "t9p" or (mode == "hybrid" and "t9h")
                 or (mode == "tap" and "t9" or mode))
             Addon.Keyboard:Show(false)
+        elseif mode and #mode == 2 and Addon.Languages[mode:upper()] then
+            -- /cgp keyboard en | de | pl | fr | es | it | pt: the language the keyboard types in.
+            Addon.Keyboard:SetLanguage(mode:upper())
         else
             Addon.Keyboard:Toggle()
         end
@@ -427,17 +431,34 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "edit" then
         Addon.Options:EditActions()
         return
+    elseif command == "fonts" then
+        Addon.Fonts:Debug()
+        return
+    elseif command == "language" or command == "lang" then
+        -- /cgp language en | de | pl | fr | es | it | pt | auto: the language of the interface.
+        local wanted = input:lower():match("^%s*%S+%s+(%S+)") or ""
+        local chosen = wanted == "auto" and "auto" or nil
+        for _, code in ipairs(Addon.Locales.order) do
+            if code:lower() == wanted or code:sub(1, 2):lower() == wanted then chosen = code end
+        end
+        if chosen then
+            Addon.db.language = chosen
+            Addon.Options:Changed("language")
+        else
+            Addon:Print("/cgp language en | de | pl | fr | es | it | pt | auto")
+        end
+        return
     elseif command == "on" or command == "off" then
         Addon.db.enabled = command == "on"
     elseif command == "native" or command == "classic" then
         Addon.nativeView = command == "native"
     elseif command == "scale" then
-        Addon:Print("Use the game's UI scale and Edit Mode: drag the player, target and focus frames there and save the layout.")
+        Addon:Print(Addon.L.scaleHelp)
         return
     elseif command == "resetframes" then
-        if InCombatLockdown() then Addon:Print("Not in combat."); return end
+        if InCombatLockdown() then Addon:Print(Addon.L.notInCombat); return end
         Addon.HUD:ResetFrames()
-        Addon:Print("Player, target and focus frames are back at their classic places.")
+        Addon:Print(Addon.L.framesBack)
     elseif command == "taint" then
         local ours, others = Addon:ScanTaint(2)
         local summary, foreign = {}, others.foreign or {}
@@ -502,7 +523,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | language | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)

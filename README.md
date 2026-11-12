@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.75. Alpha: expect bugs.
+Version 0.1.0-alpha.76. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -23,8 +23,9 @@ Version 0.1.0-alpha.75. Alpha: expect bugs.
 *   Mouse clicks, drag and drop and keyboard keys work on the bars.
 *   Classic micro menu, bags, unit frames and experience bar.
 *   Move the player, target and focus frames in Edit Mode. The addon remembers where you put them.
-*   On-screen keyboard for chat, for the controller and the mouse: a normal keyboard or a phone-style T9 keypad with word suggestions. English, German and Polish.
+*   On-screen keyboard for chat, for the controller and the mouse: a normal keyboard or a phone-style T9 keypad, both with word suggestions. English, German, Polish, French, Spanish, Italian and Portuguese.
 *   Settings window with tabs, also usable with the controller.
+*   Settings, hints and keyboard in English, German, Polish, French, Spanish, Italian or Portuguese. You choose the language, English is the default.
 *   Controller button hints in micro menu tooltips.
 *   Easy item deletion: X, X, A, A.
 *   Chat, controller legend and micro menu position options.
@@ -37,10 +38,11 @@ Version 0.1.0-alpha.75. Alpha: expect bugs.
 
 The game has no on-screen keyboard of its own, so the addon has one. Open the chat line as usual and type with the controller or the mouse. The keyboard closes when the chat line closes.
 
-*   A normal keyboard, or a phone-style T9 keypad.
+*   A normal keyboard, or a phone-style T9 keypad. Choose in the Keyboard tab, or with the key next to Clear on the keyboard.
 *   T9 has three modes: Tap (press a key again for the next letter), Smart (press each key once and pick the word from the suggestions) and Hybrid (tap the letters and the suggestions finish the word, the default).
-*   The suggestions learn from the chat you read and write and from quest texts.
-*   Languages: English, German, Polish.
+*   A space key and Y end a word with a space, so you can type whole sentences.
+*   The suggestions learn from the chat you read and write and from quest texts. If English Quest Panel or a WordHunterWoW dictionary is installed, its words are suggested too.
+*   Languages: English, German, Polish, French, Spanish, Italian, Portuguese.
 *   `/cgp keyboard` shows or hides it. A setting opens it automatically when you start typing in chat.
 *   If you do not want it, a setting in the Keyboard tab turns the keyboard off completely.
 
@@ -57,6 +59,7 @@ Commands: `/cgp` (or `/classicconsolegamepadui`)
 *   `/cgp on`, `/cgp off`: turn the classic look on or off.
 *   `/cgp native`, `/cgp classic`: switch the action bars for this session.
 *   `/cgp keyboard`: show or hide the on-screen keyboard.
+*   `/cgp language`: the language of the settings and hints (`en`, `de`, `pl`, `fr`, `es`, `it`, `pt` or `auto`).
 *   `/cgp resetframes`: put the player, target and focus frames back at their classic places.
 *   `/cgp bindings`, `/cgp edit`: how to open the key bindings and the action editor.
 *   `/cgp status`: current state and the last problem found.

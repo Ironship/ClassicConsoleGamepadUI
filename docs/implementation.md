@@ -233,11 +233,15 @@ matching the exported source commit's build **1.60.1 (70450)**.
   at most every 0.1 s, only when `GetBindingAction(key, true)` shows one of its buttons bound to something else;
   `Input.lua` does the same for the action bar keys (`BindingsLost`). `/cgp keyboard debug` lists what each button is bound to.
 - The phone layouts compose a word in a buffer of their own (shown in a strip above the keys) and put it into the chat
-  line only when it is accepted (Y adds a space, the 0 key of the smart layout, Done), so the line is the only state
-  shared with the game. Tap cycles a key's letters (1.5 s, a move of the selection or RB ends a letter), Smart keeps the digits
-  of the word and asks `Words.lua` for matches (exact digit sequence by use count, then longer words that start with
-  it), Hybrid taps letters and asks `Words:Prefix` for words that begin with them. `db.keyboardLanguage` (EN, DE, PL) picks
-  the full layout and the letters under the phone keys, `db.keyboardPhone` the T9 mode (Hybrid by default). Words come
+  line only when it ends. Y, the Space key and the 0 key end it with a space (`Keyboard:Flush(true)`); Done and X end it
+  without one. The 0 key of Tap and Hybrid turns the space it just added into a 0 on a quick second press (`Keyboard:Zero`),
+  so a space is never part of the buffer and the suggestions only ever look at the word being typed. The line is the only
+  state shared with the game. Tap cycles a key's letters (1.5 s, a move of the selection or RB ends a letter), Smart keeps
+  the digits of the word and asks `Words.lua` for matches (exact digit sequence by score, then longer words that start with
+  it), Hybrid taps letters and asks `Words:Prefix` for words that begin with them. `db.keyboardLanguage` (EN, DE, PL, FR,
+  ES, IT, PT, see `Languages.lua`) picks the full layout and the letters under the phone keys, `db.keyboardMode` the layout
+  in use (`abc`, `t9`, `t9p`, `t9h`; Hybrid by default) and `db.keyboardPhone` the phone layout that the mode key goes back
+  to. Words come
   from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events, a post-hook on `SendChatMessage` and
   the words accepted on the keyboard; item links and colours are stripped and only letters are kept. Past 6000
   words the 4500 most used are kept. `db.keyboardEnabled` (the settings window's Keyboard tab, on by default) turns all of
@@ -245,6 +249,35 @@ matching the exported source commit's build **1.60.1 (70450)**.
   hides an open keyboard, `Words:Learn` returns before it reads the text, so the word index is not even built, and the
   chat-focus callbacks schedule nothing before a pad exists. The hooks stay installed (a post-hook cannot be taken back) and
   find nothing to do. The rows that depend on it are dimmed in the window (a `parent`).
+- The full keyboard types straight into the chat line, so it has no buffer (`Keyboard:Pending` is empty in mode `abc`). Its row of
+  suggestions (`UpdateHints`) is made for the word at the end of the line (`TypedWord`: its letters, nothing while a slash command
+  is being typed), and read again with the 0.25 s check (`WatchTyped`) because the line also changes by other means. `Complete`
+  replaces those letters with `SetText` (the cursor goes to the end, like `Delete`), adds a space and teaches the word; LB/RB
+  cycle with `Cycle`, Y and the Space key take the chosen one, a click `Choose`s it.
+- Languages and texts. `Locales.lua` keeps the texts: each file in `Locales/` registers one language (`enUS` is the base, a key
+  a language leaves out is shown in English) and `Addon.L.key` reads the language in use (`db.language`: a code, or `auto` for
+  the game client's; English by default). Changing it makes `SettingsWindow:Relocalize` (tabs and pages are built again, the
+  pad selection stays on its row) and `Keyboard:Relocalize` (keys and prompts) rebuild what holds texts; the Options > AddOns
+  button keeps its text until the next reload. `Languages.lua` holds what the keyboard knows about each typing language (the
+  rows of the full keyboard, the letters under the phone keys, common words) and the letter tables (`Upper`, `Lower`, `DIGIT`),
+  which work by byte range and table so they never depend on the client's locale.
+- Fonts. The game's interface font (Friz Quadrata) has only ó and ł of the Polish letters; ą ć ę ń ś ź ż show as boxes.
+  `Fonts.lua` makes copies of the game's font objects (`CGPFont...`, `CopyFontObject`) that every text of the addon uses
+  (`Fonts:String`, `Fonts:Button` for the three fonts of a button). `Fonts:Update` puts the chat's font file
+  (`ChatFontNormal:GetFont()`, Arial Narrow, 8 % bigger) under the interface copies while the interface language is Polish and
+  under the key copies (keys, the strip, suggestions) while the keyboard types Polish; a font object passes the change on to
+  every text that uses it. The game's own tooltip cannot be changed, so the settings window shows its tips in a tooltip of its
+  own while the interface is Polish, and the two Polish texts that reach the game's tooltips (`openTip`, `stickCenter`) are
+  written without the missing letters.
+- `WordSources.lua` reads word lists for `Words.lua` and never writes to or loads anything of the other add-ons. English: the
+  quest texts of English Quest Panel (`WordHunterWoW_QuestEN`), counted per word (names a little lower, words seen once left
+  out). German, French, Spanish, Italian, Portuguese: the dictionary a WordHunterWoW dictionary registered with the base add-on
+  (`WordHunterWoW_Addon.DictionaryProviders[locale]`; the keys are the words, there are no counts, "ignored" entries are names).
+  The load-on-demand dictionaries (24-54 MiB each) are used only once the base add-on has loaded them. Reading is a coroutine
+  resumed from an `OnUpdate` for 3 ms a frame, not in combat. The result is a `Lexicon` of 1-2 MB (15,000 to 110,000 words in
+  buckets by their first three keys, plus the best words per first key and first letter for the shortest input), kept for the
+  language in use only. `Words:Lookup` and `Words:Prefix` merge it with the player's own words and the common ones by score: the
+  source's weight (0-31), 8 for a common word, up to 24 for use.
 - The settings window (`SettingsWindow.lua`) is made of plain frames (`ButtonFrameTemplate`, `PanelTopTabButtonTemplate`,
   `UIPanelButtonTemplate`; no secure templates), so it opens in combat and in Gamepad Mode, and Options > AddOns has one
   button (`CreateSettingsButtonInitializer`) that opens it. In Gamepad Mode it takes the pad with

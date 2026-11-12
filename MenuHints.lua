@@ -3,10 +3,6 @@ local Hints = { buttons = {} }
 Addon.MenuHints = Hints
 
 local directions = { "→", "↗", "↑", "↖", "←", "↙", "↓", "↘" }
-local centerText = ({
-    deDE = "Stick zur Mitte zurückführen",
-    plPL = "puść drążek do środka",
-})[GetLocale()] or "return the stick to center"
 
 function Hints:KeyText(key)
     local parts = InputIconTextureSetUtility.GetInputIconNameFromBindingKey(key)
@@ -49,7 +45,7 @@ function Hints:GetHint(button)
                         for _ = 1, math.abs(pageIndex - 2) do route[#route + 1] = KeyText(prompt.mappedButtonKey) end
                     end
                     route[#route + 1] = KeyText(GAMEPAD_STICK_RIGHT) .. " " .. directions[index]
-                    return table.concat(route, " > ") .. "\n" .. centerText
+                    return table.concat(route, " > ") .. "\n" .. Addon.L.stickCenter
                 end
             end
         end
