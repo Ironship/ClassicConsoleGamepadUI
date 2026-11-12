@@ -7,6 +7,8 @@ local text = ({
         enabled = "Klasyczny interfejs",
         enabledTip = "Włącz ClassicConsoleGamepadUI, gdy aktywny jest tryb interfejsu pada. Zmiana podczas walki zostanie zastosowana po jej zakończeniu.",
         compact = "Kompaktowe paski (8 pól)",
+        moveUnitFrames = "Klasyczne ramki gracza, celu i focusu",
+        moveUnitFramesTip = "Ustawia te ramki w ich klasycznych miejscach. Przeciągnij je w trybie edycji i zapisz układ, a miejsce zostanie zapamiętane (/cgp resetframes cofa). Wyłącz, aby ramkami rządził wyłącznie tryb edycji pada.",
         compactTip = "Skróć trzy paski do 8 pól. L2 i R2 mają stałe sekcje u góry; L2+R2 pokazuje swoje akcje na dole. Wyłącz, aby użyć układu 12 pól, np. na Steam Decku. Zmiana podczas walki zostanie zastosowana po jej zakończeniu.",
         bindingsTip = "Zmień skróty klawiatury i przyciski pada w edytorze gry. Przypisania zapisuje gra, a podpowiedzi ClassicConsoleGamepadUI odświeżają się automatycznie.",
         bind = "Przypisz klawisze z pasków",
@@ -26,6 +28,8 @@ local text = ({
         enabled = "Klassische Benutzeroberfläche",
         enabledTip = "ClassicConsoleGamepadUI verwenden, wenn der Gamepad-Modus aktiv ist. Änderungen im Kampf werden danach angewendet.",
         compact = "Kompakte Leisten (8 Plätze)",
+        moveUnitFrames = "Klassische Spieler-, Ziel- und Fokusrahmen",
+        moveUnitFramesTip = "Setzt diese Rahmen an ihre klassischen Plätze. Im Bearbeitungsmodus ziehen und das Layout speichern, dann merkt sich das Addon den Platz (/cgp resetframes setzt zurück). Deaktivieren, damit nur der Bearbeitungsmodus des Gamepads die Rahmen steuert.",
         compactTip = "Drei Leisten auf 8 Plätze verkürzen. L2 und R2 bleiben oben; L2+R2 zeigt seine Aktionen unten. Für 12 Plätze, z. B. auf dem Steam Deck, deaktivieren. Änderungen im Kampf werden danach angewendet.",
         bindingsTip = "Tastatur- und Controllerbelegungen im Spieleditor ändern. Das Spiel speichert die Belegungen; ClassicConsoleGamepadUI aktualisiert die Hinweise automatisch.",
         bind = "Tasten auf den Leisten zuweisen",
@@ -45,6 +49,8 @@ local text = ({
     enabled = "Classic interface",
     enabledTip = "Use ClassicConsoleGamepadUI while the game's Gamepad Mode is enabled. Changes during combat apply when combat ends.",
     compact = "Compact bars (8 slots)",
+    moveUnitFrames = "Classic player, target and focus frames",
+    moveUnitFramesTip = "Places these frames at their classic positions. Drag them in Edit Mode and save the layout and the new place is remembered (/cgp resetframes undoes it). Disable to let the gamepad layout's Edit Mode alone place the frames.",
     compactTip = "Shorten all three bars to 8 slots. L2 and R2 stay in fixed sections above; L2+R2 shows its actions below. Disable for 12 slots, for example on Steam Deck. Changes during combat apply when combat ends.",
     bindingsTip = "Change keyboard and controller bindings in the game's editor. The game saves bindings and ClassicConsoleGamepadUI refreshes its hints automatically.",
     bind = "Assign keys from the bars",
@@ -88,6 +94,21 @@ local extraText = ({
         bindPending = "Zamknij ustawienia, aby rozpocząć przypisywanie.",
         editRouteKey = "Natywny edytor akcji otworzysz przyciskiem: %s",
         editRouteCommand = "Wpisz na czacie /click GamepadActionBarEditFrameEnterEditMode, aby otworzyć natywny edytor akcji.",
+        keyboard = "Klawiatura ekranowa", autoKeyboard = "Klawiatura ekranowa przy pisaniu na chacie",
+        autoKeyboardTip = "W trybie pada otwiera klawiaturę ekranową, gdy zaczynasz pisać na chacie. Klawiaturę otwierasz też komendą /cgp keyboard lub przyciskiem w Skróty klawiszowe.",
+        keyboardTip = "Pokaż lub ukryj klawiaturę ekranową do pisania na chacie. Klikaj klawisze myszą; przeciągnij ją, aby zmienić miejsce.",
+        keyboardLanguage = "Język klawiatury ekranowej",
+        keyboardLanguageTip = "Układ klawiatury ekranowej i litery pod klawiszami T9: EN (QWERTY), DE (QWERTZ z ä ö ü ß), PL (QWERTY z polskimi literami). Wybór jest zapamiętywany.",
+        keyboardInput = "Tryb T9 klawiatury ekranowej",
+        keyboardInputTip = "Tap: naciskaj klawisz kilka razy, aby wybrać literę. Smart: naciskaj każdy klawisz raz i wybierz słowo z podpowiedzi. Hybrid: pisz literami jak w Tap, a podpowiedzi uzupełniają słowo (LB/RB wybierają, Y akceptuje).",
+        inputTap = "Tap (wielokrotne naciśnięcia)", inputSmart = "Smart (podpowiedzi)", inputHybrid = "Hybrid (Tap + podpowiedzi)",
+        tabGeneral = "Ogólne", tabHints = "Podpowiedzi", tabKeyboard = "Klawiatura", tabTools = "Narzędzia",
+        padHint = "%s/%s: wybór  ·  %s/%s: zmiana  ·  %s: użyj  ·  %s: zamknij  ·  %s/%s: karty",
+        forgetWords = "Zapomnij nauczone słowa",
+        forgetWordsTip = "Czyści listę słów, których uczą się podpowiedzi klawiatury z czatu i tekstów zadań.",
+        wordsForgotten = "Nauczone słowa zapomniane.",
+        confirmAgain = "Kliknij ponownie, aby potwierdzić",
+        openTip = "Otwórz okno ustawień. Możesz też wpisać /cgp.",
         items = "Przedmioty", easyDelete = "Łatwe usuwanie: X, X, A, A",
         easyDeleteTip = "W oknie usuwania wymagającym sekwencji przycisków użyj X, X, A, A. Czwarty przycisk zatwierdza usunięcie. B nadal anuluje, błędny przycisk zeruje sekwencję. Działa poza walką w trybie pada.",
     },
@@ -117,6 +138,21 @@ local extraText = ({
         bindPending = "Einstellungen schließen, um mit dem Zuweisen zu beginnen.",
         editRouteKey = "Den nativen Aktionseditor öffnest du mit: %s",
         editRouteCommand = "Im Chat /click GamepadActionBarEditFrameEnterEditMode eingeben, um den nativen Aktionseditor zu öffnen.",
+        keyboard = "Bildschirmtastatur", autoKeyboard = "Bildschirmtastatur beim Chatten",
+        autoKeyboardTip = "Öffnet im Gamepad-Modus die Bildschirmtastatur, sobald du im Chat schreibst. Auch mit /cgp keyboard oder über die Schaltfläche bei den Tastenbelegungen.",
+        keyboardTip = "Bildschirmtastatur zum Schreiben im Chat ein- oder ausblenden. Tasten mit der Maus anklicken; zum Verschieben ziehen.",
+        keyboardLanguage = "Sprache der Bildschirmtastatur",
+        keyboardLanguageTip = "Layout der Bildschirmtastatur und Buchstaben unter den T9-Tasten: EN (QWERTY), DE (QWERTZ mit ä ö ü ß), PL (QWERTY mit polnischen Buchstaben). Die Wahl wird gemerkt.",
+        keyboardInput = "T9-Modus der Bildschirmtastatur",
+        keyboardInputTip = "Tap: Taste mehrmals drücken, um den Buchstaben zu wählen. Smart: jede Taste einmal drücken und das Wort aus den Vorschlägen wählen. Hybrid: Buchstaben wie bei Tap tippen, Vorschläge ergänzen das Wort (LB/RB wählen, Y übernimmt).",
+        inputTap = "Tap (mehrfach drücken)", inputSmart = "Smart (Vorschläge)", inputHybrid = "Hybrid (Tap + Vorschläge)",
+        tabGeneral = "Allgemein", tabHints = "Hinweise", tabKeyboard = "Tastatur", tabTools = "Werkzeuge",
+        padHint = "%s/%s: wählen  ·  %s/%s: ändern  ·  %s: benutzen  ·  %s: schließen  ·  %s/%s: Tabs",
+        forgetWords = "Gelernte Wörter vergessen",
+        forgetWordsTip = "Löscht die Wortliste, die die Vorschläge der Tastatur aus Chat und Questtexten lernen.",
+        wordsForgotten = "Gelernte Wörter vergessen.",
+        confirmAgain = "Zum Bestätigen erneut klicken",
+        openTip = "Das Einstellungsfenster öffnen. Du kannst auch /cgp eingeben.",
         items = "Gegenstände", easyDelete = "Einfaches Zerstören: X, X, A, A",
         easyDeleteTip = "Im Zerstörungsdialog mit Tastenkombination X, X, A, A drücken. Die vierte Taste bestätigt das Zerstören. B bricht weiterhin ab; eine falsche Taste setzt die Folge zurück. Nur außerhalb des Kampfes im Gamepad-Modus.",
     },
@@ -145,6 +181,21 @@ local extraText = ({
     bindPending = "Close the settings to start assigning keys.",
     editRouteKey = "Open the native action editor with: %s",
     editRouteCommand = "Type /click GamepadActionBarEditFrameEnterEditMode in chat to open the native action editor.",
+    keyboard = "On-screen keyboard", autoKeyboard = "On-screen keyboard when typing in chat",
+    autoKeyboardTip = "In Gamepad Mode, open the on-screen keyboard when you start typing in chat. You can also open it with /cgp keyboard or the button under key bindings.",
+    keyboardTip = "Show or hide an on-screen keyboard for typing in chat. Click the keys with the mouse; drag it to move it.",
+    keyboardLanguage = "On-screen keyboard language",
+    keyboardLanguageTip = "Layout of the on-screen keyboard and the letters under the T9 keys: EN (QWERTY), DE (QWERTZ with ä ö ü ß), PL (QWERTY with Polish letters). The choice is remembered.",
+    keyboardInput = "On-screen keyboard T9 mode",
+    keyboardInputTip = "Tap: press a key repeatedly to pick the letter. Smart: press each key once and pick the word from the suggestions. Hybrid: tap the letters as in Tap and let the suggestions complete the word (LB/RB choose, Y accepts).",
+    inputTap = "Tap (repeated presses)", inputSmart = "Smart (suggestions)", inputHybrid = "Hybrid (Tap + suggestions)",
+    tabGeneral = "General", tabHints = "Hints", tabKeyboard = "Keyboard", tabTools = "Tools",
+    padHint = "%s/%s: select  ·  %s/%s: adjust  ·  %s: activate  ·  %s: close  ·  %s/%s: tabs",
+    forgetWords = "Forget learned words",
+    forgetWordsTip = "Clears the word list the keyboard's suggestions learn from chat and quest texts.",
+    wordsForgotten = "Learned words forgotten.",
+    confirmAgain = "Click again to confirm",
+    openTip = "Open the settings window. You can also type /cgp.",
     items = "Items", easyDelete = "Easy deletion: X, X, A, A",
     easyDeleteTip = "Use X, X, A, A in item deletion dialogs that require a button sequence. The fourth press confirms deletion. B still cancels; a wrong button resets the sequence. Available outside combat in Gamepad Mode.",
 }
@@ -153,6 +204,7 @@ for key, value in pairs(extraText) do text[key] = value end
 local controls = {
     { key = "enabled", default = true, section = "layout" },
     { key = "compact", default = true },
+    { key = "moveUnitFrames", default = true },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
     { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
     { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, tip = "menuTip" },
@@ -169,13 +221,52 @@ local controls = {
     { key = "chatBottom", default = 0, min = 0, max = 800, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "raiseChat", default = true },
     { key = "chatGap", default = 12, min = 0, max = 100, step = 2, parent = "raiseChat" },
+    { key = "autoKeyboard", default = false },
     { key = "easyDelete", default = false, section = "items" },
 }
 
 local geometrySettings = { compact = true, contextGap = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
+-- Shared with the settings window (SettingsWindow.lua).
+Options.text, Options.controls = text, controls
+Options.choices = {
+    keyboardLanguage = { { "EN", "English (QWERTY)" }, { "DE", "Deutsch (QWERTZ)" }, { "PL", "Polski (QWERTY)" } },
+    keyboardPhone = { { "t9", text.inputTap }, { "t9p", text.inputSmart }, { "t9h", text.inputHybrid } },
+}
+
+-- A setting was changed in the settings window (its value is already in the database).
+function Options:Changed(key)
+    Addon:Trace("setting " .. key)
+    Addon:CheckNativeTaint("setting changed: " .. key)
+    if key == "keyboardLanguage" then
+        Addon.Keyboard:SetLanguage(Addon.db[key])
+    elseif key == "keyboardPhone" then
+        if (Addon.Keyboard.mode or Addon.db.keyboardMode) ~= "abc" then Addon.Keyboard:SetMode(Addon.db[key]) end
+    else
+        if geometrySettings[key] then Addon.Layout.dirty = true end
+        Addon:QueueRefresh(true)
+    end
+end
+
+local KEYBOARD_LANGUAGES = { "EN", "DE", "PL" }
+local KEYBOARD_INPUTS = { "t9", "t9p", "t9h" }
+
+local function Contains(list, value)
+    for _, item in ipairs(list) do
+        if item == value then return true end
+    end
+end
+
 function Options:InitializeDefaults()
+    if not Contains(KEYBOARD_LANGUAGES, Addon.db.keyboardLanguage) then Addon.db.keyboardLanguage = "EN" end
+    -- Hybrid is the default T9 mode; whatever was saved while it did not exist yet is replaced once.
+    if not Addon.db.hybridDefault then
+        Addon.db.hybridDefault = true
+        Addon.db.keyboardPhone = "t9h"
+        if Addon.db.keyboardMode ~= "abc" then Addon.db.keyboardMode = "t9h" end
+    end
+    if not Contains(KEYBOARD_INPUTS, Addon.db.keyboardPhone) then Addon.db.keyboardPhone = "t9h" end
     for _, info in ipairs(controls) do
         local value = Addon.db[info.key]
         if type(value) ~= type(info.default) or (info.min and (value ~= value or value < info.min or value > info.max)) then
@@ -435,6 +526,7 @@ end
 
 function Options:BindFromBars()
     if not OutsideCombat() then return end
+    Addon.SettingsWindow:Hide()
     if SettingsPanel:IsShown() then
         -- Let the player close Settings; closing it from here taints its teardown.
         self.pendingBind = true
@@ -455,54 +547,17 @@ function Options:ObserveSettingsPanel()
     end)
 end
 
+-- Options > AddOns has one button that opens the settings window.
 function Options:Register()
     local category, layout = Settings.RegisterVerticalLayoutCategory("ClassicConsoleGamepadUI")
     self.category = category
-    local initializers = {}
-    for _, info in ipairs(controls) do
-        if info.section then layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text[info.section])) end
-        local key = info.key
-        local setting = Settings.RegisterAddOnSetting(category, "CLASSICCONSOLEGAMEPADUI_" .. key:upper(), key, Addon.db,
-            info.min and Settings.VarType.Number or Settings.VarType.Boolean, text[key], info.default)
-        setting:SetValueChangedCallback(function()
-            Addon:Trace("setting " .. key)
-            Addon:CheckNativeTaint("setting changed: " .. key)
-            -- Non-layout options must not rebuild native frames while Settings owns focus.
-            if geometrySettings[key] then Addon.Layout.dirty = true end
-            Addon:QueueRefresh(true)
-        end)
-        local tooltip = text[info.tip or (key .. "Tip")]
-        local initializer
-        if info.min then
-            local options = Settings.CreateSliderOptions(info.min, info.max, info.step)
-            options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
-                if key == "promptScale" or key == "modifierScale" then return math.floor(value * 100 + 0.5) .. "%" end
-                return tostring(math.floor(value + 0.5))
-            end)
-            initializer = Settings.CreateSlider(category, setting, options, tooltip)
-        else
-            initializer = Settings.CreateCheckbox(category, setting, tooltip)
-        end
-        initializers[key] = initializer
-        if info.parent then initializer:SetParentInitializer(initializers[info.parent]) end
-    end
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(SETTINGS_KEYBINDINGS_LABEL))
-    for _, info in ipairs({
-        { text.bind, text.bindTip, function() self:BindFromBars() end },
-        { SETTINGS_KEYBINDINGS_LABEL, text.bindingsTip, function() self:OpenBindings() end },
-        { text.actions, text.actionsTip, function() self:EditActions() end },
-        { GAMEPAD_LABEL, text.controlsTip, function() self:OpenGamepad() end },
-    }) do
-        layout:AddInitializer(CreateSettingsButtonInitializer(info[1], text.open, info[3], info[2], true))
-    end
+    layout:AddInitializer(CreateSettingsButtonInitializer("ClassicConsoleGamepadUI", text.open, function()
+        Addon.SettingsWindow:Open()
+    end, text.openTip, true))
     Settings.RegisterAddOnCategory(category)
     self:ObserveSettingsPanel()
 end
 
 function Options:Open()
-    if not CanDrivePanels() then
-        Addon:Print(text.panelRoute)
-        return
-    end
-    Settings.OpenToCategory(self.category:GetID())
+    Addon.SettingsWindow:Toggle()
 end

@@ -1,6 +1,6 @@
 # AI Instructions
 
-These instructions apply to the entire UsefulPlatesAndTooltips repository.
+These instructions apply to the entire ClassicConsoleGamepadUI repository.
 
 ## Strict Rule: No Unit Test Generation
 

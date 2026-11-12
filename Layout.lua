@@ -11,6 +11,8 @@ local function Frames()
         { "MainStatusTrackingBarContainer", MainStatusTrackingBarContainer },
         { "MultiBarBottomRight", MultiBarBottomRight }, { "MultiBarBottomLeft", MultiBarBottomLeft },
         { "LeftEndCap", caps and caps.LeftEndCap }, { "RightEndCap", caps and caps.RightEndCap },
+        -- Placed from the classic bars (PlaceTotemBar), so its keyboard place is not saved.
+        { "MultiCastActionBarFrame", MultiCastActionBarFrame, true },
     }
 end
 
@@ -53,6 +55,9 @@ local function Apply(frame, layout)
     return true
 end
 
+-- HUD.lua snapshots and restores the unit frames the same way.
+Layout.Snapshot, Layout.Apply = Snapshot, Apply
+
 function Layout:CanCaptureKeyboard()
     if InCombatLockdown() or self.active or Addon:IsGamepadMode() then return false end
     local manager = EditModeManagerFrame
@@ -65,7 +70,7 @@ function Layout:Capture()
     for _, entry in ipairs(Frames()) do
         local key, frame = entry[1], entry[2]
         -- Hidden bars can still carry their XML placeholder at TOPLEFT, 0, 0.
-        if frame and frame:IsVisible() then
+        if frame and not entry[3] and frame:IsVisible() then
             local snapshot = Snapshot(frame, true)
             if snapshot then Addon.db.keyboardBars[key] = snapshot end
         end
@@ -216,6 +221,27 @@ end
 
 function Layout:SetBottomLeft(frame, x, y)
     Anchor(frame, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+end
+
+-- The Shaman's totem bar is a mouse bar that the game shows in Gamepad Mode too, in the place its gamepad layout gives
+-- it (128 points up, just left of the middle), which is on top of the classic bars. The keyboard layout stacks it above
+-- every other bottom bar, indented past the end cap (EditModeManager:UpdateBottomActionBarPositions); this puts it above
+-- the classic bars the same way. left and top are the stack's left edge and top in UIParent points. A bar the player
+-- moved in Edit Mode stays where it is; Restore puts the game's anchor back.
+function Layout:PlaceTotemBar(left, top)
+    local bar = MultiCastActionBarFrame
+    if not bar or InCombatLockdown() or not left or not top then return end
+    if type(bar.IsInDefaultPosition) ~= "function" or not bar:IsInDefaultPosition() then return end
+    local ratio = UIParent:GetEffectiveScale()
+    local scale = bar:GetEffectiveScale() / ratio
+    if not scale or scale <= 0 then return end
+    local unit = MainActionBar and MainActionBar:GetEffectiveScale() / ratio or 1
+    local x = left + (BOTTOM_ACTION_BAR_DEFAULT_OFFSET_X or 30) * unit
+    local y = top + (BOTTOM_ACTION_BARS_SPACER_Y or 4) * unit
+    -- Never off the screen.
+    x = math.max(0, math.min(x, UIParent:GetWidth() - bar:GetWidth() * scale))
+    y = math.max(0, math.min(y, UIParent:GetHeight() - bar:GetHeight() * scale))
+    Anchor(bar, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
 end
 
 function Layout:SetStatusWidth(frame, width)

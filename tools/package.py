@@ -2,13 +2,34 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
+import time
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "ClassicConsoleGamepadUI"
+FALLBACK_DATE = (2026, 10, 22, 0, 0, 0)
+
+
+def archive_date():
+    """The timestamp of every file in the ZIP: SOURCE_DATE_EPOCH, else the date of the last commit, else a fixed
+    date, so the same sources always give the same archive."""
+    epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if not epoch.isdigit():
+        try:
+            epoch = subprocess.run(["git", "-C", str(ROOT), "log", "-1", "--format=%ct"], capture_output=True,
+                                   text=True, check=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            epoch = ""
+    if not epoch.isdigit():
+        return FALLBACK_DATE
+    when = time.gmtime(int(epoch))
+    if when.tm_year < 1980:
+        return FALLBACK_DATE
+    return (when.tm_year, when.tm_mon, when.tm_mday, when.tm_hour, when.tm_min, when.tm_sec - when.tm_sec % 2)
 
 
 def main():
@@ -41,9 +62,10 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     # CurseForge expects one top-level folder named after the TOC.
     destination = args.output / f"{NAME}-{version}.zip"
+    date = archive_date()
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, data in sorted(payload.items()):
-            info = zipfile.ZipInfo(f"{NAME}/{name}", date_time=(2026, 10, 22, 0, 0, 0))
+            info = zipfile.ZipInfo(f"{NAME}/{name}", date_time=date)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, data)

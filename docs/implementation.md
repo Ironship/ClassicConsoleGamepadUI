@@ -78,6 +78,31 @@ matching the exported source commit's build **1.60.1 (70450)**.
   presses from physical mouse clicks before forwarding the effective left button.
   Keyboard casts follow the native key-down setting; mouse casts wait for release.
   Native flyout visibility securely hides/resumes hitboxes and their bindings.
+- `Blizzard_GamepadActionBars/FlyoutRadial.lua`, `PageUnit.lua`, `Camelot/ClassSpellFlyout.lua` and
+  `Blizzard_Flyout/Flyout.lua`: a selection radial is a `GamepadFlyoutTemplate` frame (`SecureFrameTemplate`, so
+  protected; DIALOG strata, toplevel). The warrior's stances, the druid's forms and the paladin's auras are flyouts 269,
+  262 and 270 on `RightClassAction` / `LeftClassAction`; the pet commands and any bar button's flyout work the same way.
+  `AttachToButton` hangs the flyout off UIParent, moves the button into it and centres it on the button's stock place;
+  the right stick selects (`UpdateSelection`) and a release in the dead zone clicks the choice. Only a bar button's
+  flyout makes `PageUnit:OnFlyoutOpened` fade the page unit to 0.35 (a class action has no `parentActionBar`). The radial
+  therefore shows over the faded stock HUD, and `Display:Refresh` keeps the classic bars up under it, faded to the same
+  alpha, instead of switching to the native view: that switch moved the bags, micro menu, status bars and chat back to
+  their stock places while the radial was open, and in combat it could not be undone until the fight ended. The radial
+  is not moved (a protected frame cannot be anchored in combat). The action editor's radials still use the native view,
+  because the bars are drawn above the editor's dimmed screen there.
+- `Blizzard_ActionBar/Shared/MultiCastActionBarFrame.lua`, `Blizzard_ActionBarController/ActionBarController.lua`,
+  `Blizzard_EditMode/Camelot/EditModeUtil.lua` and `Mainline/EditModePresetLayouts.lua`: the Shaman's totems are a mouse bar
+  (four slots with a flyout on hover, the summon and recall spells), not a selection radial: `ClassSpellFlyout.lua` knows
+  only the druid, paladin and warrior, and `Blizzard_GamepadActionBars` has nothing about totems. `TotemActionBarMixin:
+  UpdateShownState` does not ask `InputUtil.IsMKBUIEnabled()` (the stance bar's `ShouldShow` does), so the bar is shown in
+  Gamepad Mode, at the gamepad layout's anchor for it (`EDIT_MODE_GAMEPAD_SYSTEM_MAP` copies the modern one: `RIGHT` of the
+  bottom middle, -28 and 128 up). The gamepad layouts have no bottom bar stack (`EditModeUtil.GetBottomActionBars` returns an
+  empty list), so nothing lifts it over the classic bars. `Layout:PlaceTotemBar` anchors it with `SetPointBase` to the left
+  end of the bottom row plus the 30 point indent (`BOTTOM_ACTION_BAR_DEFAULT_OFFSET_X`), above the top of the upper row, the
+  class actions and the shoulder indicators plus `BOTTOM_ACTION_BARS_SPACER_Y`, outside combat and only while
+  `IsInDefaultPosition()` holds (a bar dragged in Edit Mode stays). `Layout:Restore` puts the game's anchor back, and the
+  `ApplySystemAnchor` hook it shares with the other bars places it again after the game re-anchors it. The keyboard place of
+  the bar is not saved with the others.
 - The upper row stays fixed: L2 uses slots 13-20 and R2 uses slots 25-32.
   Compact mode hides 21-24 and 33-36, moves the right section left by four stock
   button pitches and shortens the main border by the same amount. The upper row is
@@ -164,6 +189,59 @@ matching the exported source commit's build **1.60.1 (70450)**.
   No shared native callback table is modified.
 - `Blizzard_EditMode/Mainline/EditModePresetLayouts.lua`: the classic unit-frame
   and bar anchors supply a fallback before a keyboard/mouse layout has been captured.
+- `Blizzard_EditMode/Shared/EditModeManager.lua`: `OnSystemPositionChange` runs after a drag or nudge,
+  `SaveLayouts` after Save (also right after `RevertAllChanges` when a preset is saved as a new layout) and
+  `RevertAllChanges` on exit. Post-hooks keep a drag of the player, target or focus frame as a pending move;
+  `SaveLayouts` commits it to `gamepadHUD`, a revert drops it. The classic place is then
+  `moves` > `gamepadHUD` > `keyboardHUD` > preset. The frames are not restored to the gamepad layout while
+  Edit Mode is open. The hooks are post-hooks: nothing in Edit Mode's tables is written.
+- No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation), so
+  `Keyboard.lua` draws one from plain unprotected frames. It acts only on a chat line the player has already opened
+  (`ChatFrameUtil.GetActiveWindow`; any shown `ChatFrameNEditBox` as fallback) and only with `Insert` and `SetText`.
+  It never opens, focuses or sends the line. `Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua`:
+  `OnEditFocusGained` and `SendMessage` (through `ClearChat`, `Hide` and `ChatFrameUtil.DeactivateChat`) run
+  `FrameControlsManager` and the `InputBindingManager` binding sets, and `SendText` calls `ParseText(1)`, which runs
+  secure slash commands. Called from addon code all of it runs with the addon's taint, and `securecallfunction`
+  does not change that: `CallbackRegistryMixin:TriggerEvent` uses it so that an addon callback's taint does not reach
+  the game's own caller, not the other way round. Sending is the game's: the footer's "A: send" is an
+  `InputFunctionBinding`, i.e. `PAD1` bound to the global button `InputFunctionBindingButton_PAD1`, whose `OnClick` calls
+  `PromptedBindingMixin:TriggerBinding` (only on a key down, so a secure `type = "click"` action, which calls
+  `Click(button)` with `down = false`, cannot trigger it). While the chat line has the focus,
+  `box.chatFrame.footer.isShown` is true (read raw: the footer is a mixin table whose metatable throws on a missing
+  field) and no word waits in the buffer, the header binds X straight to that button
+  (`SetBindingClick(true, "PAD3", "InputFunctionBindingButton_PAD1", "LeftButton")`, attribute `sendbutton`), so the
+  game runs its own send. `Keyboard:SyncSend` follows that state (the 0.25 s check, every change of the buffer, the
+  chat's focus callbacks). A waiting word goes into the line with the first X. Start is Done: the word goes into the
+  line and the keyboard closes. The keyboard also hides when a chat line it has seen closes.
+  `ChatFrame.OnEditBoxFocusGained` (EventRegistry callbacks run through `securecallfunction`) opens the keyboard with
+  the chat line when the setting is on, a frame later and not within the first five seconds after entering the world.
+- Keyboard controller: like `ItemDelete.lua`, a `SecureHandlerShowHideTemplate,SecureHandlerStateTemplate` header
+  binds the D-pad, face buttons, shoulders, triggers and Start/Back (and their SHIFT-/CTRL- variants, swallowed) to a
+  `SecureActionButtonTemplate` while the keyboard is shown in Gamepad Mode; its wrapped `OnClick` only bumps
+  `padcount`/`padtoken`, which an `OnAttributeChanged` hook reads. The `[combat]` state driver clears the bindings and
+  the keyboard's 0.25 s `OnUpdate` shows the header again after combat. The chat's footer
+  (`FloatingChatFrameMixin:CreateFooter`: PAD3 channels, PAD4 tab settings, PAD1 send, back prompt) binds its keys with
+  `SetOverrideBindingClick(UIParent, true, ...)` (`InputButtonBinding` / `InputFunctionBinding`), the same priority as the
+  header's `SetBindingClick(true, ...)`, and does it again at every `Gamepad.RefreshFrameFocus` and SmartNavigation
+  selection (`PromptedBindingFooterMixin:Refresh` / `RefreshBindingGroup`). The newest binding wins, so the keyboard
+  binds its buttons again after `InputBindingManager:AddBindingSet`, `RemoveSet` and `ClearBindings` (post-hooks), once,
+  at most every 0.1 s, only when `GetBindingAction(key, true)` shows one of its buttons bound to something else;
+  `Input.lua` does the same for the action bar keys (`BindingsLost`). `/cgp keyboard debug` lists what each button is bound to.
+- The phone layouts compose a word in a buffer of their own (shown in a strip above the keys) and put it into the chat
+  line only when it is accepted (Y adds a space, the 0 key of the smart layout, Done), so the line is the only state
+  shared with the game. Tap cycles a key's letters (1.5 s, a move of the selection or RB ends a letter), Smart keeps the digits
+  of the word and asks `Words.lua` for matches (exact digit sequence by use count, then longer words that start with
+  it), Hybrid taps letters and asks `Words:Prefix` for words that begin with them. `db.keyboardLanguage` (EN, DE, PL) picks
+  the full layout and the letters under the phone keys, `db.keyboardPhone` the T9 mode (Hybrid by default). Words come
+  from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events, a post-hook on `SendChatMessage` and
+  the words accepted on the keyboard; item links and colours are stripped and only letters are kept. Past 6000
+  words the 4500 most used are kept.
+- The settings window (`SettingsWindow.lua`) is made of plain frames (`ButtonFrameTemplate`, `PanelTopTabButtonTemplate`,
+  `UIPanelButtonTemplate`; no secure templates), so it opens in combat and in Gamepad Mode, and Options > AddOns has one
+  button (`CreateSettingsButtonInitializer`) that opens it. In Gamepad Mode it takes the pad with
+  `EnableGamePadButton` and an `OnGamePadButtonDown` handler that stops propagation for the buttons it uses.
+  `SetPropagateKeyboardInput` is blocked for addons in combat (a BugGrabber report from the keyboard frame), so these calls
+  are made out of combat only. It leaves the pad to the keyboard while that is shown.
 - `Blizzard_Gamepad/UI/PersistentInputLegend/GamepadPersistentInputLegend.xml`:
   the legend's native top-left anchor overlaps the classic player frame. Outside
   combat, position its root 16 UI points from the left edge and 12 points below the
@@ -204,7 +282,7 @@ matching the exported source commit's build **1.60.1 (70450)**.
 
 Native action HUD changes: temporarily set its root alpha to zero and disable
 invisible mouse hitboxes outside combat, recording click/motion flags separately.
-Restore the exact alpha/input state for native view, bindings and flyouts. The visual
+Restore the exact alpha/input state for native view and bindings. The visual
 mirror is intentionally not an extra set of spell-casting buttons.
 
 All addon state is stored in its private table or `ClassicConsoleGamepadUIDB`. Native page

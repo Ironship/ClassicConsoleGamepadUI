@@ -1,5 +1,174 @@
 # Changelog
 
+## 0.1.0-alpha.73
+
+- The Shaman's totem bar now sits above the classic bars. It is a mouse bar (`MultiCastActionBarFrame`) that the game shows in
+  Gamepad Mode too, in the place its gamepad layout gives it (128 points up, just left of the middle), which is on top of the
+  upper row and the shoulder indicators. It goes above the bars, indented past the end cap, the way the keyboard layout stacks
+  it, outside combat. A bar moved in Edit Mode stays where it was put, and leaving the classic bars puts the game's place back.
+  Totems have no selection radial in this client (the game's class radials are the druid's forms, the paladin's auras and the
+  warrior's stances), so the radial fix of alpha.72 does not concern them.
+
+## 0.1.0-alpha.72
+
+- Fix: the classic bars no longer give way to the game's own HUD while a selection radial is open (the warrior's
+  stances, the druid's forms, the paladin's auras, the pet commands, a bar button's flyout). The radial is the game's
+  own and is drawn over the classic bars, which fade while it is open, like the game's own bars do. Before, the bars,
+  bags, micro menu, status bars and chat all went back to their stock places for as long as the radial was open, and in
+  combat they stayed there until the fight ended (the classic bars cannot be built in combat). The radial itself is not
+  moved: it is a protected frame, centred on the game's own button. Only the action editor's radials still use the
+  native view.
+
+## 0.1.0-alpha.71
+
+- X sends the line again, and this time the game does the sending. While the chat line has the focus, the chat's footer
+  is up and no word waits in the keyboard's buffer, X is bound straight to the game's own button for PAD1 (the chat's
+  "A: send"), so the chat's code runs in the game's own call and not inside this addon's (that was the taint of
+  alpha.58 to alpha.69). A waiting word goes into the line with the first X, the next X sends. `/cgp keyboard debug`
+  shows `send=` (the button X is bound to, or nil).
+- The keyboard closes when the chat line closes (after a send, or when the line is closed with B).
+- The keyboard's texts follow the client's language (English, German, Polish).
+- Fix: Y with nothing waiting inserted a space as the first character of the line, and a line that starts with a space
+  is no slash command (`/cgp status` was sent to the chat as text). A space is never the first character and never
+  follows another space.
+- Fix: an edit box that was only shown (not active, not focused) counted as an open chat line.
+- `tools/package.py` stamps the files in the ZIP with the commit's date (or `SOURCE_DATE_EPOCH`) instead of a fixed date.
+
+## 0.1.0-alpha.70
+
+- Fix: X no longer sends the chat line. The send ran the game's chat code (closing the line, the footer's binding
+  sets, secure slash commands) with this addon's taint; `securecallfunction` does not remove it, it only keeps the callee's
+  taint away from its caller. That is the "interface action failed because of an addon" message after a send. X is now
+  Done, like Start: the word goes into the chat line, the keyboard lets go of the controller and the game's own A sends it.
+- Fix: the chat's footer binds A, X, Y and B again with every focus refresh and, with the same priority, the newest
+  binding wins, so it kept taking the controller from the keyboard (an A press then sent the half-typed line). The keyboard
+  now binds its buttons again right after the game's binding stack changes (post-hooks on `AddBindingSet`, `RemoveSet`
+  and `ClearBindings`; once, at most every tenth of a second, only when one of its buttons is bound to something else),
+  as well as from its 0.25 s check.
+- Fix: the settings window ignores the controller while the keyboard is shown (both used to move at once).
+- "Forget learned words" asks for a second click within four seconds.
+- The learned word list keeps its most used words when it grows past its limit. A list full of words that had all been
+  seen more than once used to stay too big, and every chat message then rebuilt the whole index.
+- A part of the addon that fails while it starts (hooks, options, keyboard) is reported and no longer stops the parts
+  after it.
+
+## 0.1.0-alpha.69
+
+- Keyboard: Hybrid is the default T9 mode (a saved Tap or Smart choice is replaced once).
+
+## 0.1.0-alpha.68
+
+- Settings: a window of its own (`/cgp`) with tabs General, Hints, Chat, Keyboard and Tools, replacing the long list in the game's Settings panel. Plain frames, so it opens in combat and in Gamepad Mode; with a controller D-pad up/down select, left/right adjust, A activates, LB/RB switch tabs, B closes. Options > AddOns > ClassicConsoleGamepadUI keeps one button that opens it. The window position is remembered.
+
+## 0.1.0-alpha.67
+
+- Keyboard: new Hybrid T9 mode (tap the letters, suggestions complete the word; LB/RB pick, Y accepts). Words typed in Tap mode are learned too.
+- The keyboard language and the T9 mode (Tap, Smart, Hybrid) moved from keys on the keyboard to the addon's settings (On-screen keyboard); both are remembered. `/cgp keyboard hybrid`.
+
+## 0.1.0-alpha.66
+
+- Keyboard: a language key (EN, DE, PL) switches the layout and remembers the choice. EN is plain QWERTY, DE is QWERTZ with ä ö ü ß, PL is QWERTY with an extra row of Polish letters. The phone layouts get the letters of the language under their keys. `/cgp keyboard en|de|pl` sets it too.
+
+## 0.1.0-alpha.65
+
+- Keyboard: the full layout is always QWERTY (no Y/Z swap on German clients); the keys for ä ö ü ß stay at the ends of the rows.
+
+## 0.1.0-alpha.64
+
+- Keyboard: the strip above the T9 keys says which layout is active (Tap or Smart) and how it works; the Smart key is highlighted while the smart layout is on, and the strip says when no word matches.
+
+## 0.1.0-alpha.63
+
+- Fix: removed the raw pad button probe of alpha.60 (`SetPropagateKeyboardInput` is protected and was blocked when the keyboard opened with the chat line in combat).
+- The keyboard that opens with the chat line now does so a frame later, outside the game's own call that opens the line.
+
+## 0.1.0-alpha.62
+
+- Keyboard: the T9 layouts compose a word in a buffer of their own, shown in a strip above the keys, and put it in the chat line only when it is accepted (Y adds a space, X sends, Done, the 0 key of the smart layout). Multi-tap no longer depends on the chat text, so repeated presses cycle through the letters; a pause of 1.5 s, a move of the selection or RB (multi-tap layout) ends a letter.
+
+## 0.1.0-alpha.61
+
+- Keyboard: Blizzard-style look (dialog frame, tooltip-border keys with a gold edge on the selected key) and lower on the screen by default.
+- Keyboard: the button prompts are icons (round A/B/X/Y, D-pad cross, LB/RB/LT/RT/Start plates) with a short label, in the style of the game's own prompts.
+
+## 0.1.0-alpha.60
+
+- Keyboard: when the chat takes over a pad button's binding (it sets its own when the line opens), the keyboard binds its buttons again, at most once a second.
+- `/cgp keyboard debug` shows what each pad button is bound to and whether raw pad buttons reach the keyboard.
+
+## 0.1.0-alpha.59
+
+- Keyboard: no longer opens by itself at login (the chat reports focus while loading in); it opens with the chat line only from 5 seconds after entering the world, and an automatically opened keyboard closes when the chat line does.
+
+## 0.1.0-alpha.58
+
+- Keyboard buttons follow the chat's own prompts: A key, X sends the line, B closes, Y accepts the suggested word (a space elsewhere), RT deletes, LT shift, Start done.
+- Sending goes through securecallfunction so the chat's own code is not run with this addon's taint.
+
+## 0.1.0-alpha.57
+
+- Keyboard: X accepts the suggested word (and adds a space) in the smart T9 layout; RT deletes in every layout (X deletes in the others).
+- Keyboard: finds the open chat line even when the game does not report it as active, and shows "No chat line is open" on the keyboard when there is none.
+
+## 0.1.0-alpha.56
+
+- Keyboard controller buttons: B closes the keyboard, X deletes, Y is space, LT is Shift (capital letter),
+  LB / RB pick another suggested word, Start is Done and also closes it, A types the highlighted key.
+  Back / Select still closes it.
+- More diagnostics for blocked-action reports: the saved trace now lists what the keyboard did (`Keyboard:Press`,
+  `Keyboard:Show`, pad bindings on / off), and the first-taint check also watches the binding stack and more
+  `InputBindingManager.activeBindings` entries.
+
+## 0.1.0-alpha.55
+
+- Fix: using the on-screen keyboard could make opening the game menu in combat fail with
+  "ClassicConsoleGamepadUI tried to call the protected function SetOverrideBindingClick()". The keyboard opened,
+  focused and sent the chat line itself, which ran the game's chat focus and gamepad binding code inside the
+  addon and left 60+ native binding fields tainted (`/cgp taint`: `InputBindingManager.activeBindings.PAD1`, ...).
+  It now only inserts and deletes text in a chat line that is already open. Open the chat line the normal way
+  (Enter, the chat button or the controller), type, press Start (Done) and send with the game's own A / Enter.
+  Without an open chat line a message says so instead of opening one.
+
+## 0.1.0-alpha.54
+
+- T9 with word suggestions: the `Smart` key on the phone layout (or `/cgp keyboard smart`; `/cgp keyboard tap`
+  returns to plain multi-tap). Press each key once per letter (4 2 5 5 6 for "hallo"); the best match is
+  shown in the chat line, five more are in the top row (click one, or LB / RB on the controller). 0 or a
+  chosen suggestion adds a space, 1 is punctuation, B removes the last key, Y toggles the capital letter.
+- The word list is learned, not shipped: a few dozen common English, German and Polish words to start, then
+  the words of chat you read, of what you send and of quest and gossip texts, in the language you play. Only
+  single words with counts are stored (SavedVariables, up to about 6000); `/cgp keyboard forget` clears them.
+  Words with an apostrophe or a digit are not learned.
+
+## 0.1.0-alpha.53
+
+- On-screen keyboard for typing in chat (`/cgp keyboard`, or the button in the settings). It works with the
+  controller too: D-pad moves the highlight, A types the key, B deletes, X is space, Y is Shift, Start sends,
+  Back closes. The pad buttons are taken over only while the keyboard is open (not in combat, where addons
+  cannot change bindings; the mouse still works and the pad returns after combat). Mouse: Shift applies to the next key, `<-` removes a character, Enter sends. It acts on the open chat
+  line only (insert, delete, send) and can be dragged anywhere. The German layout swaps Y and Z and adds
+  the umlauts and ß. Setting "On-screen keyboard when typing in chat" opens it with the chat line in
+  Gamepad Mode (off by default).
+- T9 layout (multi-tap, like an old phone keypad): 3 by 4 big keys, press 2 once for a, twice for b,
+  three times for c, a fourth press for the digit; a pause or another key accepts the letter. 0 is space,
+  1 holds punctuation and `/`. Switch with the `T9` / `ABC` key or `/cgp keyboard t9` / `/cgp keyboard abc`;
+  the choice is remembered. Same controller buttons as the full keyboard.
+- Messages sent from it are chat messages; commands that need protected actions (`/cast`, `/target` in combat)
+  are the game's to refuse when they are not typed by hand.
+
+## 0.1.0-alpha.52
+
+- The player, target and focus frames can be moved in Edit Mode while in Gamepad Mode. Drag them and save the
+  layout: the new place is remembered and no longer reverts to the top left. Leaving Edit Mode without saving
+  drops the move, like any other Edit Mode change. `/cgp resetframes` puts them back at their classic places.
+- New setting "Classic player, target and focus frames" (on by default). Off leaves these frames entirely to the
+  Edit Mode of the gamepad layout.
+- The classic places of the target and focus frames are now captured in keyboard/mouse mode even while those
+  frames are hidden (before, they were captured only while a target or focus existed).
+- The classic frames stay put while Edit Mode is open instead of jumping back to the gamepad layout.
+- `/cgp scale` describes what actually works. README: on-screen keyboard for typing in chat (Steam Deck,
+  Windows touch keyboard); the packaged AI instruction files name this repository.
+
 ## 0.1.0-alpha.51
 
 - Switching compact bars (8 slots) off in Settings no longer leaves the keyboard keys dead until a UI reload:

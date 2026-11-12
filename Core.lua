@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.51"
+Addon.version = "0.1.0-alpha.73"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -118,8 +118,9 @@ function Addon:CheckNativeTaint(stage)
         { "focusedFrame", "isUIFocused" })
     Check("SmartNavigation", SmartNavigation, { "activeInfo", "currentDirections", "selectButtonSequence" })
     local bindings = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
-    Check("InputBindingManager", bindings, { "currentCoreBindingActive" })
-    Check("InputBindingManager.activeBindings", bindings and bindings.activeBindings, { "PAD1", "PAD2", "PADDUP" })
+    Check("InputBindingManager", bindings, { "currentCoreBindingActive", "bindingSetStack", "coreBindingListenerFunctions" })
+    Check("InputBindingManager.activeBindings", bindings and bindings.activeBindings,
+        { "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADFORWARD", "PADBACK" })
     local unit = GamepadMainActionBarFrame and GamepadMainActionBarFrame.PageUnit
     Check("PageUnit", unit, { "activeBar" })
     if #fields == 0 then return end
@@ -245,7 +246,7 @@ function Addon:Refresh()
         self.Layout:Restore(true)
         if not gamepad then self:QueueRefresh(true) end
     end
-    self.HUD:Refresh(wanted and not self.Display:IsEditing(), changed)
+    self.HUD:Refresh(wanted, changed, self.Display:IsEditing())
     local revision = self.Layout.revision
     self:CheckNativeTaint("HUD:Refresh")
     local ok, visible = pcall(self.Display.Refresh, self.Display, wanted)
@@ -265,14 +266,14 @@ function Addon:Refresh()
     else
         self.HUD:RefreshChat(self.classicVisible, changed)
         -- The legend steers clear of chat, so it is placed again once chat has settled.
-        if self.HUD.applied and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
+        if self.HUD.legendWanted and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
     end
     self:CheckNativeTaint("HUD:RefreshChat")
     self.ItemDelete:Refresh()
     self:CheckNativeTaint("ItemDelete:Refresh")
     if not gamepad and not changed then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
     self:Note(not ok and "Display:Refresh" or "refresh", not ok and visible or nil)
-    -- Keep observing while flyouts/cursor/editor temporarily expose the native HUD.
+    -- Keep observing while Edit Mode or the action editor temporarily expose the native HUD.
     local watchDelete = gamepad and self.db.easyDelete and self.ItemDelete.dialog
     driver:SetScript("OnUpdate", (wanted or watchDelete) and Poll or nil)
 end
@@ -295,6 +296,8 @@ local function Initialize()
     end
     if type(Addon.db.keyboardHUD) ~= "table" then Addon.db.keyboardHUD = {} end
     if type(Addon.db.keyboardBars) ~= "table" then Addon.db.keyboardBars = {} end
+    -- Where the player dragged the unit frames in Edit Mode while in Gamepad Mode.
+    if type(Addon.db.gamepadHUD) ~= "table" then Addon.db.gamepadHUD = {} end
     -- Older caches can contain hidden-bar placeholders or gamepad transition anchors.
     if Addon.db.keyboardLayoutVersion ~= 1 then
         Addon.db.keyboardHUD, Addon.db.keyboardBars = {}, {}
@@ -316,18 +319,29 @@ local function Initialize()
     end
     ready = true
     Addon:CheckNativeTaint("before Initialize")
-    local ok, err = pcall(function()
+    -- Every part is set up on its own: one that fails is reported and the others still start.
+    local function Try(label, setup)
+        local ok, err = pcall(setup)
+        if not ok then Addon:Note("Initialize " .. label, err) end
+    end
+    Try("SmartNavigation", function()
         if SmartNavigation and type(SmartNavigation.SelectButton) == "function" then
             hooksecurefunc(SmartNavigation, "SelectButton", function()
                 Addon:CheckNativeTaint("SmartNavigation:SelectButton")
             end)
         end
-        Addon.HUD:Observe()
-        Addon.Layout:Observe()
-        Addon.MenuHints:Observe()
+    end)
+    Try("HUD", function() Addon.HUD:Observe() end)
+    Try("Layout", function() Addon.Layout:Observe() end)
+    Try("MenuHints", function() Addon.MenuHints:Observe() end)
+    Try("Options", function()
         Addon.Options:Register()
         Addon:CheckNativeTaint("Options:Register")
-        Addon.ItemDelete:Observe()
+    end)
+    Try("ItemDelete", function() Addon.ItemDelete:Observe() end)
+    Try("Words", function() Addon.Words:Observe() end)
+    Try("Keyboard", function() Addon.Keyboard:Observe() end)
+    Try("native hooks", function()
         local native = GamepadMainActionBarFrame
         if native then
             hooksecurefunc(native, "OnShow", function() Addon:QueueRefresh() end)
@@ -351,7 +365,6 @@ local function Initialize()
             end)
         end
     end)
-    if not ok then Addon:Note("Initialize", err) end
     Addon:CheckNativeTaint("Initialize")
     Addon:QueueRefresh(true)
 end
@@ -394,6 +407,23 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "bindings" then
         Addon.Options:OpenBindings()
         return
+    elseif command == "keyboard" or command == "kb" then
+        local mode = input:lower():match("^%s*%S+%s+(%S+)")
+        if mode == "debug" then
+            Addon.Keyboard:Debug()
+        elseif mode == "forget" then
+            Addon.Words:Forget()
+            Addon:Print("Learned words forgotten.")
+        elseif mode == "en" or mode == "de" or mode == "pl" then
+            Addon.Keyboard:SetLanguage(mode:upper())
+        elseif mode == "t9" or mode == "abc" or mode == "tap" or mode == "smart" or mode == "hybrid" then
+            Addon.Keyboard:SetMode(mode == "smart" and "t9p" or (mode == "hybrid" and "t9h")
+                or (mode == "tap" and "t9" or mode))
+            Addon.Keyboard:Show(false)
+        else
+            Addon.Keyboard:Toggle()
+        end
+        return
     elseif command == "edit" then
         Addon.Options:EditActions()
         return
@@ -402,8 +432,12 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "native" or command == "classic" then
         Addon.nativeView = command == "native"
     elseif command == "scale" then
-        Addon:Print("Use the game's UI scale and Edit Mode; ClassicConsoleGamepadUI follows the original frames.")
+        Addon:Print("Use the game's UI scale and Edit Mode: drag the player, target and focus frames there and save the layout.")
         return
+    elseif command == "resetframes" then
+        if InCombatLockdown() then Addon:Print("Not in combat."); return end
+        Addon.HUD:ResetFrames()
+        Addon:Print("Player, target and focus frames are back at their classic places.")
     elseif command == "taint" then
         local ours, others = Addon:ScanTaint(2)
         local summary, foreign = {}, others.foreign or {}
@@ -468,7 +502,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | bindings | edit | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)
