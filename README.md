@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.73. Alpha: expect bugs.
+Version 0.1.0-alpha.74. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -42,6 +42,7 @@ The game has no on-screen keyboard of its own, so the addon has one. Open the ch
 *   The suggestions learn from the chat you read and write and from quest texts.
 *   Languages: English, German, Polish.
 *   `/cgp keyboard` shows or hides it. A setting opens it automatically when you start typing in chat.
+*   If you do not want it, a setting in the Keyboard tab turns the keyboard off completely.
 
 ## Moving frames
 

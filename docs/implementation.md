@@ -235,7 +235,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
   the full layout and the letters under the phone keys, `db.keyboardPhone` the T9 mode (Hybrid by default). Words come
   from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events, a post-hook on `SendChatMessage` and
   the words accepted on the keyboard; item links and colours are stripped and only letters are kept. Past 6000
-  words the 4500 most used are kept.
+  words the 4500 most used are kept. `db.keyboardEnabled` (the settings window's Keyboard tab, on by default) turns all of
+  it off: `Keyboard:Show` does nothing (it says so when the player asked, not when the chat line asked), `SetEnabled(false)`
+  hides an open keyboard, `Words:Learn` returns before it reads the text, so the word index is not even built, and the
+  chat-focus callbacks schedule nothing before a pad exists. The hooks stay installed (a post-hook cannot be taken back) and
+  find nothing to do. The rows that depend on it are dimmed in the window (a `parent`).
 - The settings window (`SettingsWindow.lua`) is made of plain frames (`ButtonFrameTemplate`, `PanelTopTabButtonTemplate`,
   `UIPanelButtonTemplate`; no secure templates), so it opens in combat and in Gamepad Mode, and Options > AddOns has one
   button (`CreateSettingsButtonInitializer`) that opens it. In Gamepad Mode it takes the pad with

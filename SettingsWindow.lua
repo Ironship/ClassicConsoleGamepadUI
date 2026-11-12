@@ -43,7 +43,8 @@ end
 
 -- ---------------------------------------------------------------------------------------------
 -- What the tabs hold. {"header", text}, {"control", key} (a check box or a slider, by its entry in the
--- options), {"choice", key}, {"button", label, tooltip, function}, {"note", text}.
+-- options), {"choice", key[, parent]}, {"button", label, tooltip, function[, parent]}, {"note", text}. A row with a
+-- parent (the key of a check box) is dimmed while that box is off.
 -- ---------------------------------------------------------------------------------------------
 
 -- A destructive button asks twice: the first click changes its label, a second one within four seconds does it.
@@ -92,9 +93,10 @@ local function Tabs()
         } },
         { id = "keyboard", label = Text("tabKeyboard"), items = {
             { "header", "keyboard" },
+            { "control", "keyboardEnabled" },
             { "control", "autoKeyboard" },
-            { "choice", "keyboardLanguage" }, { "choice", "keyboardPhone" },
-            { "button", Text("keyboard"), Text("keyboardTip"), function() Addon.Keyboard:Toggle() end },
+            { "choice", "keyboardLanguage", "keyboardEnabled" }, { "choice", "keyboardPhone", "keyboardEnabled" },
+            { "button", Text("keyboard"), Text("keyboardTip"), function() Addon.Keyboard:Toggle() end, "keyboardEnabled" },
             { "button", Text("forgetWords"), Text("forgetWordsTip"), Confirmed(function()
                 Addon.Words:Forget()
                 Addon:Print(Text("wordsForgotten"))
@@ -241,7 +243,7 @@ local function Slider(page, y, info)
     return y + 50
 end
 
-local function Choice(page, y, key)
+local function Choice(page, y, key, parent)
     local choices = Addon.Options.choices[key]
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
@@ -271,11 +273,11 @@ local function Choice(page, y, key)
     end
     button:SetScript("OnClick", function(_, mouse) button.StepChoice(mouse == "RightButton" and -1 or 1) end)
     AddTooltip(button, Text(key), Text(key .. "Tip"))
-    Register(page, row, button, y, 34, function() button:SetText(Name()) end)
+    Register(page, row, button, y, 34, function() button:SetText(Name()) end, parent)
     return y + 36
 end
 
-local function Button(page, y, label, tip, action)
+local function Button(page, y, label, tip, action, parent)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
     row:SetSize(ROW_WIDTH, 34)
@@ -286,7 +288,7 @@ local function Button(page, y, label, tip, action)
     button.baseText = label
     button:SetScript("OnClick", action)
     AddTooltip(button, label, tip)
-    Register(page, row, button, y, 34, function() end)
+    Register(page, row, button, y, 34, function() end, parent)
     return y + 36
 end
 
@@ -361,8 +363,8 @@ local function BuildPage(window, tab)
         local kind = item[1]
         if kind == "header" then y = Header(page, y, item[2])
         elseif kind == "note" then y = Note(page, y, item[2])
-        elseif kind == "choice" then y = Choice(page, y, item[2])
-        elseif kind == "button" then y = Button(page, y, item[2], item[3], item[4])
+        elseif kind == "choice" then y = Choice(page, y, item[2], item[3])
+        elseif kind == "button" then y = Button(page, y, item[2], item[3], item[4], item[5])
         else
             local info = Control(item[2])
             if info then y = (info.min and Slider or Check)(page, y, info) end
