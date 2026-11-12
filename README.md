@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.76. Alpha: expect bugs.
+Version 0.1.0-alpha.77. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -41,9 +41,9 @@ The game has no on-screen keyboard of its own, so the addon has one. Open the ch
 *   A normal keyboard, or a phone-style T9 keypad. Choose in the Keyboard tab, or with the key next to Clear on the keyboard.
 *   T9 has three modes: Tap (press a key again for the next letter), Smart (press each key once and pick the word from the suggestions) and Hybrid (tap the letters and the suggestions finish the word, the default).
 *   A space key and Y end a word with a space, so you can type whole sentences.
-*   The suggestions learn from the chat you read and write and from quest texts. If English Quest Panel or a WordHunterWoW dictionary is installed, its words are suggested too.
+*   The suggestions learn the words you write, so they get better the longer you use the keyboard (a button in the Keyboard tab resets what was learned). They also learn from the chat you read and from quest texts. If English Quest Panel or a WordHunterWoW dictionary is installed, its words are suggested too.
 *   Languages: English, German, Polish, French, Spanish, Italian, Portuguese.
-*   `/cgp keyboard` shows or hides it. A setting opens it automatically when you start typing in chat.
+*   `/cgp keyboard` shows or hides it. A setting opens it automatically when you start typing in chat, and another one makes it see-through.
 *   If you do not want it, a setting in the Keyboard tab turns the keyboard off completely.
 
 ## Moving frames

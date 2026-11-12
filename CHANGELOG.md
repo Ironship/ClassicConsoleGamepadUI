@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.1.0-alpha.77
+
+- The keyboard learns your own words. What you send and what you accept from the suggestions is kept as your vocabulary, per
+  keyboard language, and your words rank above the common ones and above words that were only read, so the suggestions fit the
+  way you write better the longer you use the keyboard. Only single words with counts are kept, never a sentence.
+- What the keyboard reads (chat, quest and gossip texts) is kept apart from your own words, and it is learned only while the
+  keyboard types the language of the game. Before, one list served every language, so the quest texts of a German game filled
+  the suggestions of a Polish keyboard. A list saved by an earlier version becomes the words read in the language of the game;
+  nothing is lost.
+- A "Learned words" section in the Keyboard tab shows how many words of yours and how many read ones the keyboard knows for the
+  language in use, and has the "Reset learned words" button (it was "Forget learned words", the last button of the tab). It
+  asks for a second click within four seconds and clears everything learned, in every language. `/cgp keyboard forget` does
+  the same and `/cgp keyboard words` prints the counts.
+- The full keyboard looks like a real one. Every row is as wide as the digit row and ends in the same place; before, the rows
+  had different lengths, the row of accented letters floated in the middle and the bottom row stopped short. The letter keys
+  have one size, and the keys that are not letters sit where Tab, Caps, Enter and the right Shift are on a keyboard: Clear,
+  the layout key (T9), Done and Close, with Shift on the left of the bottom letter row and the space bar under the middle. The
+  row of suggestions is as wide as the keys. A row with so many letters that a key does not fit beside them (German, French,
+  Spanish, Portuguese) puts that key next to the space bar. The row of accents is as wide as the keyboard, its keys at most
+  72 pixels wide.
+- A new setting, "Keyboard transparency" (Keyboard tab, 0% to 90%, 0% is the look so far), lets the game show through the
+  keyboard. The background and the faces of the keys become see-through; the letters and the borders of the keys stay solid, so
+  it stays readable. It takes effect at once, also on an open keyboard.
+- The word list can no longer stop the keyboard. Every call the keyboard makes into it (suggestions, learning) is guarded: if
+  something fails inside, the key press goes on without suggestions and the error is shown once in the chat and kept in the
+  saved diagnostics.
+- `/cgp keyboard debug` now says whether X is the game's send button and, when it is not, which condition is missing (in combat,
+  no chat line, the line has no focus, the chat footer is not shown, a word waits in the buffer, ...). When X reaches the keyboard
+  instead of sending, the same reason and what the pad buttons are bound to are saved at once in the diagnostics
+  (`xPress`), so a send that does nothing can be explained afterwards.
+
 ## 0.1.0-alpha.76
 
 - Interface language. Every text of the addon now lives in language files (`Locales/`): English, German, Polish, French,

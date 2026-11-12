@@ -241,14 +241,39 @@ matching the exported source commit's build **1.60.1 (70450)**.
   it), Hybrid taps letters and asks `Words:Prefix` for words that begin with them. `db.keyboardLanguage` (EN, DE, PL, FR,
   ES, IT, PT, see `Languages.lua`) picks the full layout and the letters under the phone keys, `db.keyboardMode` the layout
   in use (`abc`, `t9`, `t9p`, `t9h`; Hybrid by default) and `db.keyboardPhone` the phone layout that the mode key goes back
-  to. Words come
-  from `CHAT_MSG_*` (text checked with `issecretvalue`), quest and gossip text events, a post-hook on `SendChatMessage` and
-  the words accepted on the keyboard; item links and colours are stripped and only letters are kept. Past 6000
-  words the 4500 most used are kept. `db.keyboardEnabled` (the settings window's Keyboard tab, on by default) turns all of
+  to. `db.keyboardEnabled` (the settings window's Keyboard tab, on by default) turns all of
   it off: `Keyboard:Show` does nothing (it says so when the player asked, not when the chat line asked), `SetEnabled(false)`
   hides an open keyboard, `Words:Learn` returns before it reads the text, so the word index is not even built, and the
   chat-focus callbacks schedule nothing before a pad exists. The hooks stay installed (a post-hook cannot be taken back) and
   find nothing to do. The rows that depend on it are dimmed in the window (a `parent`).
+- Learned words (`Words.lua`) are two tables per language of the keyboard, `db.own[language][word]` and
+  `db.seen[language][word]`, each a count. Own words are what the player sends (a post-hook on `C_ChatInfo.SendChatMessage`,
+  which the chat's edit box calls; older clients: the global `SendChatMessage`; the text is checked with `issecretvalue`) and
+  what they accept from the suggestions (`Flush`, `Complete`). Seen words come from `CHAT_MSG_*` and from quest and gossip text
+  events, and only while the keyboard types the language of the game (`Words.ClientLanguage`, from `GetLocale`), because those
+  texts are in that language: one list for all languages let the quest texts of a German game fill the suggestions of a Polish
+  keyboard. A word counts once per text; item links and colours are stripped and only letters are kept. `LearnSent` ignores the
+  same text within a second (a message reaches both the game's function and its old global wrapper). Past 3000 own words the
+  2500 most used are kept, past 6000 seen words 4500. `Words:Migrate` turns the flat `db.words` of earlier versions into
+  `db.seen` of the game's language. `Words:Forget` (the settings button "Reset learned words", `/cgp keyboard forget`) clears
+  both tables in every language; the Keyboard tab shows the counts for the language in use (`Words:Summary`) and
+  `/cgp keyboard words` prints them. Only single words and counts are stored, never a sentence.
+- The full keyboard is laid out by `FullRows` in `Keyboard.lua`, like a real one: every row is as wide as the digit row (15 key
+  pitches of `KEY + GAP` pixels, wider only when a row cannot hold its letters and keys), the letters are `KEY` wide, and the keys
+  that are not letters (`MIN_KEY` gives their least width) take what is left of their row: Back (digits), Clear and the last
+  letter (second row), the layout key and Done (home row), Shift and Close (bottom letter row). A row whose letters leave no room
+  for its optional key (`optional`: Clear, the layout key, Close) hands it to the row of the space bar, which is centred on the
+  keyboard. The suggestions and the accented letters (`spec.extra`) are rows of equal keys, whole pixels, flush with the others
+  (`Share`; accents at most `MAX_ACCENT` wide, a shorter row is centred). A letter with a width of its own is
+  `{ letter = "ą", width = 69 }`; `Keyboard:Build` places the keys by those widths. The phone layouts are centred rows as before.
+- `db.keyboardTransparency` (0 to 0.9, the settings window's Keyboard tab) takes that share off the opacity of the frame's
+  background, the strip above the keys and the faces of the keys (`Keyboard:Opacity`, `ApplyTransparency`, which `Options:Changed`
+  calls and `Create` calls once); letters and borders are not touched, and `MAX_TRANSPARENCY` keeps the keyboard from vanishing.
+- Every call from the keyboard into `Words.lua` goes through `Suggest` (a `pcall`; a failure goes to `Addon:Note`, once), so the
+  word list cannot break typing or the X binding. `Keyboard:WantsNativeSend` returns the first condition that is not met,
+  `SendReason` turns it into a text, `SyncSend` keeps it in `diagnostics.keyboardSend`, `/cgp keyboard debug` prints it, and a
+  press of X that reaches `PadPress` (so X was not the game's send button) saves it with the pad bindings as
+  `diagnostics.xPress` and flushes the saved variables (`ReportSend`).
 - The full keyboard types straight into the chat line, so it has no buffer (`Keyboard:Pending` is empty in mode `abc`). Its row of
   suggestions (`UpdateHints`) is made for the word at the end of the line (`TypedWord`: its letters, nothing while a slash command
   is being typed), and read again with the 0.25 s check (`WatchTyped`) because the line also changes by other means. `Complete`
@@ -277,7 +302,9 @@ matching the exported source commit's build **1.60.1 (70450)**.
   resumed from an `OnUpdate` for 3 ms a frame, not in combat. The result is a `Lexicon` of 1-2 MB (15,000 to 110,000 words in
   buckets by their first three keys, plus the best words per first key and first letter for the shortest input), kept for the
   language in use only. `Words:Lookup` and `Words:Prefix` merge it with the player's own words and the common ones by score: the
-  source's weight (0-31), 8 for a common word, up to 24 for use.
+  source's weight (0-31), 8 for a common word, up to 30 for the player's own use and up to 12 for words seen (both grow
+  with the logarithm of the count: 8 and 4 points per doubling), so a word the player used a few times comes before most
+  words of a word list.
 - The settings window (`SettingsWindow.lua`) is made of plain frames (`ButtonFrameTemplate`, `PanelTopTabButtonTemplate`,
   `UIPanelButtonTemplate`; no secure templates), so it opens in combat and in Gamepad Mode, and Options > AddOns has one
   button (`CreateSettingsButtonInitializer`) that opens it. In Gamepad Mode it takes the pad with

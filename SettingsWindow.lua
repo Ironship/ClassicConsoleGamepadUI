@@ -146,9 +146,12 @@ local function Tabs()
             { "control", "keyboardEnabled" },
             { "control", "autoKeyboard" },
             { "choice", "keyboardLanguage", "keyboardEnabled" }, { "choice", "keyboardMode", "keyboardEnabled" },
+            { "control", "keyboardTransparency" },
             { "control", "wordHunter" },
             { "status", function() return Addon.WordSources:Status() end, "wordHunter" },
             { "button", Text("keyboard"), Text("keyboardTip"), function() Addon.Keyboard:Toggle() end, "keyboardEnabled" },
+            { "header", "learnedHeader" },
+            { "status", function() return Addon.Words:Summary() end },
             { "button", Text("forgetWords"), Text("forgetWordsTip"), Confirmed(function()
                 Addon.Words:Forget()
                 Addon:Print(Text("wordsForgotten"))
