@@ -174,6 +174,19 @@ function Display:Create()
     root:Hide()
 end
 
+-- The stock button a slot is drawn on. The stock main row runs right to left, so it is mirrored. In the 12-slot layout
+-- the stock bars split the buttons used with both triggers: 21-24 follow the L2 row and 33-36 close the R2 row. With
+-- group set, all eight sit together between the L2 row (13-20) and the R2 row (25-32).
+function Display.PlacementTemplate(slots, i, compact, group)
+    if i <= 12 and not compact then return slots[13 - i].template end
+    if i <= 8 then return slots[9 - i].template end
+    if group and not compact then
+        if i >= 33 and i <= 36 then return slots[i - 8].template end
+        if i >= 25 and i <= 32 then return slots[i + 4].template end
+    end
+    return slots[i].template
+end
+
 function Display:RefreshGeometry()
     if self.layoutRevision == Addon.Layout.revision then return true end
     for i, slot in ipairs(self.slots) do
@@ -187,10 +200,7 @@ function Display:RefreshGeometry()
             glyph:SetSize(20 * modifierScale, 20 * modifierScale)
             glyph:SetPoint("TOPLEFT", ((index - 1) * 13 - 4) * modifierScale, 3 * modifierScale)
         end
-        -- The stock main row runs right to left; mirror the visible row.
-        local placeOn = template
-        if i <= 12 and not Addon.Layout.compact then placeOn = self.slots[13 - i].template
-        elseif i <= 8 then placeOn = self.slots[9 - i].template end
+        local placeOn = Display.PlacementTemplate(self.slots, i, Addon.Layout.compact, Addon.db.groupBoth)
         if not Addon.Layout:Place(slot, placeOn) then return false end
         for _, entry in ipairs({
             { slot.Background, template.SlotBackground }, { slot.SlotArt, template.SlotArt },
@@ -218,7 +228,7 @@ function Display:RefreshGeometry()
         -- Left shoulder stays on the left end. Right shoulder sits on the far
         -- right of the visible upper row, not beside the left one.
         local anchorIndex = 13
-        if i == 2 then anchorIndex = Addon.Layout.compact and 32 or 36 end
+        if i == 2 then anchorIndex = (Addon.Layout.compact or Addon.db.groupBoth) and 32 or 36 end
         shoulder:SetPoint("BOTTOMLEFT", self.slots[anchorIndex], "TOPLEFT", 0, Addon.db.contextGap)
         if Addon.Layout.compact then
             local class = self.slots[8 + i]
