@@ -10,6 +10,8 @@ local text = ({
         moveUnitFrames = "Klasyczne ramki gracza, celu i focusu",
         moveUnitFramesTip = "Ustawia te ramki w ich klasycznych miejscach. Przeciągnij je w trybie edycji i zapisz układ, a miejsce zostanie zapamiętane (/cgp resetframes cofa). Wyłącz, aby ramkami rządził wyłącznie tryb edycji pada.",
         compactTip = "Skróć trzy paski do 8 pól. L2 i R2 mają stałe sekcje u góry; L2+R2 pokazuje swoje akcje na dole. Wyłącz, aby użyć układu 12 pól, np. na Steam Decku. Zmiana podczas walki zostanie zastosowana po jej zakończeniu.",
+        groupBoth = "Trzymaj przyciski L2+R2 razem (12 pól)",
+        groupBothTip = "W układzie 12 pól przyciski używane z oboma triggerami są rozdzielone: cztery za rzędem L2 i cztery na samym końcu. Ta opcja zbiera wszystkie osiem między rzędem L2 a rzędem R2. Nie działa przy kompaktowych paskach.",
         bindingsTip = "Zmień skróty klawiatury i przyciski pada w edytorze gry. Przypisania zapisuje gra, a podpowiedzi ClassicConsoleGamepadUI odświeżają się automatycznie.",
         bind = "Przypisz klawisze z pasków",
         bindTip = "Najedź na pole widocznego paska akcji, postaw lub zwierzaka i naciśnij klawisz albo przycisk pada. Escape kończy. Backspace usuwa główny skrót tego pola. Tryb startuje po zamknięciu ustawień.",
@@ -31,6 +33,8 @@ local text = ({
         moveUnitFrames = "Klassische Spieler-, Ziel- und Fokusrahmen",
         moveUnitFramesTip = "Setzt diese Rahmen an ihre klassischen Plätze. Im Bearbeitungsmodus ziehen und das Layout speichern, dann merkt sich das Addon den Platz (/cgp resetframes setzt zurück). Deaktivieren, damit nur der Bearbeitungsmodus des Gamepads die Rahmen steuert.",
         compactTip = "Drei Leisten auf 8 Plätze verkürzen. L2 und R2 bleiben oben; L2+R2 zeigt seine Aktionen unten. Für 12 Plätze, z. B. auf dem Steam Deck, deaktivieren. Änderungen im Kampf werden danach angewendet.",
+        groupBoth = "L2+R2-Tasten zusammenhalten (12 Plätze)",
+        groupBothTip = "Im 12-Plätze-Layout sind die Tasten für beide Trigger getrennt: vier hinter der L2-Reihe und vier ganz am Ende. Diese Option stellt alle acht zwischen die L2- und die R2-Reihe. Wirkt nicht bei kompakten Leisten.",
         bindingsTip = "Tastatur- und Controllerbelegungen im Spieleditor ändern. Das Spiel speichert die Belegungen; ClassicConsoleGamepadUI aktualisiert die Hinweise automatisch.",
         bind = "Tasten auf den Leisten zuweisen",
         bindTip = "Zeige auf ein Feld der sichtbaren Aktions-, Haltungs- oder Begleiterleiste und drücke eine Taste oder eine Controllertaste. Escape beendet den Modus. Rücktaste löscht die Hauptbelegung. Der Modus startet nach dem Schließen der Einstellungen.",
@@ -52,6 +56,8 @@ local text = ({
     moveUnitFrames = "Classic player, target and focus frames",
     moveUnitFramesTip = "Places these frames at their classic positions. Drag them in Edit Mode and save the layout and the new place is remembered (/cgp resetframes undoes it). Disable to let the gamepad layout's Edit Mode alone place the frames.",
     compactTip = "Shorten all three bars to 8 slots. L2 and R2 stay in fixed sections above; L2+R2 shows its actions below. Disable for 12 slots, for example on Steam Deck. Changes during combat apply when combat ends.",
+    groupBoth = "Keep the L2+R2 buttons together (12 slots)",
+    groupBothTip = "In the 12-slot layout the buttons used with both triggers are split: four after the L2 row and four at the far end. This puts all eight together, between the L2 row and the R2 row. It has no effect with compact bars.",
     bindingsTip = "Change keyboard and controller bindings in the game's editor. The game saves bindings and ClassicConsoleGamepadUI refreshes its hints automatically.",
     bind = "Assign keys from the bars",
     bindTip = "Hover a visible action, stance or pet slot and press a keyboard key or a controller button. Escape finishes. Backspace clears that slot's primary binding. Starts when the settings close.",
@@ -210,6 +216,7 @@ for key, value in pairs(extraText) do text[key] = value end
 local controls = {
     { key = "enabled", default = true, section = "layout" },
     { key = "compact", default = true },
+    { key = "groupBoth", default = false },
     { key = "moveUnitFrames", default = true },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
     { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
@@ -232,7 +239,7 @@ local controls = {
     { key = "easyDelete", default = false, section = "items" },
 }
 
-local geometrySettings = { compact = true, contextGap = true,
+local geometrySettings = { compact = true, groupBoth = true, contextGap = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
 -- Shared with the settings window (SettingsWindow.lua).

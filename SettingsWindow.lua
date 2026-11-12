@@ -74,7 +74,7 @@ local function Tabs()
     return {
         { id = "general", label = Text("tabGeneral"), items = {
             { "header", "layout" },
-            { "control", "enabled" }, { "control", "compact" }, { "control", "moveUnitFrames" },
+            { "control", "enabled" }, { "control", "compact" }, { "control", "groupBoth" }, { "control", "moveUnitFrames" },
             { "control", "contextGap" },
             { "header", "menu" },
             { "control", "menuRight" }, { "control", "menuBottom" },

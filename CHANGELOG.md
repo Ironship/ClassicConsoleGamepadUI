@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.75
+
+- New setting "Keep the L2+R2 buttons together (12 slots)" (General tab, off by default). In the 12-slot layout the stock bars
+  split the buttons used with both triggers: four sit after the L2 row and four at the far end. With the setting on, all
+  eight sit together between the L2 row and the R2 row. It has no effect with compact bars, which do not show them
+  in the upper row.
+
 ## 0.1.0-alpha.74
 
 - New setting "Use the on-screen keyboard" (Keyboard tab, on by default). Off, the keyboard never opens (`/cgp keyboard` and

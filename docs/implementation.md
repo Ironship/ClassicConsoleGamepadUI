@@ -119,6 +119,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
   The original menu anchor, the other anchors, and keyboard status widths are restored on exit. Sizes of
   individual buttons and end-cap artwork are unchanged. Geometry changes wait
   for combat to end.
+- In the 12-slot layout the L2+R2 layer is split across the stock bars: slots 21-24 (native buttons 5-8) follow the L2
+  row and slots 33-36 (native buttons 1-4) close the R2 row. `db.groupBoth` draws 33-36 on the stock positions of 25-28 and
+  the R2 row (25-32) on those of 29-36, so the eight sit together between the two rows (`Display.PlacementTemplate`); the
+  right shoulder indicator then goes above slot 32. Only positions change: the click targets follow the slots, and the keys
+  stay with their slots. It is a layout setting, applied outside combat like the others.
 - Each visible row of eight shows native buttons 5-8 (face, X Y B A) then 1-4 (cross).
   The secure click index uses that same order. The main row's stock buttons run
   right to left, so slots 1-8 are placed on buttons 8-1 and the keyboard labels
