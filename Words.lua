@@ -105,6 +105,8 @@ end
 
 -- Learn every word of a text (chat line, quest text). Links and colours are removed first.
 function Words:Learn(text, weight)
+    -- Nothing is learned while the keyboard is turned off (the word index is not even built).
+    if Addon.db and Addon.db.keyboardEnabled == false then return end
     if not self.db or not Readable(text) then return end
     self:Load()
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"):gsub("|T.-|t", "")

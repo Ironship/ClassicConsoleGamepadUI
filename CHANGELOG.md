@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.74
+
+- New setting "Use the on-screen keyboard" (Keyboard tab, on by default). Off, the keyboard never opens (`/cgp keyboard` and
+  the settings button say that it is off), the opening with the chat line does nothing, and the word suggestions stop learning
+  from chat and quest texts. The words already learned stay, and "Forget learned words" still clears them. The other
+  keyboard settings are dimmed while it is off.
+
 ## 0.1.0-alpha.73
 
 - The Shaman's totem bar now sits above the classic bars. It is a mouse bar (`MultiCastActionBarFrame`) that the game shows in

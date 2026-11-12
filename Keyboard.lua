@@ -30,6 +30,7 @@ local STRINGS = {
         noMatch = "no word matches: Tap and Hybrid are in the settings",
         noChat = "No chat line is open: open it first (Enter or the chat button)",
         openChat = "Open the chat line first (Enter or the chat button), then use the keyboard.",
+        off = "The on-screen keyboard is turned off. Turn it on in the settings (/cgp, Keyboard tab).",
     },
     deDE = {
         move = "Bewegen", key = "Taste", send = "Senden", close = "Schließen", space = "Leerzeichen",
@@ -43,6 +44,7 @@ local STRINGS = {
         noMatch = "kein Wort passt: Tap und Hybrid gibt es in den Einstellungen",
         noChat = "Keine Chatzeile offen: erst öffnen (Enter oder Chat-Taste)",
         openChat = "Erst die Chatzeile öffnen (Enter oder Chat-Taste), dann die Tastatur benutzen.",
+        off = "Die Bildschirmtastatur ist ausgeschaltet. Einschalten in den Einstellungen (/cgp, Tab Tastatur).",
     },
     plPL = {
         move = "Ruch", key = "Klawisz", send = "Wyślij", close = "Zamknij", space = "Spacja", shift = "Shift",
@@ -56,6 +58,7 @@ local STRINGS = {
         noMatch = "brak pasującego słowa: Tap i Hybrid są w ustawieniach",
         noChat = "Brak otwartej linii czatu: otwórz ją najpierw (Enter lub przycisk czatu)",
         openChat = "Najpierw otwórz linię czatu (Enter lub przycisk czatu), potem użyj klawiatury.",
+        off = "Klawiatura ekranowa jest wyłączona. Włączysz ją w ustawieniach (/cgp, karta Klawiatura).",
     },
 }
 local L = STRINGS[GetLocale()] or STRINGS.enUS
@@ -829,7 +832,22 @@ function Keyboard:Create()
     self:Apply((mode == "t9" or mode == "t9p" or mode == "t9h") and mode or "abc")
 end
 
+-- The setting "Use the on-screen keyboard" (db.keyboardEnabled, on by default) turns the keyboard off for good: it never
+-- opens, and Words stops learning. The hooks below stay (a post-hook cannot be taken back) but find nothing to do.
+function Keyboard:IsEnabled()
+    return not (Addon.db and Addon.db.keyboardEnabled == false)
+end
+
+function Keyboard:SetEnabled(enabled)
+    if not enabled then self:Hide() end
+end
+
 function Keyboard:Show(auto)
+    if not self:IsEnabled() then
+        -- Said when the player asked for it; the opening with the chat line stays quiet.
+        if not auto then Addon:Print(L.off) end
+        return
+    end
     Trace("Keyboard:Show")
     if not self.frame then self:Create() end
     self.auto = auto and true or false
@@ -999,7 +1017,7 @@ end
 
 -- The state of X can change with every key (the buffer fills and empties): look at it once, on the next frame.
 function Keyboard:QueueSendSync()
-    if self.sendQueued then return end
+    if self.sendQueued or not self.pad then return end
     self.sendQueued = true
     C_Timer.After(0, function()
         self.sendQueued = nil
@@ -1129,7 +1147,7 @@ function Keyboard:Observe()
     EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusLost", function() self:QueueSendSync() end, self)
     EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusGained", function()
         self:QueueSendSync()
-        if not (Addon.db.autoKeyboard and Addon:IsGamepadMode()) then return end
+        if not (Addon.db.autoKeyboard and Addon:IsGamepadMode() and self:IsEnabled()) then return end
         if not self.worldTime or GetTime() - self.worldTime < 5 then return end
         if self.frame and self.frame:IsShown() then return end
         -- Not inside the game's own call stack that is opening the chat line: a frame later, on our own.

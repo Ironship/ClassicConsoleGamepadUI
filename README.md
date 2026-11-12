@@ -4,7 +4,7 @@ Gamepad support for WoW Forever, with the classic look and feel.
 
 I wanted Gamepad mode but with support for both keyboard-and-mouse UI on screen. The game's own controller controls stay as they are. Simple settings, not much to configure.
 
-Version 0.1.0-alpha.73. Alpha: expect bugs.
+Version 0.1.0-alpha.74. Alpha: expect bugs.
 
 ## Compact mode (best for Xbox gamepad)
 
@@ -65,7 +65,8 @@ Tap presses a key repeatedly for the next letter (RB, a pause or moving the sele
 press per letter and suggests words, Hybrid taps letters and suggests the rest of the word (LB / RB pick, Y accepts).
 The word being typed stays in a strip above the keys until accepted. The word list learns from the chat you read and write
 and from quest texts, and starts small; `/cgp keyboard forget` clears it. The setting "On-screen keyboard when typing
-in chat" opens it with the chat line in Gamepad Mode. On Steam Deck, Steam + X also works.
+in chat" opens it with the chat line in Gamepad Mode. The setting "Use the on-screen keyboard" turns the keyboard off
+for good: it never opens and the word list stops learning (the words already learned stay). On Steam Deck, Steam + X also works.
 
 ## Steam Deck
 

@@ -94,6 +94,8 @@ local extraText = ({
         bindPending = "Zamknij ustawienia, aby rozpocząć przypisywanie.",
         editRouteKey = "Natywny edytor akcji otworzysz przyciskiem: %s",
         editRouteCommand = "Wpisz na czacie /click GamepadActionBarEditFrameEnterEditMode, aby otworzyć natywny edytor akcji.",
+        keyboardEnabled = "Używaj klawiatury ekranowej",
+        keyboardEnabledTip = "Wyłącz, jeśli nie chcesz klawiatury ekranowej. Nie będzie się wtedy otwierać, także przez /cgp keyboard, a podpowiedzi przestaną uczyć się słów z czatu i tekstów zadań. Słowa już nauczone zostają.",
         keyboard = "Klawiatura ekranowa", autoKeyboard = "Klawiatura ekranowa przy pisaniu na chacie",
         autoKeyboardTip = "W trybie pada otwiera klawiaturę ekranową, gdy zaczynasz pisać na chacie. Klawiaturę otwierasz też komendą /cgp keyboard lub przyciskiem w Skróty klawiszowe.",
         keyboardTip = "Pokaż lub ukryj klawiaturę ekranową do pisania na chacie. Klikaj klawisze myszą; przeciągnij ją, aby zmienić miejsce.",
@@ -138,6 +140,8 @@ local extraText = ({
         bindPending = "Einstellungen schließen, um mit dem Zuweisen zu beginnen.",
         editRouteKey = "Den nativen Aktionseditor öffnest du mit: %s",
         editRouteCommand = "Im Chat /click GamepadActionBarEditFrameEnterEditMode eingeben, um den nativen Aktionseditor zu öffnen.",
+        keyboardEnabled = "Bildschirmtastatur verwenden",
+        keyboardEnabledTip = "Ausschalten, wenn du die Bildschirmtastatur nicht möchtest. Sie öffnet sich dann nie, auch nicht mit /cgp keyboard, und die Vorschläge lernen keine Wörter mehr aus Chat und Questtexten. Bereits gelernte Wörter bleiben erhalten.",
         keyboard = "Bildschirmtastatur", autoKeyboard = "Bildschirmtastatur beim Chatten",
         autoKeyboardTip = "Öffnet im Gamepad-Modus die Bildschirmtastatur, sobald du im Chat schreibst. Auch mit /cgp keyboard oder über die Schaltfläche bei den Tastenbelegungen.",
         keyboardTip = "Bildschirmtastatur zum Schreiben im Chat ein- oder ausblenden. Tasten mit der Maus anklicken; zum Verschieben ziehen.",
@@ -181,6 +185,8 @@ local extraText = ({
     bindPending = "Close the settings to start assigning keys.",
     editRouteKey = "Open the native action editor with: %s",
     editRouteCommand = "Type /click GamepadActionBarEditFrameEnterEditMode in chat to open the native action editor.",
+    keyboardEnabled = "Use the on-screen keyboard",
+    keyboardEnabledTip = "Turn this off if you do not want the on-screen keyboard. It then never opens, not even with /cgp keyboard, and the word suggestions stop learning from chat and quest texts. Words already learned are kept.",
     keyboard = "On-screen keyboard", autoKeyboard = "On-screen keyboard when typing in chat",
     autoKeyboardTip = "In Gamepad Mode, open the on-screen keyboard when you start typing in chat. You can also open it with /cgp keyboard or the button under key bindings.",
     keyboardTip = "Show or hide an on-screen keyboard for typing in chat. Click the keys with the mouse; drag it to move it.",
@@ -221,7 +227,8 @@ local controls = {
     { key = "chatBottom", default = 0, min = 0, max = 800, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "raiseChat", default = true },
     { key = "chatGap", default = 12, min = 0, max = 100, step = 2, parent = "raiseChat" },
-    { key = "autoKeyboard", default = false },
+    { key = "keyboardEnabled", default = true },
+    { key = "autoKeyboard", default = false, parent = "keyboardEnabled" },
     { key = "easyDelete", default = false, section = "items" },
 }
 
@@ -243,6 +250,8 @@ function Options:Changed(key)
         Addon.Keyboard:SetLanguage(Addon.db[key])
     elseif key == "keyboardPhone" then
         if (Addon.Keyboard.mode or Addon.db.keyboardMode) ~= "abc" then Addon.Keyboard:SetMode(Addon.db[key]) end
+    elseif key == "keyboardEnabled" then
+        Addon.Keyboard:SetEnabled(Addon.db[key])
     else
         if geometrySettings[key] then Addon.Layout.dirty = true end
         Addon:QueueRefresh(true)
