@@ -536,12 +536,12 @@ function Input:Refresh(wanted, native, unit, bars)
             local slot = Addon.Display.slots[i]
             if slot then
                 local shown = slot:IsShown()
-                button:SetShown(shown)
+                if button:IsShown() ~= shown then button:SetShown(shown) end
                 if not shown then slot.Key:SetText("") end
             end
         end
     end
-    header:SetAttribute("enabled", true)
+    if not header:GetAttribute("enabled") then header:SetAttribute("enabled", true) end
     if not header:IsShown() then Addon:Trace("Input on"); header:Show()
     elseif self.bindingsPending then header:Execute(APPLY_BINDINGS)
     elseif self:BindingsLost() then

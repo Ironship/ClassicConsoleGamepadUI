@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Reduce repeated HUD anchor, opacity and secure-input updates while the bars are unchanged.
+- Check the word-list reading budget within long quest texts as well as between quests, reducing long individual reading slices.
+
 ## 0.1.0-alpha.77
 
 - The keyboard learns your own words. What you send and what you accept from the suggestions is kept as your vocabulary, per

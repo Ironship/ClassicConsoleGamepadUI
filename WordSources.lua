@@ -212,6 +212,7 @@ local NAME_PENALTY = 6
 local function ScanQuests(lexicon, tick, language, source)
     local quests = source.quests
     local counts = {}
+    local tokens = 0
     for _, quest in pairs(quests) do
         if type(quest) == "table" then
             for _, field in ipairs(QUEST_FIELDS) do
@@ -222,6 +223,8 @@ local function ScanQuests(lexicon, tick, language, source)
                             local word = token:lower()
                             counts[word] = (counts[word] or 0) + (byte(token) >= 97 and PACK + 1 or 1)
                         end
+                        tokens = tokens + 1
+                        if tokens % 128 == 0 then tick() end
                     end
                 end
             end

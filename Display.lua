@@ -215,6 +215,7 @@ function Display:RefreshGeometry()
         slot.SlotArt:SetShown(template.SlotArt and template.SlotArt:IsShown() or false)
         Addon.Layout:Place(slot.Icon, template.icon, template, template)
         Addon.Layout:Place(slot.Cooldown, template.cooldown, template, template)
+        slot.iconAnchored = nil
         if slot.Mask then
             CopyTexture(slot.Mask, template.IconMask)
             Addon.Layout:Place(slot.Mask, template.IconMask, template, template)
@@ -610,12 +611,15 @@ local function PresentActionIcon(slot, icon)
     CopyTexture(slot.Icon, icon)
     slot.SlotArt:Hide()
     slot.Background:Hide()
-    if slot.Mask then slot.Icon:RemoveMaskTexture(slot.Mask) end
-    slot.Icon:ClearAllPoints()
-    slot.Icon:SetPoint("TOPLEFT", slot, "TOPLEFT", 3, -3)
-    slot.Icon:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", -3, 3)
-    slot.Cooldown:ClearAllPoints()
-    slot.Cooldown:SetAllPoints(slot.Icon)
+    if not slot.iconAnchored then
+        if slot.Mask then slot.Icon:RemoveMaskTexture(slot.Mask) end
+        slot.Icon:ClearAllPoints()
+        slot.Icon:SetPoint("TOPLEFT", slot, "TOPLEFT", 3, -3)
+        slot.Icon:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", -3, 3)
+        slot.Cooldown:ClearAllPoints()
+        slot.Cooldown:SetAllPoints(slot.Icon)
+        slot.iconAnchored = true
+    end
 end
 
 local function PresentEmptySlot(slot)
@@ -885,7 +889,7 @@ function Display:SuppressNative(frames)
     for _, frame in ipairs(frames) do
         keep[frame] = true
         if self.suppressed[frame] == nil then self.suppressed[frame] = frame:GetAlpha() end
-        frame:SetAlpha(0)
+        if frame:GetAlpha() ~= 0 then frame:SetAlpha(0) end
     end
     for frame, alpha in pairs(self.suppressed) do
         if not keep[frame] then frame:SetAlpha(alpha); self.suppressed[frame] = nil end
