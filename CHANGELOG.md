@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Complete and delete at the chat cursor without altering links; keep the X send binding in sync with predictive words.
+- Stop an unfinished dictionary scan when the keyboard is disabled or its language changes.
 - Reduce repeated HUD anchor, opacity and secure-input updates while the bars are unchanged.
 - Check the word-list reading budget within long quest texts as well as between quests, reducing long individual reading slices.
 

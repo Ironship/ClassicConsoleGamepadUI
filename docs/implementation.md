@@ -275,10 +275,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
   press of X that reaches `PadPress` (so X was not the game's send button) saves it with the pad bindings as
   `diagnostics.xPress` and flushes the saved variables (`ReportSend`).
 - The full keyboard types straight into the chat line, so it has no buffer (`Keyboard:Pending` is empty in mode `abc`). Its row of
-  suggestions (`UpdateHints`) is made for the word at the end of the line (`TypedWord`: its letters, nothing while a slash command
-  is being typed), and read again with the 0.25 s check (`WatchTyped`) because the line also changes by other means. `Complete`
-  replaces those letters with `SetText` (the cursor goes to the end, like `Delete`), adds a space and teaches the word; LB/RB
-  cycle with `Cycle`, Y and the Space key take the chosen one, a click `Choose`s it.
+  suggestions (`UpdateHints`) is made for the word before the cursor (`TypedWord`: its letters, nothing inside a link or while a
+  slash command is being typed), and read again with the 0.25 s check (`WatchTyped`) because the line and cursor also change by
+  other means. `Complete` replaces the word at the cursor, preserves the following text and teaches the word; `Delete` also
+  acts at the cursor. `GetUTF8CursorPosition` counts characters, while `SetCursorPosition` uses byte offsets. LB/RB cycle with
+  `Cycle`, Y and the Space key take the chosen suggestion, a click `Choose`s it.
 - Languages and texts. `Locales.lua` keeps the texts: each file in `Locales/` registers one language (`enUS` is the base, a key
   a language leaves out is shown in English) and `Addon.L.key` reads the language in use (`db.language`: a code, or `auto` for
   the game client's; English by default). Changing it makes `SettingsWindow:Relocalize` (tabs and pages are built again, the
@@ -299,7 +300,8 @@ matching the exported source commit's build **1.60.1 (70450)**.
   out). German, French, Spanish, Italian, Portuguese: the dictionary a WordHunterWoW dictionary registered with the base add-on
   (`WordHunterWoW_Addon.DictionaryProviders[locale]`; the keys are the words, there are no counts, "ignored" entries are names).
   The load-on-demand dictionaries (24-54 MiB each) are used only once the base add-on has loaded them. Reading is a coroutine
-  resumed from an `OnUpdate` for 3 ms a frame, not in combat. The result is a `Lexicon` of 1-2 MB (15,000 to 110,000 words in
+  resumed from an `OnUpdate` for 3 ms a frame, not in combat. An unfinished scan is discarded when the keyboard is disabled or
+  the typing language changes; enabling it again starts a fresh scan. The result is a `Lexicon` of 1-2 MB (15,000 to 110,000 words in
   buckets by their first three keys, plus the best words per first key and first letter for the shortest input), kept for the
   language in use only. `Words:Lookup` and `Words:Prefix` merge it with the player's own words and the common ones by score: the
   source's weight (0-31), 8 for a common word, up to 30 for the player's own use and up to 12 for words seen (both grow

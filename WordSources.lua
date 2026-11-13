@@ -305,6 +305,10 @@ function Sources:Request(language)
     local db = Addon.db
     if not db or db.wordHunter == false or db.keyboardEnabled == false then return end
     language = Languages.Valid(language or (Addon.Words and Addon.Words:Language()))
+    if self.job and self.job.language ~= language then
+        self.lexicons[self.job.language], self.job = nil, nil
+        if self.frame then self.frame:Hide() end
+    end
     if self.lexicons[language] or self.failed[language] then return end
     local source = self:Find(language)
     if not source then return end
@@ -331,6 +335,10 @@ end
 
 -- One slice of reading; not in combat.
 function Sources:Pump()
+    if Addon.db.wordHunter == false or Addon.db.keyboardEnabled == false then
+        self:Changed()
+        return
+    end
     local job = self.job
     if not job then
         if self.frame then self.frame:Hide() end
@@ -354,9 +362,12 @@ end
 function Sources:Changed()
     if Addon.db.wordHunter == false then
         self.lexicons, self.job, self.failed = {}, nil, {}
+    elseif Addon.db.keyboardEnabled == false then
+        if self.job then self.lexicons[self.job.language], self.job = nil, nil end
     else
         self:Request()
     end
+    if not self.job and self.frame then self.frame:Hide() end
 end
 
 -- Forget what was read (for a fresh start).

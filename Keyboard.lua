@@ -470,17 +470,35 @@ function Keyboard:Pending()
     return self.buffer or ""
 end
 
--- The word the cursor ends: the letters at the end of the chat line. None while the line is a slash command being typed, and
+-- The word immediately before the cursor. None while the line is a slash command being typed, and
 -- none after a link or a colour ("|r", "|h" are no words).
 local function TypedWord(line)
     if line:find("^/[^ ]*$") then return nil end
+    local linkStart = line:match(".*()|H")
+    if linkStart then
+        local link = line:sub(linkStart)
+        local first = link:find("|h", 1, true)
+        if not first or not link:find("|h", first + 2, true) then return nil end
+    end
     local word = line:match("([%a\128-\255]+)$")
     if word and line:sub(-#word - 1, -#word - 1) == "|" then return nil end
     return word
 end
 
+local function TextAtCursor(box)
+    local line = box:GetText() or ""
+    local cursor = box:GetUTF8CursorPosition()
+    local count, offset = 0, 0
+    for character in line:gmatch(Languages.CHARACTER) do
+        if count == cursor then break end
+        count, offset = count + 1, offset + #character
+    end
+    if count ~= cursor then error("Chat cursor is outside the text") end
+    return line:sub(1, offset), line:sub(offset + 1)
+end
+
 -- Suggestions: on the hybrid layout the matches for the letters typed so far (the buffer), on the full keyboard the matches
--- for the word at the end of the chat line.
+-- for the word immediately before the cursor.
 function Keyboard:UpdateHints()
     local hints = { cands = {}, idx = 0, cap = false }
     local word
@@ -488,7 +506,7 @@ function Keyboard:UpdateHints()
         word = self.buffer
     elseif self.mode == "abc" then
         local box = FindEditBox()
-        word = box and TypedWord(box:GetText() or "")
+        word = box and TypedWord(TextAtCursor(box))
         self.typed = word or ""
     end
     if word then
@@ -507,7 +525,7 @@ end
 function Keyboard:WatchTyped()
     if self.mode ~= "abc" then return end
     local box = FindEditBox()
-    local word = box and TypedWord(box:GetText() or "") or ""
+    local word = box and TypedWord(TextAtCursor(box)) or ""
     if word ~= (self.typed or "") then self:UpdateHints() end
 end
 
@@ -558,6 +576,7 @@ function Keyboard:ShowWord()
     pred.shown = word
     self:ShowPreview()
     self:Refresh()
+    if self.pad then self:QueueSendSync() end
 end
 
 -- Put the word in progress into the chat line, with a space after it if wanted. Without a word, the space alone.
@@ -569,13 +588,13 @@ function Keyboard:Flush(space)
     if text == "" and not space then return true, false end
     local box = EditBox()
     if not box then return false, false end
-    local line = box:GetText() or ""
-    if line == "" then text = (text:gsub("^ +", "")) end
+    local before = TextAtCursor(box)
+    if before == "" then text = (text:gsub("^ +", "")) end
     -- A space is added once: a word that ends with a blank does not get a second one.
     if space then text = (text:gsub(" +$", "")) end
     if text == "" then
         local added = false
-        if space and line ~= "" and line:sub(-1) ~= " " then
+        if space and before ~= "" and before:sub(-1) ~= " " then
             box:Insert(" ")
             added = true
         end
@@ -611,20 +630,28 @@ function Keyboard:Zero(key)
         if tap.space then
             local box = EditBox()
             if not box then return end
-            if tap.added then
-                local line = box:GetText() or ""
-                if line:sub(-1) == " " then box:SetText(line:sub(1, -2)) end
+            if box == tap.box and box:GetText() == tap.line and box:GetUTF8CursorPosition() == tap.cursor then
+                if tap.added then
+                    local before, after = TextAtCursor(box)
+                    before = before:sub(1, -2)
+                    box:SetText(before .. after)
+                    box:SetCursorPosition(#before)
+                end
+                self.buffer = "0"
+                self.tap = { key = key, zero = true, time = now }
+                self:UpdateHints()
+                return
             end
-            self.buffer = "0"
-            self.tap = { key = key, zero = true, time = now }
-            self:UpdateHints()
-            return
         elseif tap.zero and self.buffer == "0" then
             self.buffer = ""
         end
     end
     local ok, added = self:Flush(true)
-    if ok then self.tap = { key = key, space = true, added = added, time = now } end
+    if ok then
+        local box = FindEditBox()
+        self.tap = { key = key, space = true, added = added, time = now,
+            box = box, line = box and box:GetText(), cursor = box and box:GetUTF8CursorPosition() }
+    end
 end
 
 function Keyboard:Discard()
@@ -681,18 +708,23 @@ function Keyboard:Choose(index)
     self:Flush(true)
 end
 
--- Full keyboard: a suggestion takes the place of the letters typed so far, and a space follows it.
+-- Full keyboard: replace the word at the cursor, preserving the rest of the line.
 function Keyboard:Complete(index)
     local hints = self.hints
     local word = hints and hints.cands[index]
     if not word then return end
     local box = EditBox()
     if not box then return end
-    local line = box:GetText() or ""
-    local typed = TypedWord(line)
-    if not typed then return end
+    local before, after = TextAtCursor(box)
+    local typed = TypedWord(before)
+    if not typed or typed ~= self.typed then self:UpdateHints(); return end
     if hints.cap then word = CapitalizeFirst(word) end
-    box:SetText(line:sub(1, #line - #typed) .. word .. " ")
+    local remainder = after:match("^[%a\128-\255]*") or ""
+    after = after:sub(#remainder + 1)
+    local prefix = before:sub(1, #before - #typed) .. word
+    if after == "" then prefix = prefix .. " " end
+    box:SetText(prefix .. after)
+    box:SetCursorPosition(#prefix)
     Suggest("LearnOwn", word)
     self:UpdateHints()
 end
@@ -709,6 +741,7 @@ function Keyboard:Delete()
             self.pred = nil
             self:ShowPreview()
             self:Refresh()
+            if self.pad then self:QueueSendSync() end
         end
         return
     end
@@ -720,7 +753,10 @@ function Keyboard:Delete()
     end
     local box = EditBox()
     if box then
-        box:SetText(WithoutLastCharacter(box:GetText() or ""))
+        local before, after = TextAtCursor(box)
+        before = WithoutLastCharacter(before)
+        box:SetText(before .. after)
+        box:SetCursorPosition(#before)
         self:UpdateHints()
     end
 end

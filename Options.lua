@@ -77,6 +77,7 @@ function Options:Changed(key)
         Addon.Keyboard:SetMode(Addon.db[key])
     elseif key == "keyboardEnabled" then
         Addon.Keyboard:SetEnabled(Addon.db[key])
+        Addon.WordSources:Changed()
     elseif key == "keyboardTransparency" then
         Addon.Keyboard:ApplyTransparency()
     elseif key == "wordHunter" then
