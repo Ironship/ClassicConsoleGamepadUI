@@ -124,6 +124,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
   the R2 row (25-32) on those of 29-36, so the eight sit together between the two rows (`Display.PlacementTemplate`); the
   right shoulder indicator then goes above slot 32. Only positions change: the click targets follow the slots, and the keys
   stay with their slots. It is a layout setting, applied outside combat like the others.
+- Each visible row of eight shows native buttons 5-8 (face, X Y B A) then 1-4 (cross); `db.crossFirst` swaps the halves
+  (`Layout.RowStart`, asked by `Display:Update` for what a slot shows and by `Input` for the index its click target presses,
+  also for slots 21-24 and 33-36). Positions, anchors and keyboard keys are untouched: a slot keeps its place and its key and
+  shows another native button, so the click target and the picture cannot disagree. It is a geometry setting: the secure
+  indexes are rewritten with the next layout revision, outside combat.
 - Each visible row of eight shows native buttons 5-8 (face, X Y B A) then 1-4 (cross).
   The secure click index uses that same order. The main row's stock buttons run
   right to left, so slots 1-8 are placed on buttons 8-1 and the keyboard labels
@@ -278,7 +283,8 @@ matching the exported source commit's build **1.60.1 (70450)**.
   suggestions (`UpdateHints`) is made for the word before the cursor (`TypedWord`: its letters, nothing inside a link or while a
   slash command is being typed), and read again with the 0.25 s check (`WatchTyped`) because the line and cursor also change by
   other means. `Complete` replaces the word at the cursor, preserves the following text and teaches the word; `Delete` also
-  acts at the cursor. `GetUTF8CursorPosition` counts characters, while `SetCursorPosition` uses byte offsets. LB/RB cycle with
+  acts at the cursor. `GetUTF8CursorPosition` counts characters, `SetCursorPosition` (like `GetText` and `string.sub`) uses byte offsets (the game's own code passes `strlen`); `TextAtCursor` splits the line and never throws. Phone-layout words add
+  a trailing space only if no blank follows the cursor; when one does, the cursor steps over it. LB/RB cycle with
   `Cycle`, Y and the Space key take the chosen suggestion, a click `Choose`s it.
 - Languages and texts. `Locales.lua` keeps the texts: each file in `Locales/` registers one language (`enUS` is the base, a key
   a language leaves out is shown in English) and `Addon.L.key` reads the language in use (`db.language`: a code, or `auto` for

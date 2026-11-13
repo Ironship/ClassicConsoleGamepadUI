@@ -11,6 +11,8 @@ Addon.Locales.Register("esES", "Español", {
     enabledTip = "Usa ClassicConsoleGamepadUI mientras el modo de mando del juego esté activado. Los cambios hechos en combate se aplican al terminar el combate.",
     compact = "Barras compactas (8 casillas)",
     compactTip = "Acorta las tres barras a 8 casillas. L2 y R2 permanecen en secciones fijas arriba; L2+R2 muestra sus acciones abajo. Desactívalo para usar 12 casillas, por ejemplo en Steam Deck. Los cambios hechos en combate se aplican al terminar el combate.",
+    crossFirst = "Botones de la cruceta primero en cada fila",
+    crossFirstTip = "Cada fila de ocho empieza con los cuatro botones de acción (X, Y, B, A) y termina con la cruceta. Con esta opción la fila empieza con la cruceta. Solo cambia el orden: cada casilla conserva su acción y su tecla, y un clic o una tecla sigue haciendo lo que muestra la casilla.",
     groupBoth = "Mantener juntos los botones L2+R2 (12 casillas)",
     groupBothTip = "En la disposición de 12 casillas los botones que se usan con ambos gatillos están separados: cuatro tras la fila L2 y cuatro al final. Esta opción coloca los ocho juntos, entre la fila L2 y la fila R2. No tiene efecto con barras compactas.",
     moveUnitFrames = "Marcos clásicos de jugador, objetivo y foco",

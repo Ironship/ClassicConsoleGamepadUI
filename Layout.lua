@@ -256,6 +256,15 @@ function Layout:GetButtons()
     return buttons
 end
 
+-- The first native button of each half of a row of eight. The stock order is the four face buttons (native 5-8: X, Y, B, A)
+-- and then the cross (native 1-4); with the setting "crossFirst" the cross comes first. Display and Input both ask here, so a
+-- slot always shows the button its click target presses.
+function Layout.RowStart(secondHalf)
+    local crossFirst = Addon.db and Addon.db.crossFirst == true
+    if secondHalf then return crossFirst and 5 or 1 end
+    return crossFirst and 1 or 5
+end
+
 function Layout:Observe()
     local function Invalidate()
         self.dirty = true

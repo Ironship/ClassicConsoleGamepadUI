@@ -11,6 +11,8 @@ Addon.Locales.Register("ptBR", "Português", {
     enabledTip = "Usa o ClassicConsoleGamepadUI enquanto o modo de controle do jogo estiver ativado. As mudanças feitas em combate são aplicadas quando o combate termina.",
     compact = "Barras compactas (8 espaços)",
     compactTip = "Reduz as três barras a 8 espaços. L2 e R2 ficam em seções fixas acima; L2+R2 mostra suas ações abaixo. Desative para usar 12 espaços, por exemplo no Steam Deck. As mudanças feitas em combate são aplicadas quando o combate termina.",
+    crossFirst = "Botões do direcional primeiro em cada fileira",
+    crossFirstTip = "Cada fileira de oito começa com os quatro botões de ação (X, Y, B, A) e termina com o direcional. Com esta opção a fileira começa pelo direcional. Só a ordem muda: cada espaço mantém sua ação e sua tecla, e um clique ou tecla continua fazendo o que o espaço mostra.",
     groupBoth = "Manter os botões L2+R2 juntos (12 espaços)",
     groupBothTip = "No layout de 12 espaços, os botões usados com os dois gatilhos ficam separados: quatro depois da fileira L2 e quatro no final. Esta opção coloca os oito juntos, entre a fileira L2 e a fileira R2. Não tem efeito com barras compactas.",
     moveUnitFrames = "Quadros clássicos de jogador, alvo e foco",

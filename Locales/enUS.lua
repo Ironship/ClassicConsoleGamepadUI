@@ -13,6 +13,8 @@ Addon.Locales.Register("enUS", "English", {
     enabledTip = "Use ClassicConsoleGamepadUI while the game's Gamepad Mode is enabled. Changes during combat apply when combat ends.",
     compact = "Compact bars (8 slots)",
     compactTip = "Shorten all three bars to 8 slots. L2 and R2 stay in fixed sections above; L2+R2 shows its actions below. Disable for 12 slots, for example on Steam Deck. Changes during combat apply when combat ends.",
+    crossFirst = "D-pad buttons first in each row",
+    crossFirstTip = "Each row of eight starts with the four face buttons (X, Y, B, A) and ends with the D-pad. With this on, the row starts with the D-pad buttons instead. Only the order changes: every slot keeps its action and its key, and a click or key press still does what the slot shows.",
     groupBoth = "Keep the L2+R2 buttons together (12 slots)",
     groupBothTip = "In the 12-slot layout the buttons used with both triggers are split: four after the L2 row and four at the far end. This puts all eight together, between the L2 row and the R2 row. It has no effect with compact bars.",
     moveUnitFrames = "Classic player, target and focus frames",

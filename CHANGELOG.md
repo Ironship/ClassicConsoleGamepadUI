@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.78
 
-- Complete and delete at the chat cursor without altering links; keep the X send binding in sync with predictive words.
+- Complete and delete at the chat cursor without altering links, also in lines with Polish, German or French letters (the cursor is set in bytes, as the game does); typing a word or a space in front of an existing blank steps over that blank instead of running the words together; the cursor look-up never throws; the X send binding follows predictive words.
+- New setting "D-pad buttons first in each row" (General tab, off by default): each row of eight starts with the D-pad buttons instead of the face buttons (X, Y, B, A). Only the order changes; every slot keeps its place and its key, and the click target of a slot presses what the slot shows. Applied outside combat like the other layout settings. Not tried in the game yet. The French, Spanish, Italian and Portuguese texts are new and unread by native speakers.
 - Stop an unfinished dictionary scan when the keyboard is disabled or its language changes.
-- Reduce repeated HUD anchor, opacity and secure-input updates while the bars are unchanged.
+- Reduce repeated HUD anchor, opacity and secure-input updates while the bars are unchanged. Redraws asked for by the action buttons (usable, range, count, state, cooldown reports, which come nearly every frame in a fight) are served at most 20 times a second; layout, settings and end-of-combat redraws are not held back.
 - Check the word-list reading budget within long quest texts as well as between quests, reducing long individual reading slices.
 
 ## 0.1.0-alpha.77
