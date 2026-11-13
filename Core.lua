@@ -1,11 +1,12 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.77"
+Addon.version = "0.1.0-alpha.78"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
 local ready, queued, lastMode, lastSaved, capturedBlock
 local elapsedSinceRefresh = 0
+local lastRefreshAt = 0
 local firstTaintCaptured
 local function Poll(_, elapsed)
     elapsedSinceRefresh = elapsedSinceRefresh + elapsed
@@ -234,6 +235,7 @@ end
 
 function Addon:Refresh()
     if not ready then return end
+    lastRefreshAt = GetTime()
     self:CheckNativeTaint("before Refresh")
     local gamepad = self:IsGamepadMode()
     local changed = lastMode ~= nil and lastMode ~= gamepad
@@ -278,10 +280,17 @@ function Addon:Refresh()
     driver:SetScript("OnUpdate", (wanted or watchDelete) and Poll or nil)
 end
 
+-- The action buttons report usable, range, count, state and cooldown changes nearly every frame in a fight, and each report
+-- asks for a redraw of every slot. Those requests are served at most 20 times a second; the redraw they wait for shows the
+-- state of the newest report anyway. A forced request (layout, mode, settings, combat end) is never held back, and the
+-- pressed look of a slot is drawn at once by the click layer, not by this redraw.
+local REFRESH_GAP = 0.05
+
 function Addon:QueueRefresh(force)
     if not ready or queued or (not force and not self:IsGamepadMode()) then return end
     queued = true
-    C_Timer.After(0, function() queued = false; self:Refresh() end)
+    local wait = force and 0 or math.max(0, lastRefreshAt + REFRESH_GAP - GetTime())
+    C_Timer.After(wait, function() queued = false; self:Refresh() end)
 end
 
 local function Initialize()

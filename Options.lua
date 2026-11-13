@@ -9,6 +9,7 @@ local controls = {
     { key = "enabled", default = true, section = "layout" },
     { key = "compact", default = true },
     { key = "groupBoth", default = false },
+    { key = "crossFirst", default = false },
     { key = "moveUnitFrames", default = true },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
     { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
@@ -33,7 +34,7 @@ local controls = {
     { key = "easyDelete", default = false, section = "items" },
 }
 
-local geometrySettings = { compact = true, groupBoth = true, contextGap = true,
+local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
 -- The rows that pick one of a list: { value, label } (a language names itself) or { value, nil, text key }.

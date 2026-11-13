@@ -11,6 +11,8 @@ Addon.Locales.Register("deDE", "Deutsch", {
     enabledTip = "ClassicConsoleGamepadUI verwenden, wenn der Gamepad-Modus aktiv ist. Änderungen im Kampf werden danach angewendet.",
     compact = "Kompakte Leisten (8 Plätze)",
     compactTip = "Drei Leisten auf 8 Plätze verkürzen. L2 und R2 bleiben oben; L2+R2 zeigt seine Aktionen unten. Für 12 Plätze, z. B. auf dem Steam Deck, deaktivieren. Änderungen im Kampf werden danach angewendet.",
+    crossFirst = "Steuerkreuz-Tasten zuerst in jeder Reihe",
+    crossFirstTip = "Jede Reihe aus acht beginnt mit den vier Aktionstasten (X, Y, B, A) und endet mit dem Steuerkreuz. Mit dieser Option beginnt sie mit den Steuerkreuz-Tasten. Nur die Reihenfolge ändert sich: Jeder Platz behält Aktion und Taste, und ein Klick oder Tastendruck löst weiter aus, was der Platz zeigt.",
     groupBoth = "L2+R2-Tasten zusammenhalten (12 Plätze)",
     groupBothTip = "Im 12-Plätze-Layout sind die Tasten für beide Trigger getrennt: vier hinter der L2-Reihe und vier ganz am Ende. Diese Option stellt alle acht zwischen die L2- und die R2-Reihe. Wirkt nicht bei kompakten Leisten.",
     moveUnitFrames = "Klassische Spieler-, Ziel- und Fokusrahmen",

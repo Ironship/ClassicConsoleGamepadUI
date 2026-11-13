@@ -833,8 +833,8 @@ function Display:Update(unit)
     local compact = Addon.Layout.compact
     local mainIndex = compact and selected[4] and activeBar == selected[4] and 4 or 1
     local function PaintRow(index, firstSlot)
-        PaintGroup(index, firstSlot, 5, 4)
-        PaintGroup(index, firstSlot + 4, 1, 4)
+        PaintGroup(index, firstSlot, Addon.Layout.RowStart(false), 4)
+        PaintGroup(index, firstSlot + 4, Addon.Layout.RowStart(true), 4)
     end
     PaintRow(mainIndex, 1)
     PaintRow(2, 13)
@@ -848,8 +848,8 @@ function Display:Update(unit)
         end
     else
         -- Split the combined layer across the extended trigger sections.
-        PaintGroup(4, 21, 5, 4)
-        PaintGroup(4, 33, 1, 4)
+        PaintGroup(4, 21, Addon.Layout.RowStart(false), 4)
+        PaintGroup(4, 33, Addon.Layout.RowStart(true), 4)
     end
     for i = 11, 12 do
         local slot = self.slots[i]
@@ -889,7 +889,8 @@ function Display:SuppressNative(frames)
     for _, frame in ipairs(frames) do
         keep[frame] = true
         if self.suppressed[frame] == nil then self.suppressed[frame] = frame:GetAlpha() end
-        if frame:GetAlpha() ~= 0 then frame:SetAlpha(0) end
+        local alpha = frame:GetAlpha()
+        if not Readable(alpha) or alpha ~= 0 then frame:SetAlpha(0) end
     end
     for frame, alpha in pairs(self.suppressed) do
         if not keep[frame] then frame:SetAlpha(alpha); self.suppressed[frame] = nil end

@@ -11,6 +11,8 @@ Addon.Locales.Register("itIT", "Italiano", {
     enabledTip = "Usa ClassicConsoleGamepadUI mentre è attiva la modalità controller del gioco. Le modifiche fatte in combattimento si applicano al termine del combattimento.",
     compact = "Barre compatte (8 slot)",
     compactTip = "Riduce le tre barre a 8 slot. L2 e R2 restano in sezioni fisse sopra; L2+R2 mostra le sue azioni sotto. Disattiva per avere 12 slot, ad esempio su Steam Deck. Le modifiche fatte in combattimento si applicano al termine del combattimento.",
+    crossFirst = "Prima i pulsanti della croce direzionale in ogni riga",
+    crossFirstTip = "Ogni riga di otto inizia con i quattro pulsanti azione (X, Y, B, A) e finisce con la croce direzionale. Con questa opzione la riga inizia con la croce. Cambia solo l'ordine: ogni slot mantiene azione e tasto, e un clic o un tasto fa sempre ciò che lo slot mostra.",
     groupBoth = "Tieni insieme i pulsanti L2+R2 (12 slot)",
     groupBothTip = "Nella disposizione a 12 slot i pulsanti usati con entrambi i grilletti sono separati: quattro dopo la riga L2 e quattro in fondo. Questa opzione li mette tutti e otto insieme, tra la riga L2 e la riga R2. Non ha effetto con le barre compatte.",
     moveUnitFrames = "Riquadri classici di giocatore, bersaglio e focus",

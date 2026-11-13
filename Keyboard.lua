@@ -485,15 +485,21 @@ local function TypedWord(line)
     return word
 end
 
+-- The chat line split at the cursor: what comes before it and what after. GetUTF8CursorPosition counts characters, while
+-- SetCursorPosition (like GetText and string.sub) works in bytes: the game's own code passes strlen() to it, never a
+-- character count. Never throws (it also runs from the 0.25 s check): a cursor that cannot be placed in the text, or a
+-- secret value, gives the whole line as "before", the way the end of the line was always taken.
 local function TextAtCursor(box)
-    local line = box:GetText() or ""
-    local cursor = box:GetUTF8CursorPosition()
+    local line = box:GetText()
+    if (issecretvalue and issecretvalue(line)) or type(line) ~= "string" then return "", "" end
+    local cursor = box.GetUTF8CursorPosition and box:GetUTF8CursorPosition()
+    if (issecretvalue and issecretvalue(cursor)) or type(cursor) ~= "number" then return line, "" end
     local count, offset = 0, 0
     for character in line:gmatch(Languages.CHARACTER) do
         if count == cursor then break end
         count, offset = count + 1, offset + #character
     end
-    if count ~= cursor then error("Chat cursor is outside the text") end
+    if count ~= cursor then return line, "" end
     return line:sub(1, offset), line:sub(offset + 1)
 end
 
@@ -588,15 +594,22 @@ function Keyboard:Flush(space)
     if text == "" and not space then return true, false end
     local box = EditBox()
     if not box then return false, false end
-    local before = TextAtCursor(box)
+    local before, after = TextAtCursor(box)
     if before == "" then text = (text:gsub("^ +", "")) end
     -- A space is added once: a word that ends with a blank does not get a second one.
     if space then text = (text:gsub(" +$", "")) end
+    -- Typing in the middle of a line: a blank that already follows the cursor is the separator. The cursor steps over
+    -- it, so the next word starts after it instead of running into the word behind it.
+    local onBlank = space and after:sub(1, 1) == " "
     if text == "" then
         local added = false
         if space and before ~= "" and before:sub(-1) ~= " " then
-            box:Insert(" ")
-            added = true
+            if onBlank then
+                box:SetCursorPosition(#before + 1)
+            else
+                box:Insert(" ")
+                added = true
+            end
         end
         -- A buffer of nothing but blanks is used up.
         if self:Pending() ~= "" then
@@ -612,9 +625,11 @@ function Keyboard:Flush(space)
         Suggest("LearnOwn", text)
     end
     self.pred, self.buffer, self.tap = nil, "", nil
-    box:Insert(text .. (space and " " or ""))
+    local added = space and not onBlank
+    box:Insert(text .. (added and " " or ""))
+    if onBlank then box:SetCursorPosition(#before + #text + 1) end
     self:UpdateHints()
-    return true, space and true or false
+    return true, added and true or false
 end
 
 -- The 0 key: a space that ends the word, so a sentence goes on with the next word. The smart layout has no digits and

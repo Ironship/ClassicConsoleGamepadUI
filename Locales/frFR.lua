@@ -11,6 +11,8 @@ Addon.Locales.Register("frFR", "Français", {
     enabledTip = "Utiliser ClassicConsoleGamepadUI lorsque le mode manette du jeu est activé. Les changements faits en combat s'appliquent à la fin du combat.",
     compact = "Barres compactes (8 emplacements)",
     compactTip = "Réduit les trois barres à 8 emplacements. L2 et R2 restent dans des sections fixes au-dessus ; L2+R2 affiche ses actions en dessous. Désactivez pour obtenir 12 emplacements, par exemple sur Steam Deck. Les changements faits en combat s'appliquent à la fin du combat.",
+    crossFirst = "Boutons de la croix directionnelle d'abord dans chaque rangée",
+    crossFirstTip = "Chaque rangée de huit commence par les quatre boutons d'action (X, Y, B, A) et finit par la croix directionnelle. Avec cette option, la rangée commence par la croix. Seul l'ordre change : chaque emplacement garde son action et sa touche, et un clic ou une touche fait toujours ce que l'emplacement affiche.",
     groupBoth = "Garder les boutons L2+R2 ensemble (12 emplacements)",
     groupBothTip = "Dans la disposition à 12 emplacements, les boutons utilisés avec les deux gâchettes sont séparés : quatre après la rangée L2 et quatre tout au bout. Cette option place les huit ensemble, entre la rangée L2 et la rangée R2. Sans effet avec les barres compactes.",
     moveUnitFrames = "Cadres classiques du joueur, de la cible et du focus",

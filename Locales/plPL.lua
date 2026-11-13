@@ -11,6 +11,8 @@ Addon.Locales.Register("plPL", "Polski", {
     enabledTip = "Włącz ClassicConsoleGamepadUI, gdy aktywny jest tryb interfejsu pada. Zmiana podczas walki zostanie zastosowana po jej zakończeniu.",
     compact = "Kompaktowe paski (8 pól)",
     compactTip = "Skróć trzy paski do 8 pól. L2 i R2 mają stałe sekcje u góry; L2+R2 pokazuje swoje akcje na dole. Wyłącz, aby użyć układu 12 pól, np. na Steam Decku. Zmiana podczas walki zostanie zastosowana po jej zakończeniu.",
+    crossFirst = "Przyciski krzyżaka najpierw w każdym rzędzie",
+    crossFirstTip = "Każdy rząd ośmiu pól zaczyna się od czterech przycisków akcji (X, Y, B, A), a kończy krzyżakiem. Po włączeniu rząd zaczyna się od krzyżaka. Zmienia się tylko kolejność: każde pole zachowuje akcję i klawisz, a klik lub klawisz robi to, co pokazuje pole.",
     groupBoth = "Trzymaj przyciski L2+R2 razem (12 pól)",
     groupBothTip = "W układzie 12 pól przyciski używane z oboma triggerami są rozdzielone: cztery za rzędem L2 i cztery na samym końcu. Ta opcja zbiera wszystkie osiem między rzędem L2 a rzędem R2. Nie działa przy kompaktowych paskach.",
     moveUnitFrames = "Klasyczne ramki gracza, celu i focusu",

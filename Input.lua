@@ -136,11 +136,11 @@ local RESUME = [[
     end
 ]]
 
--- Face buttons (native 5-8, X Y B A) sit on the left of each row of eight.
--- The cross (native 1-4) sits on the right.
+-- Face buttons (native 5-8, X Y B A) sit on the left of each row of eight and the cross (native 1-4) on the right,
+-- or the other way round with the setting "crossFirst" (Layout.RowStart).
 local function RowIndex(offset)
-    if offset <= 4 then return offset + 4 end
-    return offset - 4
+    if offset <= 4 then return Addon.Layout.RowStart(false) + offset - 1 end
+    return Addon.Layout.RowStart(true) + offset - 5
 end
 
 local function SlotAction(i)
@@ -148,9 +148,9 @@ local function SlotAction(i)
     if i <= 10 then return 0, i - 8 end
     if i <= 12 then return 5, i end
     if i >= 13 and i <= 20 then return 2, RowIndex(i - 12) end
-    if i >= 21 and i <= 24 then return 4, i - 16 end
+    if i >= 21 and i <= 24 then return 4, Addon.Layout.RowStart(false) + i - 21 end
     if i >= 25 and i <= 32 then return 3, RowIndex(i - 24) end
-    if i >= 33 and i <= 36 then return 4, i - 32 end
+    if i >= 33 and i <= 36 then return 4, Addon.Layout.RowStart(true) + i - 33 end
 end
 
 function Input:SyncNativeMouse(restore)
