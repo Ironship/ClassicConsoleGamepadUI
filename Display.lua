@@ -191,6 +191,8 @@ function Display:RefreshGeometry()
     if self.layoutRevision == Addon.Layout.revision then return true end
     for i, slot in ipairs(self.slots) do
         local template = slot.template
+        -- Placed at the stock size first (Layout:Place works in UIParent points); ApplyScale sizes the bars afterwards.
+        slot:SetScale(1)
         local promptScale = Addon.db.promptScale
         slot.Prompt:SetSize(28 * promptScale, 28 * promptScale)
         slot.Prompt:SetPoint("TOPRIGHT", 4 * promptScale, 4 * promptScale)
@@ -246,6 +248,10 @@ function Display:RefreshGeometry()
     self:AlignCompactChrome()
     -- After the art is copied (that shows it) and placed: a hidden gryphon still sets where the bars are centered.
     self:ApplyCaps()
+    -- With the gryphon on its side hidden, the page switcher closes the gap it leaves.
+    self:AlignPageSwitcher()
+    -- The size the player chose for the bars (barScale), before they are moved to the player's place.
+    self:ApplyScale(Addon.db.barScale or 1)
     -- The player's own place for the bars (dragged in Edit Mode, EditMode.lua), on top of the computed one.
     self.offsetX, self.offsetY = 0, 0
     self:Translate(self:GetOffset())
@@ -264,12 +270,15 @@ local function UIBox(region)
     return x * scale, (x + w) * scale, y * scale, h * scale, scale
 end
 
+-- left and bottom are UIParent points; a region drawn at another scale (a slot under barScale) takes its own units.
 local function MoveX(region, left, bottom)
     if not region or not left or not bottom then return end
+    local ratio = region.GetEffectiveScale and region:GetEffectiveScale() / UIParent:GetEffectiveScale() or 1
+    if not ratio or ratio <= 0 then ratio = 1 end
     local clear = region.ClearAllPointsBase or region.ClearAllPoints
     local set = region.SetPointBase or region.SetPoint
     clear(region)
-    set(region, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+    set(region, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", left / ratio, bottom / ratio)
 end
 
 function Display:AlignCompactChrome()
@@ -432,6 +441,111 @@ function Display:ApplyCaps()
     if not art then return end
     if art[2] then art[2].texture:SetShown(Addon.db.showLeftCap ~= false) end
     if art[3] then art[3].texture:SetShown(Addon.db.showRightCap ~= false) end
+end
+
+-- The classic bars at the size the player chose (barScale, 1 = the stock size), grown or shrunk about the middle of their
+-- bottom edge so they stay centered on the bottom of the screen. Slots are scaled whole (icon, cooldown, prompts and all),
+-- the art is resized, and the status bars and the compact layout's bags travel along: the status bars as wide as the bars,
+-- the bags scaled with them, right-aligned under the R2 half as before. Every place is measured before anything changes.
+function Display:ApplyScale(scale)
+    if not scale or math.abs(scale - 1) < 0.001 then return end
+    local own, stock = self:Regions()
+    local boxes, left, right, bottom = {}, nil, nil, nil
+    for _, region in ipairs(own) do
+        local regionLeft, regionRight, regionBottom, height = UIBox(region)
+        if regionLeft then
+            boxes[#boxes + 1] = { region, regionLeft, regionRight, regionBottom, height }
+            -- The pivot comes from what shows: hidden spare slots can sit at stock places outside the bars.
+            if region:IsShown() then
+                left, right = math.min(left or regionLeft, regionLeft), math.max(right or regionRight, regionRight)
+                bottom = math.min(bottom or regionBottom, regionBottom)
+            end
+        end
+    end
+    if not left then return end
+    local stockBoxes = {}
+    for _, frame in ipairs(stock) do
+        local frameLeft, frameRight, frameBottom, _, ratio = UIBox(frame)
+        if frameLeft and ratio > 0 then stockBoxes[#stockBoxes + 1] = { frame, frameLeft, frameRight, frameBottom, ratio } end
+    end
+    local pivotX, pivotY = (left + right) / 2, bottom
+    local function X(x) return pivotX + (x - pivotX) * scale end
+    local function Y(y) return pivotY + (y - pivotY) * scale end
+    for _, box in ipairs(boxes) do
+        local region = box[1]
+        if region:IsObjectType("Frame") then
+            region:SetScale(scale)
+        else
+            region:SetSize((box[3] - box[2]) * scale, box[5] * scale)
+        end
+        MoveX(region, X(box[2]), Y(box[4]))
+    end
+    for _, box in ipairs(stockBoxes) do
+        local frame, ratio = box[1], box[5]
+        if frame == BagsBar then
+            -- Scaled with the bars, still right-aligned under the R2 half. ResetBagsScale undoes it before a rebuild.
+            local base = frame:GetScale()
+            local scaled, setScale = base * scale, frame.SetScaleBase or frame.SetScale
+            setScale(frame, scaled)
+            self.bagsBase, self.bagsApplied = base, scaled
+            local width = (box[3] - box[2]) * scale
+            ratio = ratio * scale
+            Addon.Layout:SetBottomLeft(frame, (X(box[3]) - width) / ratio, Y(box[4]) / ratio)
+        else
+            Addon.Layout:SetStatusWidth(frame, (box[3] - box[2]) * scale / ratio)
+            Addon.Layout:SetBottomLeft(frame, X(box[2]) / ratio, Y(box[4]) / ratio)
+        end
+    end
+end
+
+-- The page switcher (the up and down arrows and the page number) sits outside a gryphon. With that gryphon hidden it
+-- moves in beside the bottom row, one slot gap away, so no gryphon-wide hole is left between them. The three parts move
+-- together; with the gryphon shown nothing changes.
+function Display:AlignPageSwitcher()
+    if not self.art or not self.art[4] then return end
+    local parts = { self.art[4].texture, self.art[5] and self.art[5].texture, self.pageLabel }
+    local boxes, partsLeft, partsRight = {}, nil, nil
+    for _, part in ipairs(parts) do
+        local left, right, bottom = UIBox(part)
+        if left then
+            boxes[#boxes + 1] = { part, left, bottom }
+            partsLeft, partsRight = math.min(partsLeft or left, left), math.max(partsRight or right, right)
+        end
+    end
+    if not partsLeft then return end
+    -- The bottom row: 8 slots with compact bars, 12 without.
+    local rowLeft, rowRight, gap
+    for i = 1, Addon.Layout.compact and 8 or 12 do
+        local left, right = UIBox(self.slots[i])
+        if left then rowLeft, rowRight = math.min(rowLeft or left, left), math.max(rowRight or right, right) end
+    end
+    if not rowLeft then return end
+    -- One slot gap: the space between slots 1 and 2, whichever side 2 is on (the row can run either way).
+    local firstLeft, firstRight = UIBox(self.slots[1])
+    local secondLeft, secondRight = UIBox(self.slots[2])
+    if firstLeft and secondLeft then
+        gap = secondLeft >= firstRight and secondLeft - firstRight or firstLeft - secondRight
+    end
+    if not gap or gap < 0 then gap = 6 end
+    local shift = 0
+    if partsRight <= rowLeft and Addon.db.showLeftCap == false then
+        shift = (rowLeft - gap) - partsRight
+    elseif partsLeft >= rowRight and Addon.db.showRightCap == false then
+        shift = (rowRight + gap) - partsLeft
+    end
+    if math.abs(shift) < 0.5 then return end
+    for _, box in ipairs(boxes) do MoveX(box[1], box[2] + shift, box[3]) end
+end
+
+-- The bags back at the size they had before ApplyScale grew or shrank them, unless something else (the layout's own
+-- anchor and scale, a restore) has set their size since.
+function Display:ResetBagsScale()
+    local applied = self.bagsApplied
+    self.bagsApplied = nil
+    if not applied or not BagsBar or InCombatLockdown() then return end
+    if math.abs(BagsBar:GetScale() - applied) < 0.0001 then
+        (BagsBar.SetScaleBase or BagsBar.SetScale)(BagsBar, self.bagsBase)
+    end
 end
 
 -- Where the player put the bars, as an offset from their computed place in UIParent points. While the Edit Mode
@@ -1098,7 +1212,11 @@ function Display:Refresh(wanted)
     end
     local needsGeometry = not self.root or Addon.Layout.dirty
         or self.layoutRevision ~= Addon.Layout.revision
-    if needsGeometry then self:RevealTemplates() end
+    if needsGeometry then
+        self:RevealTemplates()
+        -- The layout measures the bags at their own size.
+        self:ResetBagsScale()
+    end
     local prepared = Addon.Layout:Prepare()
     if not prepared then self:HideTemplates(); self.reason = "layout"; return false end
     self:Create()

@@ -127,7 +127,7 @@ local function Tabs()
             { "control", "enabled" }, { "control", "compact" }, { "control", "groupBoth" }, { "control", "crossFirst" },
             { "control", "moveUnitFrames" },
             { "control", "placeBags" }, { "control", "placeStatusBars" }, { "control", "placeTotemBar" },
-            { "control", "contextGap" },
+            { "control", "barScale" }, { "control", "contextGap" },
             { "control", "showLeftCap" }, { "control", "showRightCap" },
             { "header", "menu" },
             { "control", "placeMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },

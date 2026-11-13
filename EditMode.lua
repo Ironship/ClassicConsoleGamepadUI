@@ -394,6 +394,7 @@ Mover:Add({
     id = "bars", frameName = "ClassicConsoleGamepadUIMover", label = "barsEditLabel", hint = "barsNudgeHint",
     -- The gryphons, like the end caps setting of the game's own action bar.
     checks = { "showLeftCap", "showRightCap" },
+    sliders = { "barScale" },
     Visible = function() return Addon.classicVisible and not Addon.Display.barEditing end,
     Bounds = function() return Addon.Display:Bounds() end,
     BeginDrag = function() end,

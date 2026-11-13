@@ -21,6 +21,8 @@ local controls = {
     { key = "showRightCap", default = true },
     -- Where the classic bars were dragged in Edit Mode (EditMode.lua): an offset from their computed place, in UIParent
     -- points. Not on the settings window; Edit Mode and /cgp resetbars change it.
+    -- The size of the classic bars (Display:ApplyScale), also on their Edit Mode panel.
+    { key = "barScale", default = 1, min = 0.5, max = 1.5, step = 0.05 },
     { key = "barX", default = 0, min = -4000, max = 4000, step = 1 },
     { key = "barY", default = 0, min = -4000, max = 4000, step = 1 },
     { key = "placeMenu", default = true, section = "menu" },
@@ -55,6 +57,7 @@ local controls = {
 local releaseSettings = { placeMenu = true, placeBags = true, placeStatusBars = true, placeTotemBar = true }
 
 local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true, barX = true, barY = true,
+    barScale = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
 -- The rows that pick one of a list: { value, label } (a language names itself) or { value, nil, text key }.
@@ -108,8 +111,9 @@ function Options:Changed(key)
     elseif key == "legendFrame" or key == "legendShade" then
         Addon.HUD:ApplyLegendStyle()
     elseif key == "showLeftCap" or key == "showRightCap" then
-        -- Only art: shown or hidden at once, in combat too, without rebuilding the bars.
+        -- Shown or hidden at once, in combat too; the rebuild after combat moves the page switcher beside the bars.
         Addon.Display:ApplyCaps()
+        Addon.Layout.dirty = true
         Addon:QueueRefresh(true)
     else
         if geometrySettings[key] then Addon.Layout.dirty = true end

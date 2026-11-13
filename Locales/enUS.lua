@@ -19,6 +19,8 @@ Addon.Locales.Register("enUS", "English", {
     groupBothTip = "In the 12-slot layout the buttons used with both triggers are split: four after the L2 row and four at the far end. This puts all eight together, between the L2 row and the R2 row. It has no effect with compact bars.",
     moveUnitFrames = "Classic player, target and focus frames",
     moveUnitFramesTip = "Places these frames at their classic positions. Drag them in Edit Mode and save the layout and the new place is remembered (/cgp resetframes undoes it). Disable to let the gamepad layout's Edit Mode alone place the frames.",
+    barScale = "Classic bars size",
+    barScaleTip = "The size of the classic bars, with their gryphons, indicators, experience bar and (with compact bars) bags. They stay centered on the bottom of the screen. Also in Edit Mode, on the panel of the classic bars.",
     placeBags = "Bags with the classic bars",
     placeBagsTip = "Places the bags at their classic place (with compact bars, under the R2 half). Disable to place them yourself in Edit Mode.",
     placeStatusBars = "Experience and reputation bars above the classic bars",

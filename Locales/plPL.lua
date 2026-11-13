@@ -17,6 +17,8 @@ Addon.Locales.Register("plPL", "Polski", {
     groupBothTip = "W układzie 12 pól przyciski używane z oboma triggerami są rozdzielone: cztery za rzędem L2 i cztery na samym końcu. Ta opcja zbiera wszystkie osiem między rzędem L2 a rzędem R2. Nie działa przy kompaktowych paskach.",
     moveUnitFrames = "Klasyczne ramki gracza, celu i focusu",
     moveUnitFramesTip = "Ustawia te ramki w ich klasycznych miejscach. Przeciągnij je w trybie edycji i zapisz układ, a miejsce zostanie zapamiętane (/cgp resetframes cofa). Wyłącz, aby ramkami rządził wyłącznie tryb edycji pada.",
+    barScale = "Rozmiar klasycznych pasków",
+    barScaleTip = "Rozmiar klasycznych pasków razem z gryfami, wskaźnikami, paskiem doświadczenia i (przy kompaktowych paskach) plecakami. Zostają wyśrodkowane na dole ekranu. Także w trybie edycji, w panelu klasycznych pasków.",
     placeBags = "Plecaki przy klasycznych paskach",
     placeBagsTip = "Ustawia plecaki w klasycznym miejscu (przy kompaktowych paskach pod połową R2). Wyłącz, aby ustawić je samemu w trybie edycji.",
     placeStatusBars = "Paski doświadczenia i reputacji nad klasycznymi paskami",

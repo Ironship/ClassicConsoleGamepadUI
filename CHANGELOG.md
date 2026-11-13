@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- "Classic bars size" (50% to 150%, General tab and the Edit Mode panel of the classic bars) grows or shrinks the classic
+  bars with their gryphons, indicators, experience bar and compact bags, centered on the bottom of the screen. 100% is the size so far.
 - "Reset all settings" on the Tools tab puts every setting back to its default, with the places the addon keeps (the
   classic bars and the legend dragged in Edit Mode, the unit frames, the on-screen keyboard). The interface language and
   the learned words stay. It asks for a second click, like "Reset learned words".
@@ -18,7 +20,7 @@
   so they could not be placed at all. The classic button layer stays off while Edit Mode is open.
 - The gryphons at the ends of the classic bars can be hidden one by one, like the end caps of the game's own action bar:
   "Left gryphon" and "Right gryphon" on the General tab and on the Edit Mode panel of the classic bars. The bars keep their
-  place when a gryphon is hidden.
+  place when a gryphon is hidden, and the page switcher moves in beside the bottom row instead of leaving a gap.
 - The gamepad legend (the box of button hints) can be moved in Edit Mode too, as "Gamepad Legend": drag it or nudge it
   from its panel. The place is kept at once, also in Edit Mode, and wins over the experimental "Move the legend below the
   player frame"; `/cgp resetlegend` or the panel's "Reset position" button puts it back.
