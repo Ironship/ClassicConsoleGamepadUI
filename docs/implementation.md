@@ -205,6 +205,58 @@ matching the exported source commit's build **1.60.1 (70450)**.
   `SaveLayouts` commits it to `gamepadHUD`, a revert drops it. The classic place is then
   `moves` > `gamepadHUD` > `keyboardHUD` > preset. The frames are not restored to the gamepad layout while
   Edit Mode is open. The hooks are post-hooks: nothing in Edit Mode's tables is written.
+- Edit Mode keeps the classic bars: `Display:NeedsNativeView` goes native only for a radial of the action editor, no
+  longer for Edit Mode. The faded gamepad bar's own selection box is invisible with it (alpha 0), so `EditMode.lua` draws
+  selection boxes of the game's kind (blue, yellow once selected) for this addon's frames, in `HIGH` strata above that
+  box. Each box is a spec (`Mover:Add`: bounds, drag, nudge, reset, position text, check boxes and sliders for settings
+  of `Options.controls`); the classic bars and the gamepad legend have one each. A drag follows `GetCursorPosition` by hand
+  instead of `StartMoving`, whose clamp to the screen would make the bars (flush with its bottom edge) jump when picked
+  up, and stays on screen with the bounds it began with. A place is saved at once in this addon's saved variables, the
+  same for every Edit Mode layout (Edit Mode does not know the frames, so its Save and Revert do not see them); the
+  panel's reset button, `/cgp resetbars` and `/cgp resetlegend` put them back. Nothing calls into Edit Mode: a
+  `SelectSystem` post-hook only drops this selection when the game selects one of its own systems. While Edit Mode is
+  open the classic click layer is off (`Input:Refresh(false)`), so the pad drives the editor.
+- Bar geometry after the slots are placed, in this order (`Display:RefreshGeometry`): `AlignCompactChrome`, `ApplyCaps`,
+  `AlignPageSwitcher`, `ApplyScale`, `Translate` with the Edit Mode offset, then `PlaceTotemBar`, so the totem bar, chat
+  clearance and the Edit Mode box measure the finished bars. `Display:Regions` lists what moves: the slots, the art and
+  the page number, and the stock frames that travel with them (the status bars; the bags in the compact layout; neither
+  while a placement setting keeps it). `Translate` measures everything before it moves anything, since the shoulder
+  indicators hang off slots; during a drag `FollowOffset` moves the built bars by the difference, and the rebuild after
+  the drop moves chat and the totem bar along. `MoveX` takes UIParent points and divides by the region's effective scale.
+- `db.barScale` (0.5-1.5, "Classic bars size"): `Display:ApplyScale` grows or shrinks the built bars about the middle of
+  the bottom edge of what shows (hidden spare slots of the compact layout can sit at stock places outside it). Slots get
+  `SetScale` (icon, cooldown, prompts and glyphs follow) after `RefreshGeometry` set them back to 1, the art gets
+  `SetSize`, the status bars are widened with the bars and the compact bags get `SetScaleBase` and stay right-aligned
+  under the R2 half. The bags' scale is set back (`ResetBagsScale`, only if nothing else changed it since) before the
+  layout measures them again, so it never compounds whichever way `ApplyStockAnchor` placed them.
+- `db.showLeftCap`, `db.showRightCap`: the gryphons (`art[2]`, `art[3]`) are shown or hidden after they are placed; a
+  hidden one still sets where the bars are centered, so the bars do not move. With the gryphon on its side hidden,
+  `AlignPageSwitcher` moves the page arrows and number in beside the bottom row, one slot gap away. Changing either
+  rebuilds the layout (outside combat; the art itself changes at once).
+- The gamepad legend in Edit Mode: `db.legendSpot` is the legend frame's top-left corner in UIParent points from the
+  screen's top-left (so it keeps its distance from the top on any screen height) and wins over `moveLegend`; the legend
+  keeps it in Edit Mode too. With `db.legendGrowUp` the spot is the bottom edge of the hints instead (`anchor =
+  "bottom"`): `HUD:LegendContent` measures the shown children (not the largest set, `LegendExtent`), and an `OnUpdate`
+  places the frame so they end there, in the frame the hints change and in combat while `IsProtected()` is false.
+  Switching it converts the spot where the legend stands, so nothing jumps. `db.legendFrame` and `db.legendShade` act on
+  the legend's art, found by the names its templates give their pieces (nine-slice corners and edges or a large
+  `*Border*` for the frame; a nine-slice `Center` or a large `*Background*`, `*Backdrop*`, `*Shade*` for the shade; the
+  unnamed pieces of a frame named like that take its kind; widgets are told by the userdata at `[0]`). Only alpha
+  changes, from the alpha each piece had when found, scanned again when a new set of hints shows; the defaults give every
+  piece its alpha back. `/cgp legend` lists every texture of the legend with the kind it got.
+- Placement settings (`placeMenu`, `placeBags`, `placeStatusBars`, `placeTotemBar`, all on by default): off, the frame is
+  left where the gamepad layout's Edit Mode puts it. `Layout:Prepare` still places such a frame from its stock anchor
+  like the others (the bags can hang off the menu, so the rest is measured from the classic places), measured first and
+  put back at the end where it was, at its Edit Mode scale (and width, for a status bar); frames anchored to it are
+  pinned where they are first. Display places nothing the layout keeps (`Layout:Keeps`). A kept status bar leaves no gap
+  in the stack the fallback anchors build. The settings alone decide: a layout that once moved one of these frames does
+  not change the classic look. Switching one sets `Layout.releasePending`, so the next `Prepare` restores every frame
+  first and a frame let go is measured where Edit Mode has it. The `ApplySystemAnchor` post-hook drops that frame's
+  snapshot, so a restore returns it to its newly saved place.
+- "Reset all settings" (`Options:ResetAll`, Tools tab, asks twice, outside combat): every entry of `Options.controls` to
+  its default, `legendSpot`, the keyboard's position, language and mode, and the unit frames' Edit Mode moves
+  (`HUD:ResetFrames`); every stock frame is restored before the layout runs again. The interface language, the learned
+  words and the captured keyboard/mouse layout stay.
 - No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation), so
   `Keyboard.lua` draws one from plain unprotected frames. It acts only on a chat line the player has already opened
   (`ChatFrameUtil.GetActiveWindow`; any shown `ChatFrameNEditBox` as fallback) and only with `Insert` and `SetText`.
