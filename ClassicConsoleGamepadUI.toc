@@ -24,6 +24,7 @@ Display.lua
 Input.lua
 HUD.lua
 MenuHints.lua
+EditMode.lua
 Options.lua
 SettingsWindow.lua
 ItemDelete.lua

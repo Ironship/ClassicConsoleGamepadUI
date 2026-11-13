@@ -127,6 +127,7 @@ local function Tabs()
             { "control", "enabled" }, { "control", "compact" }, { "control", "groupBoth" }, { "control", "crossFirst" },
             { "control", "moveUnitFrames" },
             { "control", "contextGap" },
+            { "control", "showLeftCap" }, { "control", "showRightCap" },
             { "header", "menu" },
             { "control", "menuRight" }, { "control", "menuBottom" },
         } },
@@ -136,6 +137,7 @@ local function Tabs()
             { "control", "showMenuHints" }, { "control", "highlightActive" },
             { "header", "legend" },
             { "control", "moveLegend" }, { "control", "legendX" }, { "control", "legendGap" },
+            { "control", "legendFrame" }, { "control", "legendShade" },
         } },
         { id = "chat", label = Text("chat"), items = {
             { "header", "chat" },

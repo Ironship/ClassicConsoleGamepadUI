@@ -244,6 +244,11 @@ function Display:RefreshGeometry()
     Addon.Layout:Place(self.pageLabel, self.pageSource, nil, MainActionBar.ActionBarPageNumber)
     self.pageLabel:SetFont(self.pageSource:GetFont())
     self:AlignCompactChrome()
+    -- After the art is copied (that shows it) and placed: a hidden gryphon still sets where the bars are centered.
+    self:ApplyCaps()
+    -- The player's own place for the bars (dragged in Edit Mode, EditMode.lua), on top of the computed one.
+    self.offsetX, self.offsetY = 0, 0
+    self:Translate(self:GetOffset())
     -- An extra: a failure here must not switch the classic bars off.
     pcall(self.PlaceTotemBar, self)
     self.layoutRevision = Addon.Layout.revision
@@ -419,6 +424,92 @@ function Display:PlaceMicroMenuRight()
     Addon.Layout:SetBottomLeft(menu, x, Addon.db.menuBottom)
 end
 
+-- The gryphons at the two ends (the stock end caps' art, self.art[2] and [3]), each shown or hidden by its own setting.
+function Display:ApplyCaps()
+    local art = self.art
+    if not art then return end
+    if art[2] then art[2].texture:SetShown(Addon.db.showLeftCap ~= false) end
+    if art[3] then art[3].texture:SetShown(Addon.db.showRightCap ~= false) end
+end
+
+-- Where the player put the bars, as an offset from their computed place in UIParent points. While the Edit Mode
+-- selection is being dragged (EditMode.lua), the drag so far is added on top of the saved offset.
+function Display:GetOffset()
+    return (Addon.db.barX or 0) + (self.dragX or 0), (Addon.db.barY or 0) + (self.dragY or 0)
+end
+
+-- The stock frames that travel with the classic bars: the status bars above them, and in the compact layout the bags,
+-- which AlignCompactChrome tucks under the R2 half (with 12 slots the bags keep their own place by the micro menu).
+local function TravellingFrames()
+    local frames = { MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }
+    if Addon.Layout.compact and BagsBar and BagsBar:IsShown() then frames[#frames + 1] = BagsBar end
+    return frames
+end
+
+-- Every region the classic bars are drawn with, own (slots, art, page number) and stock.
+function Display:Regions()
+    local own, stock = {}, {}
+    for _, slot in ipairs(self.slots or {}) do own[#own + 1] = slot end
+    for _, entry in ipairs(self.art or {}) do own[#own + 1] = entry.texture end
+    if self.pageLabel then own[#own + 1] = self.pageLabel end
+    for _, frame in ipairs(TravellingFrames()) do
+        if frame then stock[#stock + 1] = frame end
+    end
+    return own, stock
+end
+
+-- Moves the whole set of classic bars by dx, dy UIParent points. Every place is measured before anything moves: the
+-- shoulder indicators hang from slots, so measuring after a move would shift them twice.
+function Display:Translate(dx, dy)
+    dx, dy = dx or 0, dy or 0
+    if math.abs(dx) < 0.01 and math.abs(dy) < 0.01 then return end
+    local own, stock = self:Regions()
+    local places = {}
+    for _, list in ipairs({ own, stock }) do
+        for _, region in ipairs(list) do
+            local left, _, bottom, _, scale = UIBox(region)
+            if left and scale and scale > 0 then places[#places + 1] = { region, left, bottom, scale, list == stock } end
+        end
+    end
+    for _, place in ipairs(places) do
+        local region, left, bottom, scale = place[1], place[2] + dx, place[3] + dy, place[4]
+        if place[5] then
+            Addon.Layout:SetBottomLeft(region, left / scale, bottom / scale)
+        else
+            MoveX(region, left, bottom)
+        end
+    end
+    self.offsetX, self.offsetY = (self.offsetX or 0) + dx, (self.offsetY or 0) + dy
+end
+
+-- Brings the bars on screen to the wanted offset without rebuilding them (each frame of an Edit Mode drag).
+function Display:FollowOffset()
+    if not self.root or not self.root:IsShown() or not self.offsetX or InCombatLockdown() then return end
+    local x, y = self:GetOffset()
+    self:Translate(x - self.offsetX, y - self.offsetY)
+end
+
+-- The rectangle the classic bars cover on screen, in UIParent points: left, bottom, right, top.
+function Display:Bounds()
+    if not self.root or not self.root:IsShown() then return end
+    local own, stock = self:Regions()
+    local left, bottom, right, top
+    for _, list in ipairs({ own, stock }) do
+        for _, region in ipairs(list) do
+            if region:IsShown() and (region.GetAlpha == nil or region:GetAlpha() > 0) then
+                local regionLeft, regionRight, regionBottom, height = UIBox(region)
+                if regionLeft then
+                    left = math.min(left or regionLeft, regionLeft)
+                    right = math.max(right or regionRight, regionRight)
+                    bottom = math.min(bottom or regionBottom, regionBottom)
+                    top = math.max(top or regionBottom + height, regionBottom + height)
+                end
+            end
+        end
+    end
+    if left then return left, bottom, right, top end
+end
+
 -- The native action editor ("Bind to Action Bar", "Edit Action Bar") draws its
 -- own crossbar from a separate page unit. Its buttons are read here exactly like
 -- the main HUD's, so the classic bars stay on screen while the editor is open.
@@ -449,7 +540,7 @@ function Display:GetBars()
     if bars then return native, unit, bars, false end
 end
 
--- Edit Mode (HUD layout editing) stays entirely native.
+-- Edit Mode (HUD layout editing) is open.
 function Display:IsEditing()
     return EditModeManagerFrame ~= nil and EditModeManagerFrame:IsEditModeActive()
 end
@@ -473,14 +564,15 @@ function Display:IsFlyoutOpen(bars, unit)
     return false
 end
 
--- Edit Mode stays native. A radial needs no native view: the game draws, focuses and drives it itself and shows it
+-- Edit Mode keeps the classic bars: they get a selection box of their own there (EditMode.lua) and can be dragged.
+-- Going native for it put the stock gamepad crossbar up instead, which cannot place the classic bars, and the classic
+-- bars had no place in the editor at all. A radial needs no native view: the game draws, focuses and drives it itself and shows it
 -- over whatever HUD is up (its frame hangs off UIParent and the button it belongs to moves into it, so the faded
 -- stock bar hides neither). The classic bars stay and fade while it is open (Refresh). Going native for it put the
 -- bags, micro menu, status bars and chat back in their stock places for as long as it was open, and in combat for
 -- the rest of the fight, because the classic bars cannot be built then. Only the action editor's own radials stay
 -- native: its bars are drawn above the editor's dimmed screen (SetLayer), which would put them over the radial.
 function Display:NeedsNativeView(bars, unit, editing)
-    if self:IsEditing() then return true end
     return editing and self:IsFlyoutOpen(bars, unit) or false
 end
 
@@ -988,7 +1080,7 @@ function Display:Refresh(wanted)
     if not wanted then self.reason = "disabled"; self:RestoreNative(); return false end
     if not native then self.reason = "native missing"; self:RestoreNative(); return false end
     if self:NeedsNativeView(bars, unit, editing) then
-        self.reason = self:IsEditing() and "edit mode" or "editor flyout"
+        self.reason = "editor flyout"
         self:RestoreNative()
         return false
     end
@@ -1027,8 +1119,9 @@ function Display:Refresh(wanted)
     self:SetLayer(editing)
     self.root:Show()
     if Addon.Input.disabled then Addon.Input:RestoreAfterError(); return true end
-    if editing then
-        -- Slots only mirror the editor; its own input groups own every button.
+    if editing or self:IsEditing() then
+        -- Slots only mirror the editor; its own input groups own every button. In Edit Mode the pad drives the editor,
+        -- so the classic click layer is off there too.
         pcall(Addon.Input.Refresh, Addon.Input, false)
         return true
     end

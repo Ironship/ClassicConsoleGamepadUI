@@ -19,6 +19,10 @@ Addon.Locales.Register("plPL", "Polski", {
     moveUnitFramesTip = "Ustawia te ramki w ich klasycznych miejscach. Przeciągnij je w trybie edycji i zapisz układ, a miejsce zostanie zapamiętane (/cgp resetframes cofa). Wyłącz, aby ramkami rządził wyłącznie tryb edycji pada.",
     contextGap = "Odstęp wskaźników od górnego rzędu",
     contextGapTip = "Odstęp nad paskiem dla L1/R1 i przycisków klasy. Lewy wskaźnik pozostaje po lewej, prawy po prawej.",
+    showLeftCap = "Lewy gryf",
+    showLeftCapTip = "Pokazuj gryfa na lewym końcu klasycznych pasków. Także w trybie edycji, w panelu klasycznych pasków.",
+    showRightCap = "Prawy gryf",
+    showRightCapTip = "Pokazuj gryfa na prawym końcu klasycznych pasków. Także w trybie edycji, w panelu klasycznych pasków.",
     layout = "Układ pasków",
     menu = "Panel menu",
     menuRight = "Odstęp menu od prawej krawędzi",
@@ -43,6 +47,10 @@ Addon.Locales.Register("plPL", "Polski", {
     legendX = "Pozycja legendy od lewej krawędzi",
     legendGap = "Odstęp legendy pod ramką gracza",
     legendPositionTip = "Pozycja legendy pada w punktach interfejsu.",
+    legendFrame = "Pokaż ramkę",
+    legendFrameTip = "Pokazuj złotą ramkę wokół legendy pada. Także w trybie edycji, w panelu legendy.",
+    legendShade = "Krycie tła",
+    legendShadeTip = "Jak ciemne jest tło pod podpowiedziami. 100% to wygląd gry, 0% zostawia same podpowiedzi. Także w trybie edycji, w panelu legendy.",
 
     -- Ustawienia: czat
     chat = "Chat",
@@ -126,6 +134,20 @@ Addon.Locales.Register("plPL", "Polski", {
     scaleHelp = "Użyj skali interfejsu gry i trybu edycji: przeciągnij tam ramki gracza, celu i focusu i zapisz układ.",
     notInCombat = "Poza walką.",
     framesBack = "Ramki gracza, celu i focusu wróciły na swoje klasyczne miejsca.",
+    barsBack = "Klasyczne paski wróciły na domyślne miejsce.",
+
+    -- Tryb edycji: ramka zaznaczenia nad klasycznymi paskami
+    barsEditLabel = "Klasyczne paski akcji",
+    barsPosition = "Przesunięcie od domyślnego: %d, %d",
+    barsNudgeHint = "Przeciągnij paski lub przesuń je strzałkami (Shift: 10 punktów).",
+    barsReset = "Przywróć pozycję",
+    legendEditLabel = "Legenda pada",
+    legendPosition = "Od lewego górnego rogu: %d, %d",
+    legendPositionUp = "Dolna krawędź od lewego górnego rogu: %d, %d",
+    legendDefaultPlace = "Na domyślnym miejscu",
+    legendGrowUp = "Rośnij w górę",
+    legendNudgeHint = "Przeciągnij legendę lub przesuń ją strzałkami (Shift: 10 punktów).",
+    legendBack = "Legenda pada wróciła na domyślne miejsce.",
     -- Added to the game's own tooltip of the micro menu (same font): written without the missing letters.
     stickCenter = "pusc drazek do srodka",
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- The classic action bars show up in the game's Edit Mode. While Edit Mode is open they get a selection box of their own
+  ("Classic Action Bars"): drag it, or click it and nudge the bars from its panel, to move the whole HUD (bars, gryphons,
+  experience bar and, in the compact layout, the bags). The place is saved at once; `/cgp resetbars` or the panel's
+  "Reset position" button puts the bars back. Before, Edit Mode swapped the classic bars for the stock gamepad crossbar,
+  so they could not be placed at all. The classic button layer stays off while Edit Mode is open.
+- The gryphons at the ends of the classic bars can be hidden one by one, like the end caps of the game's own action bar:
+  "Left gryphon" and "Right gryphon" on the General tab and on the Edit Mode panel of the classic bars. The bars keep their
+  place when a gryphon is hidden.
+- The gamepad legend (the box of button hints) can be moved in Edit Mode too, as "Gamepad Legend": drag it or nudge it
+  from its panel. The place is kept at once, also in Edit Mode, and wins over the experimental "Move the legend below the
+  player frame"; `/cgp resetlegend` or the panel's "Reset position" button puts it back.
+- "Grow upwards" on the legend's Edit Mode panel: the legend keeps its bottom edge and more hints push it up, instead of
+  hanging further down. It follows its hints as they change, in combat too while the game lets the legend move.
+- The legend's gold frame can be switched off and its dark shade made lighter: "Show frame" and "Background opacity" on
+  the legend's Edit Mode panel and in the Hints tab. `/cgp legend` lists the legend's textures and which option each
+  follows.
+
 ## 0.1.0-alpha.78
 
 - Complete and delete at the chat cursor without altering links, also in lines with Polish, German or French letters (the cursor is set in bytes, as the game does); typing a word or a space in front of an existing blank steps over that blank instead of running the words together; the cursor look-up never throws; the X send binding follows predictive words.

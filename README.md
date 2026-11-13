@@ -23,6 +23,9 @@ Version 0.1.0-alpha.78. Alpha: expect bugs.
 *   Mouse clicks, drag and drop and keyboard keys work on the bars.
 *   Classic micro menu, bags, unit frames and experience bar.
 *   Move the player, target and focus frames in Edit Mode. The addon remembers where you put them.
+*   Move the classic action bars in Edit Mode: they get a selection box of their own there.
+*   Show or hide the left and right gryphons, in the settings or in Edit Mode.
+*   Move the gamepad legend (the button hints) in Edit Mode.
 *   On-screen keyboard for chat, for the controller and the mouse: a normal keyboard or a phone-style T9 keypad, both with word suggestions. English, German, Polish, French, Spanish, Italian and Portuguese.
 *   Settings window with tabs, also usable with the controller.
 *   Settings, hints and keyboard in English, German, Polish, French, Spanish, Italian or Portuguese. You choose the language, English is the default.
@@ -50,6 +53,8 @@ The game has no on-screen keyboard of its own, so the addon has one. Open the ch
 
 Open the game's Edit Mode in Gamepad Mode, drag the player, target or focus frame and save the layout. The addon remembers the place. `/cgp resetframes` puts them back.
 
+The classic action bars show up in Edit Mode too, as "Classic Action Bars". Drag the box, or click it and nudge the bars with the arrows of its panel (Shift: 10 points). The place is kept at once, for every Edit Mode layout; the panel's "Reset position" button or `/cgp resetbars` puts the bars back.
+
 ## Settings
 
 `/cgp` opens the settings window. It is also under Options > AddOns > ClassicConsoleGamepadUI. The defaults should be fine.
@@ -61,6 +66,8 @@ Commands: `/cgp` (or `/classicconsolegamepadui`)
 *   `/cgp keyboard`: show or hide the on-screen keyboard.
 *   `/cgp language`: the language of the settings and hints (`en`, `de`, `pl`, `fr`, `es`, `it`, `pt` or `auto`).
 *   `/cgp resetframes`: put the player, target and focus frames back at their classic places.
+*   `/cgp resetbars`: put the classic action bars back at their default place.
+*   `/cgp resetlegend`: put the gamepad legend back at its default place.
 *   `/cgp bindings`, `/cgp edit`: how to open the key bindings and the action editor.
 *   `/cgp status`: current state and the last problem found.
 

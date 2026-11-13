@@ -271,6 +271,9 @@ function Addon:Refresh()
         if self.HUD.legendWanted and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
     end
     self:CheckNativeTaint("HUD:RefreshChat")
+    -- The Edit Mode selection box over the classic bars (EditMode.lua); a failure there must not touch the bars.
+    local moverOk, moverError = pcall(self.Mover.Refresh, self.Mover)
+    if not moverOk then self:Note("Mover:Refresh", moverError) end
     self.ItemDelete:Refresh()
     self:CheckNativeTaint("ItemDelete:Refresh")
     if not gamepad and not changed then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
@@ -342,6 +345,7 @@ local function Initialize()
     end)
     Try("HUD", function() Addon.HUD:Observe() end)
     Try("Layout", function() Addon.Layout:Observe() end)
+    Try("Mover", function() Addon.Mover:Observe() end)
     Try("MenuHints", function() Addon.MenuHints:Observe() end)
     Try("Options", function()
         Addon.Options:Register()
@@ -469,6 +473,20 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         if InCombatLockdown() then Addon:Print(Addon.L.notInCombat); return end
         Addon.HUD:ResetFrames()
         Addon:Print(Addon.L.framesBack)
+    elseif command == "resetbars" then
+        if not Addon.Mover.bars:Reset() then return end
+        Addon:Print(Addon.L.barsBack)
+    elseif command == "resetlegend" then
+        if not Addon.Mover.legend:Reset() then return end
+        Addon:Print(Addon.L.legendBack)
+    elseif command == "legend" then
+        -- The legend's textures and the kind each got (border = frame option, shade = opacity option, - = untouched).
+        local lines = Addon.HUD:DescribeLegend()
+        Addon.diagnostics.legend = lines
+        Addon:Print(#lines .. " legend textures (saved with the diagnostics):")
+        for i = 1, math.min(#lines, 40) do print("  " .. lines[i]) end
+        if #lines > 40 then print("  ... " .. (#lines - 40) .. " more in the saved variables") end
+        return
     elseif command == "taint" then
         local ours, others = Addon:ScanTaint(2)
         local summary, foreign = {}, others.foreign or {}
@@ -533,7 +551,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | language | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | language | bindings | edit | resetframes | resetbars | resetlegend | legend | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)

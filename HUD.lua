@@ -168,26 +168,142 @@ function HUD:LegendSpot(legend, x, top)
     return x, top
 end
 
-function HUD:RefreshLegend(wanted)
-    wanted = wanted and Addon.db.moveLegend
+-- Where the player dragged the legend in Edit Mode (EditMode.lua): its top-left corner, in UIParent points from the
+-- screen's top-left corner (y is negative), so it keeps its distance from the top on any screen height. It wins over
+-- moveLegend; nil leaves the legend to moveLegend or to its native place.
+-- With spot.anchor == "bottom" (legendGrowUp, "Grow upwards" in Edit Mode) y is the bottom edge of the hints instead:
+-- the legend is moved so whatever hints show end there, and more hints grow it upwards.
+function HUD:SavedLegendSpot()
+    local spot = Addon.db.legendSpot
+    if type(spot) == "table" and type(spot.x) == "number" and type(spot.y) == "number" then return spot end
+end
+
+local function GrowsUp(spot)
+    return spot and spot.anchor == "bottom"
+end
+
+-- The hints showing right now (the shown children only, unlike LegendExtent): how far below the legend frame's top
+-- they start and how high they are, in UIParent points. nil while nothing shown has a size.
+function HUD:LegendContent(legend)
+    local _, _, _, legendTop = Bounds(legend)
+    if not legendTop then return end
+    local bottom, top
+    for _, child in ipairs({ legend:GetChildren() }) do
+        if child:IsShown() then
+            local _, b, _, t = Bounds(child)
+            if b then bottom, top = math.min(bottom or b, b), math.max(top or t, t) end
+        end
+    end
+    if not bottom then return end
+    return legendTop - top, top - bottom
+end
+
+-- The legend frame's top-left corner, in UIParent points from the bottom-left.
+function HUD:LegendCorner()
     local legend = GamepadPersistentInputLegend
     if not legend then return end
+    local left, _, _, top = Bounds(legend)
+    return left, top
+end
+
+-- The rectangle the legend covers (LegendExtent), in UIParent points: left, bottom, right, top.
+function HUD:LegendBounds()
+    local legend = GamepadPersistentInputLegend
+    if not legend or not legend:IsVisible() then return end
+    local left, top = self:LegendCorner()
+    if not left then return end
+    local dx, dy, width, height = self:LegendExtent(legend)
+    if not dx or width <= 0 or height <= 0 then return end
+    if GrowsUp(self:SavedLegendSpot()) then
+        -- The largest set of hints, standing on the bottom edge of the ones showing.
+        local below, high = self:LegendContent(legend)
+        if below then
+            local bottom = top - below - high
+            return left + dx, bottom, left + dx + width, bottom + height
+        end
+    end
+    return left + dx, top - dy - height, left + dx + width, top - dy
+end
+
+-- Puts the legend's top-left corner at x, top (UIParent points from the bottom-left). The first move keeps its native
+-- anchor to go back to. In combat only while the legend is not protected (growing upwards follows its hints there).
+function HUD:PlaceLegend(x, top)
+    local legend = GamepadPersistentInputLegend
+    if not legend or (InCombatLockdown() and legend:IsProtected()) then return end
+    self.legendOriginal = self.legendOriginal or Snapshot(legend)
+    local ratio = legend:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    if not ratio or ratio <= 0 then ratio = 1 end
+    legend:ClearAllPoints()
+    legend:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / ratio, top / ratio)
+    self.legendTop, self.legendX = top, x
+end
+
+-- Keeps the legend with its frame's top-left corner at x, top: as that corner, or, growing upwards, as the bottom edge
+-- of the hints showing there.
+function HUD:SaveLegendSpot(x, top)
+    x, top = math.floor(x + 0.5), math.floor(top + 0.5)
+    local screenTop = math.floor(UIParent:GetHeight() + 0.5)
+    local spot = { x = x, y = top - screenTop }
+    local legend = GamepadPersistentInputLegend
+    if Addon.db.legendGrowUp and legend then
+        local below, high = self:LegendContent(legend)
+        if not below then
+            -- Nothing showing: the bottom of the largest set seen.
+            local _, dy, _, height = self:LegendExtent(legend)
+            below, high = dy or 0, height or 0
+        end
+        spot.y, spot.anchor = math.floor(top - below - high + 0.5) - screenTop, "bottom"
+    end
+    Addon.db.legendSpot = spot
+    Addon:Trace("HUD:SaveLegendSpot")
+    self:PlaceLegend(x, top)
+    Addon:QueueRefresh(true)
+end
+
+-- legendGrowUp was switched: the saved place is converted where the legend stands, so nothing jumps.
+function HUD:SetLegendGrowUp()
+    local x, top = self:LegendCorner()
+    if x and not InCombatLockdown() then self:SaveLegendSpot(x, top) end
+end
+
+function HUD:ResetLegendSpot()
+    Addon.db.legendSpot, Addon.db.legendGrowUp = nil, false
+    self.legendTop, self.legendX = nil, nil
+    Addon:QueueRefresh(true)
+end
+
+function HUD:RefreshLegend(wanted)
+    -- An Edit Mode drag places the legend itself until it ends.
+    if self.legendDragging then return end
+    local legend = GamepadPersistentInputLegend
+    if not legend then return end
+    local spot = wanted and self:SavedLegendSpot()
+    wanted = wanted and (spot or Addon.db.moveLegend)
     if not wanted then
         if self.legendOriginal then Apply(legend, self.legendOriginal) end
         self.legendOriginal, self.legendTop, self.legendX, self.legendArea = nil, nil, nil, nil
         return
     end
-    local bottom = PlayerFrame and PlayerFrame:GetBottom()
-    if not bottom then return end
-    local top = bottom * PlayerFrame:GetEffectiveScale() / UIParent:GetEffectiveScale() - Addon.db.legendGap
-    local x = Addon.db.legendX
-    x, top = self:LegendSpot(legend, x, top)
+    local x, top
+    if GrowsUp(spot) then
+        local below, high = self:LegendContent(legend)
+        -- Nothing showing: it stays where it is until hints come back.
+        if not below then return end
+        x, top = spot.x, UIParent:GetHeight() + spot.y + below + high
+        -- Sub-point drift from re-measuring must not move it every frame.
+        if self.legendTop and math.abs(self.legendTop - top) < 0.5 and self.legendX == x then return end
+    elseif spot then
+        x, top = spot.x, UIParent:GetHeight() + spot.y
+    else
+        local bottom = PlayerFrame and PlayerFrame:GetBottom()
+        if not bottom then return end
+        top = bottom * PlayerFrame:GetEffectiveScale() / UIParent:GetEffectiveScale() - Addon.db.legendGap
+        x = Addon.db.legendX
+        x, top = self:LegendSpot(legend, x, top)
+    end
     if self.legendTop == top and self.legendX == x then return end
-    self.legendOriginal = self.legendOriginal or Snapshot(legend)
     -- Its native top-left anchor overlaps the restored classic player frame.
-    legend:ClearAllPoints()
-    legend:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, top)
-    self.legendTop, self.legendX = top, x
+    self:PlaceLegend(x, top)
 end
 
 function HUD:ResetChat(changedMode)
@@ -304,12 +420,158 @@ function HUD:Refresh(wanted, changedMode, editing)
             end
         end
     end
-    self.legendWanted = wanted and not editing or false
+    -- In Edit Mode the legend keeps a place the player dragged it to there, so it can be dragged again.
+    self.legendWanted = wanted and (not editing or self:SavedLegendSpot() ~= nil) or false
     self:RefreshLegend(self.legendWanted)
+    -- The frame and shade options hold wherever the legend is, Edit Mode included.
+    self.legendStyleWanted = wanted and true or false
+    self:ApplyLegendStyle()
     self.applied = frames
 end
 
+-- The legend's own art: its gold frame and its dark shade (legendFrame, legendShade). The legend is the game's, built
+-- from templates this addon cannot read, so its art is found by the names the templates give their pieces: the corners
+-- and edges of a nine-slice or anything called a border are the frame, a nine-slice's Center or anything called a
+-- background, backdrop or shade is the shade. Named pieces must be large enough to be a frame or a shade, so the small
+-- glyphs of the hints are never touched; the unnamed pieces of a frame named like that take its kind. Only alpha
+-- changes (textures are never protected, so in combat too), from the alpha each piece had when it was found, and every
+-- piece gets that alpha back when the options return to their defaults. /cgp legend lists what was found.
+local NINE_SLICE = { TopLeftCorner = true, TopRightCorner = true, BottomLeftCorner = true, BottomRightCorner = true,
+    TopEdge = true, BottomEdge = true, LeftEdge = true, RightEdge = true }
+
+-- A widget's table carries its userdata at [0]; mixin tables without one can throw on a missing method.
+local function IsWidget(value)
+    return type(value) == "table" and type(rawget(value, 0)) == "userdata"
+end
+
+local function ArtKind(key, region)
+    if NINE_SLICE[key] then return "border" end
+    if key == "Center" then return "shade" end
+    local lower = key:lower()
+    local width, height = region:GetWidth() or 0, region:GetHeight() or 0
+    if lower:find("border") then return (width >= 60 or height >= 60) and "border" or nil end
+    if lower:find("background") or lower:find("backdrop") or lower:find("shade") or lower == "bg" or key:find("^Bg%u") then
+        return (width >= 60 and height >= 40) and "shade" or nil
+    end
+end
+
+local function FrameKind(key)
+    local lower = key:lower()
+    if key == "NineSlice" or lower:find("border") then return "border" end
+    if lower:find("background") or lower:find("backdrop") or lower:find("shade") then return "shade" end
+end
+
+-- Records the art under frame into art (texture -> { kind, alpha, name }); log, when given, gets every texture seen.
+local function WalkLegend(frame, inherited, art, seen, depth, path, log)
+    if seen[frame] or depth > 6 then return end
+    seen[frame] = true
+    local named, frames = {}, {}
+    for key, value in pairs(frame) do
+        if type(key) == "string" and value ~= frame and IsWidget(value) then
+            if value:IsObjectType("Texture") then
+                named[value] = key
+                local kind = ArtKind(key, value)
+                if kind and not art[value] then
+                    art[value] = { kind = kind, alpha = value:GetAlpha(), name = path .. "." .. key }
+                end
+            elseif value:IsObjectType("Frame") then
+                frames[value] = key
+            end
+        end
+    end
+    for _, region in ipairs({ frame:GetRegions() }) do
+        if region:IsObjectType("Texture") then
+            if inherited and not named[region] and not art[region] then
+                art[region] = { kind = inherited, alpha = region:GetAlpha(), name = path .. ".?" }
+            end
+            if log then
+                local info = art[region]
+                log[#log + 1] = string.format("%s.%s %dx%d %s%s", path, named[region] or "?",
+                    math.floor((region:GetWidth() or 0) + 0.5), math.floor((region:GetHeight() or 0) + 0.5),
+                    info and info.kind or "-", region:IsVisible() and "" or " (hidden)")
+            end
+        end
+    end
+    for _, child in ipairs({ frame:GetChildren() }) do
+        local key = frames[child]
+        WalkLegend(child, key and FrameKind(key) or inherited, art, seen, depth + 1, path .. "." .. (key or "?"), log)
+    end
+end
+
+function HUD:ScanLegendArt()
+    local legend = GamepadPersistentInputLegend
+    if not legend then return end
+    self.legendArt = self.legendArt or setmetatable({}, { __mode = "k" })
+    self.legendScanned = self.legendScanned or setmetatable({}, { __mode = "k" })
+    -- Marked first: a scan that fails is not tried again every frame.
+    for _, child in ipairs({ legend:GetChildren() }) do
+        if child:IsShown() and (child:GetWidth() or 0) > 0 then self.legendScanned[child] = true end
+    end
+    WalkLegend(legend, nil, self.legendArt, {}, 0, "legend")
+end
+
+local function LegendStyleDefault()
+    return Addon.db.legendFrame ~= false and (Addon.db.legendShade or 1) >= 1
+end
+
+-- Puts the frame and shade options on the legend's art. A set of hints showing for the first time is scanned first.
+function HUD:ApplyLegendStyle()
+    local styled = self.legendStyleWanted and not LegendStyleDefault()
+    if not styled then
+        if self.legendStyled then
+            for region, info in pairs(self.legendArt or {}) do region:SetAlpha(info.alpha) end
+            self.legendArt, self.legendScanned = nil, nil
+            Addon:Trace("HUD:ApplyLegendStyle restore")
+        end
+        self.legendStyled = false
+        return
+    end
+    local legend = GamepadPersistentInputLegend
+    if not legend then return end
+    local fresh = not self.legendArt
+    if not fresh then
+        for _, child in ipairs({ legend:GetChildren() }) do
+            if child:IsShown() and not self.legendScanned[child] then fresh = true; break end
+        end
+    end
+    if fresh then
+        local ok, err = pcall(self.ScanLegendArt, self)
+        if not ok then Addon:Note("HUD:ScanLegendArt", err) end
+    end
+    local frameAlpha = Addon.db.legendFrame ~= false and 1 or 0
+    local shade = math.max(0, math.min(1, Addon.db.legendShade or 1))
+    for region, info in pairs(self.legendArt or {}) do
+        local target = info.alpha * (info.kind == "border" and frameAlpha or shade)
+        if math.abs(region:GetAlpha() - target) > 0.001 then region:SetAlpha(target) end
+    end
+    self.legendStyled = true
+end
+
+-- /cgp legend: every texture of the legend, with the kind given to it (border, shade or -), for when the options miss.
+function HUD:DescribeLegend()
+    local legend = GamepadPersistentInputLegend
+    if not legend then return { "no GamepadPersistentInputLegend" } end
+    local log = {}
+    local ok, err = pcall(WalkLegend, legend, nil, {}, {}, 0, "legend", log)
+    if not ok then log[#log + 1] = "error: " .. tostring(err) end
+    return log
+end
+
+-- Growing upwards, the legend moves as soon as its hints change (a new set shows in the same frame as the event that
+-- brings it, before the screen is drawn), in combat too. Cheap: a handful of child rectangles per frame, and only then.
+function HUD:WatchLegend()
+    local watcher = CreateFrame("Frame")
+    watcher:SetScript("OnUpdate", function()
+        if self.legendWanted and not self.legendDragging and GrowsUp(self:SavedLegendSpot()) then
+            self:RefreshLegend(true)
+        end
+        -- A new set of hints shows with the game's art: it gets the frame and shade options before it is drawn.
+        if self.legendStyled then self:ApplyLegendStyle() end
+    end)
+end
+
 function HUD:Observe()
+    self:WatchLegend()
     for _, frame in ipairs(self:GetFrames()) do
         if frame and frame.ApplySystemAnchor then
             hooksecurefunc(frame, "ApplySystemAnchor", function()

@@ -21,6 +21,10 @@ Addon.Locales.Register("enUS", "English", {
     moveUnitFramesTip = "Places these frames at their classic positions. Drag them in Edit Mode and save the layout and the new place is remembered (/cgp resetframes undoes it). Disable to let the gamepad layout's Edit Mode alone place the frames.",
     contextGap = "Indicator gap above the upper row",
     contextGapTip = "Gap for L1/R1 indicators and class actions. The left indicator stays on the left and the right stays on the right.",
+    showLeftCap = "Left gryphon",
+    showLeftCapTip = "Show the gryphon at the left end of the classic bars. Also in Edit Mode, on the panel of the classic bars.",
+    showRightCap = "Right gryphon",
+    showRightCapTip = "Show the gryphon at the right end of the classic bars. Also in Edit Mode, on the panel of the classic bars.",
     layout = "Bar layout",
     menu = "Micro menu",
     menuRight = "Menu distance from the right edge",
@@ -41,10 +45,14 @@ Addon.Locales.Register("enUS", "English", {
     highlightActiveTip = "Highlight the bar used by L2, R2 and contextual buttons.",
     legend = "Gamepad legend",
     moveLegend = "Move the legend below the player frame (experimental)",
-    moveLegendTip = "Experimental: the legend can end up over chat or other frames. Off = the native gamepad legend position.",
+    moveLegendTip = "Experimental: the legend can end up over chat or other frames. Off = the native gamepad legend position. A place you drag the legend to in Edit Mode wins over this (/cgp resetlegend undoes it).",
     legendX = "Legend distance from the left edge",
     legendGap = "Legend gap below the player frame",
     legendPositionTip = "Position the gamepad legend in interface points.",
+    legendFrame = "Show frame",
+    legendFrameTip = "Show the gold frame around the gamepad legend. Also in Edit Mode, on the panel of the legend.",
+    legendShade = "Background opacity",
+    legendShadeTip = "How dark the shade behind the hints is. 100% is the game's own look, 0% leaves only the hints. Also in Edit Mode, on the panel of the legend.",
 
     -- Settings: chat
     chat = "Chat",
@@ -127,6 +135,20 @@ Addon.Locales.Register("enUS", "English", {
     scaleHelp = "Use the game's UI scale and Edit Mode: drag the player, target and focus frames there and save the layout.",
     notInCombat = "Not in combat.",
     framesBack = "Player, target and focus frames are back at their classic places.",
+    barsBack = "The classic bars are back at their default place.",
+
+    -- Edit Mode: the selection box over the classic bars
+    barsEditLabel = "Classic Action Bars",
+    barsPosition = "Offset from default: %d, %d",
+    barsNudgeHint = "Drag the bars, or nudge them (Shift: 10 points).",
+    barsReset = "Reset position",
+    legendEditLabel = "Gamepad Legend",
+    legendPosition = "From the top left: %d, %d",
+    legendPositionUp = "Bottom edge from the top left: %d, %d",
+    legendDefaultPlace = "At its default place",
+    legendGrowUp = "Grow upwards",
+    legendNudgeHint = "Drag the legend, or nudge it (Shift: 10 points).",
+    legendBack = "The gamepad legend is back at its default place.",
     stickCenter = "return the stick to center",
 
     -- On-screen keyboard

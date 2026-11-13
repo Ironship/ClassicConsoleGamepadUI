@@ -12,6 +12,13 @@ local controls = {
     { key = "crossFirst", default = false },
     { key = "moveUnitFrames", default = true },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
+    -- The gryphons at the ends of the classic bars, like the end caps of the game's own action bar.
+    { key = "showLeftCap", default = true },
+    { key = "showRightCap", default = true },
+    -- Where the classic bars were dragged in Edit Mode (EditMode.lua): an offset from their computed place, in UIParent
+    -- points. Not on the settings window; Edit Mode and /cgp resetbars change it.
+    { key = "barX", default = 0, min = -4000, max = 4000, step = 1 },
+    { key = "barY", default = 0, min = -4000, max = 4000, step = 1 },
     { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
     { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, tip = "menuTip" },
     { key = "promptScale", default = 1, min = 0.6, max = 1.6, step = 0.05, section = "hints" },
@@ -21,6 +28,11 @@ local controls = {
     { key = "highlightActive", default = true },
     { key = "moveLegend", default = false, section = "legend" },
     { key = "legendX", default = 16, min = 0, max = 600, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
+    -- "Grow upwards" on the legend's Edit Mode panel (EditMode.lua), not on the settings window.
+    { key = "legendGrowUp", default = false },
+    -- The legend's gold frame and how dark its shade is (1 = the game's own look).
+    { key = "legendFrame", default = true },
+    { key = "legendShade", default = 1, min = 0, max = 1, step = 0.05 },
     { key = "legendGap", default = 12, min = 0, max = 240, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
     { key = "anchorChat", default = false, section = "chat" },
     { key = "chatLeft", default = 0, min = 0, max = 1200, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
@@ -34,7 +46,7 @@ local controls = {
     { key = "easyDelete", default = false, section = "items" },
 }
 
-local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true,
+local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true, barX = true, barY = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
 -- The rows that pick one of a list: { value, label } (a language names itself) or { value, nil, text key }.
@@ -83,6 +95,14 @@ function Options:Changed(key)
         Addon.Keyboard:ApplyTransparency()
     elseif key == "wordHunter" then
         Addon.WordSources:Changed()
+    elseif key == "legendGrowUp" then
+        Addon.HUD:SetLegendGrowUp()
+    elseif key == "legendFrame" or key == "legendShade" then
+        Addon.HUD:ApplyLegendStyle()
+    elseif key == "showLeftCap" or key == "showRightCap" then
+        -- Only art: shown or hidden at once, in combat too, without rebuilding the bars.
+        Addon.Display:ApplyCaps()
+        Addon:QueueRefresh(true)
     else
         if geometrySettings[key] then Addon.Layout.dirty = true end
         Addon:QueueRefresh(true)
