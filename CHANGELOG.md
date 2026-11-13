@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- "Reset all settings" on the Tools tab puts every setting back to its default, with the places the addon keeps (the
+  classic bars and the legend dragged in Edit Mode, the unit frames, the on-screen keyboard). The interface language and
+  the learned words stay. It asks for a second click, like "Reset learned words".
+- Every stock frame the classic layout places has a setting now, all on by default as before: "Micro menu at the right
+  edge", "Bags with the classic bars", "Experience and reputation bars above the classic bars" and "Totem bar above the
+  classic bars" (General tab). Off, the frame is left to the gamepad layout's Edit Mode, so players can make a layout of
+  their own; chat, the legend and the unit frames already had theirs. Before, a micro menu moved in Edit Mode snapped
+  back to the right edge every time the bars were laid out, saving the layout included; now "Micro menu at the right
+  edge" off keeps it where Edit Mode puts it, at its Edit Mode size.
 - The classic action bars show up in the game's Edit Mode. While Edit Mode is open they get a selection box of their own
   ("Classic Action Bars"): drag it, or click it and nudge the bars from its panel, to move the whole HUD (bars, gryphons,
   experience bar and, in the compact layout, the bags). The place is saved at once; `/cgp resetbars` or the panel's

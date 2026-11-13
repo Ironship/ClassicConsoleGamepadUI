@@ -126,10 +126,11 @@ local function Tabs()
             { "header", "layout" },
             { "control", "enabled" }, { "control", "compact" }, { "control", "groupBoth" }, { "control", "crossFirst" },
             { "control", "moveUnitFrames" },
+            { "control", "placeBags" }, { "control", "placeStatusBars" }, { "control", "placeTotemBar" },
             { "control", "contextGap" },
             { "control", "showLeftCap" }, { "control", "showRightCap" },
             { "header", "menu" },
-            { "control", "menuRight" }, { "control", "menuBottom" },
+            { "control", "placeMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },
         } },
         { id = "hints", label = Text("tabHints"), items = {
             { "header", "hints" },
@@ -168,6 +169,9 @@ local function Tabs()
             { "button", SETTINGS_KEYBINDINGS_LABEL, Text("bindingsTip"), function() options:OpenBindings() end },
             { "button", Text("actions"), Text("actionsTip"), function() options:EditActions() end },
             { "button", GAMEPAD_LABEL, Text("controlsTip"), function() options:OpenGamepad() end },
+            { "button", Text("resetSettings"), Text("resetSettingsTip"), Confirmed(function()
+                if options:ResetAll() then Window:RefreshPages() end
+            end) },
         } },
     }
 end
@@ -588,6 +592,11 @@ end
 
 -- A new language: every label, tip and row is made again from the texts of the language now in use. The pages are
 -- built from scratch (their rows have the old texts and sizes), the selection on the pad stays on the same row.
+-- Every page built so far shows the values in the database again (after "Reset all settings").
+function Window:RefreshPages()
+    for _, page in pairs(self.pages or {}) do page.Refresh() end
+end
+
 function Window:Relocalize()
     if not self.frame then return end
     local selected

@@ -11,6 +11,10 @@ local controls = {
     { key = "groupBoth", default = false },
     { key = "crossFirst", default = false },
     { key = "moveUnitFrames", default = true },
+    -- The stock frames the classic layout places (Layout.lua PLACED, PlaceTotemBar). Off: Edit Mode places them.
+    { key = "placeBags", default = true },
+    { key = "placeStatusBars", default = true },
+    { key = "placeTotemBar", default = true },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
     -- The gryphons at the ends of the classic bars, like the end caps of the game's own action bar.
     { key = "showLeftCap", default = true },
@@ -19,8 +23,9 @@ local controls = {
     -- points. Not on the settings window; Edit Mode and /cgp resetbars change it.
     { key = "barX", default = 0, min = -4000, max = 4000, step = 1 },
     { key = "barY", default = 0, min = -4000, max = 4000, step = 1 },
-    { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
-    { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, tip = "menuTip" },
+    { key = "placeMenu", default = true, section = "menu" },
+    { key = "menuRight", default = 12, min = 0, max = 128, step = 1, parent = "placeMenu", tip = "menuTip" },
+    { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, parent = "placeMenu", tip = "menuTip" },
     { key = "promptScale", default = 1, min = 0.6, max = 1.6, step = 0.05, section = "hints" },
     { key = "modifierScale", default = 1.5, min = 0.6, max = 2.5, step = 0.05 },
     { key = "showKeyboardHints", default = true },
@@ -45,6 +50,9 @@ local controls = {
     { key = "wordHunter", default = true, parent = "keyboardEnabled" },
     { key = "easyDelete", default = false, section = "items" },
 }
+
+-- Settings that hand a stock frame to Edit Mode or take it back: every frame returns to its own place first.
+local releaseSettings = { placeMenu = true, placeBags = true, placeStatusBars = true, placeTotemBar = true }
 
 local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true, barX = true, barY = true,
     menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
@@ -105,6 +113,7 @@ function Options:Changed(key)
         Addon:QueueRefresh(true)
     else
         if geometrySettings[key] then Addon.Layout.dirty = true end
+        if releaseSettings[key] then Addon.Layout.releasePending, Addon.Layout.dirty = true, true end
         Addon:QueueRefresh(true)
     end
 end
@@ -145,6 +154,38 @@ local function OutsideCombat()
     if not InCombatLockdown() then return true end
     Addon:Print(text.combat)
     return false
+end
+
+-- "Reset all settings" (Tools tab): every setting back to its default, and the places this addon keeps (the bars and the
+-- legend dragged in Edit Mode, the unit frames, the keyboard). The interface language, the learned words and the cached
+-- keyboard/mouse layout stay. Out of combat, since it moves frames.
+function Options:ResetAll()
+    if not OutsideCombat() then return false end
+    local db = Addon.db
+    for _, info in ipairs(controls) do db[info.key] = info.default end
+    db.legendSpot, db.keyboardPos = nil, nil
+    db.keyboardLanguage, db.keyboardMode, db.keyboardPhone, db.hybridDefault = nil, nil, nil, nil
+    self:InitializeDefaults()
+    Addon:Trace("Options:ResetAll")
+    -- Every stock frame back to its own place, then laid out again from the defaults.
+    Addon.Layout.releasePending, Addon.Layout.dirty = true, true
+    Addon.HUD:ResetFrames()
+    Addon.HUD.legendTop, Addon.HUD.legendX = nil, nil
+    Addon.Display:ApplyCaps()
+    Addon.HUD:ApplyLegendStyle()
+    local keyboard = Addon.Keyboard
+    keyboard:SetLanguage(db.keyboardLanguage)
+    keyboard:SetMode(db.keyboardMode)
+    keyboard:ApplyTransparency()
+    if keyboard.frame then
+        keyboard.frame:ClearAllPoints()
+        keyboard.frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 120)
+    end
+    Addon.WordSources:Changed()
+    Addon.MenuHints:Refresh()
+    Addon:QueueRefresh(true)
+    Addon:Print(text.settingsReset)
+    return true
 end
 
 -- Opening, switching or closing Blizzard panels from addon code runs the

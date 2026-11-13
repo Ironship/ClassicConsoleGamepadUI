@@ -91,6 +91,44 @@ function Layout:ApplyStockAnchor(key, frame)
     return false
 end
 
+-- The stock frames the classic layout places, each with the setting that lets it. With the setting off the frame is kept:
+-- it stays where the gamepad layout's Edit Mode puts it, at the size Edit Mode gives it, so a player can make a layout of
+-- their own. The settings alone decide: a layout that once moved a frame does not change the classic look.
+local PLACED = {
+    { "placeMenu", function() return { MicroMenuContainer } end },
+    { "placeBags", function() return { BagsBar } end },
+    { "placeStatusBars", function() return { MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer } end },
+}
+
+local function KeptFrames()
+    local kept = {}
+    for _, entry in ipairs(PLACED) do
+        if Addon.db[entry[1]] == false then
+            for _, frame in ipairs(entry[2]()) do
+                if frame then kept[frame] = true end
+            end
+        end
+    end
+    return kept
+end
+
+-- Whether the last layout left `frame` where Edit Mode put it (Display places nothing kept).
+function Layout:Keeps(frame)
+    return frame ~= nil and self.kept ~= nil and self.kept[frame] == true
+end
+
+-- A frame anchored to `from` is pinned where it is on screen, so it stays when `from` moves.
+local function Unhook(frame, from)
+    for i = 1, frame:GetNumPoints() do
+        local _, relative = frame:GetPoint(i)
+        if relative == from then
+            local left, bottom = frame:GetLeft(), frame:GetBottom()
+            if left and bottom then Anchor(frame, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom) end
+            return
+        end
+    end
+end
+
 local function ResizeStatus(frame, width, segments)
     frame:SetWidth(width)
     if frame.ResizeContainerBars then frame:ResizeContainerBars() end
@@ -101,6 +139,12 @@ function Layout:Prepare()
     if self.active and not self.dirty then return true end
     if InCombatLockdown() then return self.active end
     if not MainActionBar or not MicroMenu or not BagsBar then return false end
+    -- A placement setting was switched: every frame goes back to its own place first, so a frame let go is measured
+    -- where Edit Mode has it, not where the classic layout last put it.
+    if self.releasePending then
+        self.releasePending = false
+        self:Restore()
+    end
     Addon:Trace("Layout:Prepare")
     local compact, cutWidth = Addon.db.compact, 0
     if compact then
@@ -121,6 +165,13 @@ function Layout:Prepare()
         local frame = entry[2]
         if frame and not self.originals[frame] then self.originals[frame] = Snapshot(frame) end
     end
+    -- Kept frames are measured before anything moves: an Edit Mode anchor can hang off a bar this rearranges.
+    local kept, keptPlaces = KeptFrames(), {}
+    for frame in pairs(kept) do
+        local left, bottom = frame:GetLeft(), frame:GetBottom()
+        if left and bottom then keptPlaces[frame] = { left, bottom, frame:GetScale(), frame:GetWidth() } end
+    end
+    self.kept = kept
     if not self.visibility then
         self.visibility = { [MicroMenu] = MicroMenu:IsShown(), [BagsBar] = BagsBar:IsShown() }
     end
@@ -144,7 +195,8 @@ function Layout:Prepare()
                 Anchor(frame, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", 0, y)
             end
             ResizeStatus(frame, STATUS_BAR_CONTAINER_WIDTH, STATUS_BAR_NUM_SEGMENTS)
-            if frame:IsShown() then
+            -- A kept status bar is elsewhere: the bars above close the gap it would leave.
+            if frame:IsShown() and not kept[frame] then
                 local gap = frame == SecondaryStatusTrackingBarContainer and MainStatusTrackingBarContainer:IsShown()
                     and PRIMARY_AND_SECONDARY_STATUS_TRACKING_BAR_SPACER_Y or BOTTOM_ACTION_BARS_SPACER_Y
                 y = y + frame:GetHeight() + gap
@@ -193,6 +245,21 @@ function Layout:Prepare()
             end
         end
     end
+    -- Kept frames were placed from their stock anchors above like every other frame (bags can hang off the menu, so the
+    -- others are measured from the classic places); now they go back where Edit Mode had them. A frame anchored to one
+    -- is pinned first so it stays.
+    for frame in pairs(keptPlaces) do
+        for _, entry in ipairs(Frames()) do
+            if entry[2] and not keptPlaces[entry[2]] then Unhook(entry[2], frame) end
+        end
+    end
+    for frame, place in pairs(keptPlaces) do
+        (frame.SetScaleBase or frame.SetScale)(frame, place[3])
+        Anchor(frame, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", place[1], place[2])
+        if frame == MainStatusTrackingBarContainer or frame == SecondaryStatusTrackingBarContainer then
+            ResizeStatus(frame, place[4], STATUS_BAR_NUM_SEGMENTS_GAMEPAD)
+        end
+    end
     self.compact, self.cutWidth = compact, cutWidth
     self.active, self.dirty = true, false
     self.revision = (self.revision or 0) + 1
@@ -230,7 +297,7 @@ end
 -- moved in Edit Mode stays where it is; Restore puts the game's anchor back.
 function Layout:PlaceTotemBar(left, top)
     local bar = MultiCastActionBarFrame
-    if not bar or InCombatLockdown() or not left or not top then return end
+    if not bar or InCombatLockdown() or not left or not top or Addon.db.placeTotemBar == false then return end
     if type(bar.IsInDefaultPosition) ~= "function" or not bar:IsInDefaultPosition() then return end
     local ratio = UIParent:GetEffectiveScale()
     local scale = bar:GetEffectiveScale() / ratio
@@ -271,7 +338,14 @@ function Layout:Observe()
         Addon:QueueRefresh(true)
     end
     for _, entry in ipairs(Frames()) do
-        if entry[2] and entry[2].ApplySystemAnchor then hooksecurefunc(entry[2], "ApplySystemAnchor", Invalidate) end
+        local frame = entry[2]
+        if frame and frame.ApplySystemAnchor then
+            hooksecurefunc(frame, "ApplySystemAnchor", function()
+                -- The game put the frame where its layout has it now (a saved Edit Mode move): the place to return to.
+                self.originals[frame] = nil
+                Invalidate()
+            end)
+        end
     end
     if StatusTrackingBarManager then
         hooksecurefunc(StatusTrackingBarManager, "UpdateBarsShown", Invalidate)

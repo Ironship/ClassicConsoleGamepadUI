@@ -318,7 +318,8 @@ function Display:AlignCompactChrome()
     -- Bags close the space the micro menu used to fill: right-aligned under
     -- the R2 half, never closer to the bottom row than the gap between halves.
     local bagsLeft, bagsBottom, bagsScale, bagsRight
-    if BagsBar and BagsBar:IsShown() then
+    -- Bags kept by the layout (placeBags off) stay where Edit Mode puts them.
+    if BagsBar and BagsBar:IsShown() and not Addon.Layout:Keeps(BagsBar) then
         local regionLeft, regionRight, bottom, _, scale = UIBox(BagsBar)
         if regionLeft then
             local gap = boxes[20] and boxes[25] and math.max(0, boxes[25][1] - boxes[20][2]) or 0
@@ -343,7 +344,7 @@ function Display:AlignCompactChrome()
     local statusPoints = {}
     for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
         local frameLeft, _, bottom, _, scale = UIBox(frame)
-        if frameLeft then statusPoints[frame] = { frameLeft, bottom, scale } end
+        if frameLeft and not Addon.Layout:Keeps(frame) then statusPoints[frame] = { frameLeft, bottom, scale } end
     end
 
     local leftShift = leftRight and ((left + overlap) - leftRight) or 0
@@ -413,7 +414,8 @@ end
 -- Keep it on the right edge, flush with the bottom unless the user adds a gap.
 function Display:PlaceMicroMenuRight()
     local menu = MicroMenuContainer
-    if not menu then return end
+    -- A menu kept by the layout (placeMenu off) stays where Edit Mode puts it.
+    if not menu or Addon.Layout:Keeps(menu) then return end
     local scale = menu:GetEffectiveScale() / UIParent:GetEffectiveScale()
     if not scale or scale <= 0 then return end
     local width, height = menu:GetWidth() * scale, menu:GetHeight() * scale
@@ -441,8 +443,13 @@ end
 -- The stock frames that travel with the classic bars: the status bars above them, and in the compact layout the bags,
 -- which AlignCompactChrome tucks under the R2 half (with 12 slots the bags keep their own place by the micro menu).
 local function TravellingFrames()
-    local frames = { MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }
-    if Addon.Layout.compact and BagsBar and BagsBar:IsShown() then frames[#frames + 1] = BagsBar end
+    local frames = {}
+    for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
+        if frame and not Addon.Layout:Keeps(frame) then frames[#frames + 1] = frame end
+    end
+    if Addon.Layout.compact and BagsBar and BagsBar:IsShown() and not Addon.Layout:Keeps(BagsBar) then
+        frames[#frames + 1] = BagsBar
+    end
     return frames
 end
 
