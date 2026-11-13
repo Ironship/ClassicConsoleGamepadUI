@@ -191,6 +191,8 @@ function Display:RefreshGeometry()
     if self.layoutRevision == Addon.Layout.revision then return true end
     for i, slot in ipairs(self.slots) do
         local template = slot.template
+        -- Placed at the stock size first (Layout:Place works in UIParent points); ApplyScale sizes the bars afterwards.
+        slot:SetScale(1)
         local promptScale = Addon.db.promptScale
         slot.Prompt:SetSize(28 * promptScale, 28 * promptScale)
         slot.Prompt:SetPoint("TOPRIGHT", 4 * promptScale, 4 * promptScale)
@@ -244,6 +246,15 @@ function Display:RefreshGeometry()
     Addon.Layout:Place(self.pageLabel, self.pageSource, nil, MainActionBar.ActionBarPageNumber)
     self.pageLabel:SetFont(self.pageSource:GetFont())
     self:AlignCompactChrome()
+    -- After the art is copied (that shows it) and placed: a hidden gryphon still sets where the bars are centered.
+    self:ApplyCaps()
+    -- With the gryphon on its side hidden, the page switcher closes the gap it leaves.
+    self:AlignPageSwitcher()
+    -- The size the player chose for the bars (barScale), before they are moved to the player's place.
+    self:ApplyScale(Addon.db.barScale or 1)
+    -- The player's own place for the bars (dragged in Edit Mode, EditMode.lua), on top of the computed one.
+    self.offsetX, self.offsetY = 0, 0
+    self:Translate(self:GetOffset())
     -- An extra: a failure here must not switch the classic bars off.
     pcall(self.PlaceTotemBar, self)
     self.layoutRevision = Addon.Layout.revision
@@ -259,12 +270,15 @@ local function UIBox(region)
     return x * scale, (x + w) * scale, y * scale, h * scale, scale
 end
 
+-- left and bottom are UIParent points; a region drawn at another scale (a slot under barScale) takes its own units.
 local function MoveX(region, left, bottom)
     if not region or not left or not bottom then return end
+    local ratio = region.GetEffectiveScale and region:GetEffectiveScale() / UIParent:GetEffectiveScale() or 1
+    if not ratio or ratio <= 0 then ratio = 1 end
     local clear = region.ClearAllPointsBase or region.ClearAllPoints
     local set = region.SetPointBase or region.SetPoint
     clear(region)
-    set(region, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+    set(region, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", left / ratio, bottom / ratio)
 end
 
 function Display:AlignCompactChrome()
@@ -313,7 +327,8 @@ function Display:AlignCompactChrome()
     -- Bags close the space the micro menu used to fill: right-aligned under
     -- the R2 half, never closer to the bottom row than the gap between halves.
     local bagsLeft, bagsBottom, bagsScale, bagsRight
-    if BagsBar and BagsBar:IsShown() then
+    -- Bags kept by the layout (placeBags off) stay where Edit Mode puts them.
+    if BagsBar and BagsBar:IsShown() and not Addon.Layout:Keeps(BagsBar) then
         local regionLeft, regionRight, bottom, _, scale = UIBox(BagsBar)
         if regionLeft then
             local gap = boxes[20] and boxes[25] and math.max(0, boxes[25][1] - boxes[20][2]) or 0
@@ -338,7 +353,7 @@ function Display:AlignCompactChrome()
     local statusPoints = {}
     for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
         local frameLeft, _, bottom, _, scale = UIBox(frame)
-        if frameLeft then statusPoints[frame] = { frameLeft, bottom, scale } end
+        if frameLeft and not Addon.Layout:Keeps(frame) then statusPoints[frame] = { frameLeft, bottom, scale } end
     end
 
     local leftShift = leftRight and ((left + overlap) - leftRight) or 0
@@ -408,7 +423,8 @@ end
 -- Keep it on the right edge, flush with the bottom unless the user adds a gap.
 function Display:PlaceMicroMenuRight()
     local menu = MicroMenuContainer
-    if not menu then return end
+    -- A menu kept by the layout (placeMenu off) stays where Edit Mode puts it.
+    if not menu or Addon.Layout:Keeps(menu) then return end
     local scale = menu:GetEffectiveScale() / UIParent:GetEffectiveScale()
     if not scale or scale <= 0 then return end
     local width, height = menu:GetWidth() * scale, menu:GetHeight() * scale
@@ -417,6 +433,202 @@ function Display:PlaceMicroMenuRight()
     local x = UIParent:GetWidth() - width - margin
     if x < margin then x = margin end
     Addon.Layout:SetBottomLeft(menu, x, Addon.db.menuBottom)
+end
+
+-- The gryphons at the two ends (the stock end caps' art, self.art[2] and [3]), each shown or hidden by its own setting.
+function Display:ApplyCaps()
+    local art = self.art
+    if not art then return end
+    if art[2] then art[2].texture:SetShown(Addon.db.showLeftCap ~= false) end
+    if art[3] then art[3].texture:SetShown(Addon.db.showRightCap ~= false) end
+end
+
+-- The classic bars at the size the player chose (barScale, 1 = the stock size), grown or shrunk about the middle of their
+-- bottom edge so they stay centered on the bottom of the screen. Slots are scaled whole (icon, cooldown, prompts and all),
+-- the art is resized, and the status bars and the compact layout's bags travel along: the status bars as wide as the bars,
+-- the bags scaled with them, right-aligned under the R2 half as before. Every place is measured before anything changes.
+function Display:ApplyScale(scale)
+    if not scale or math.abs(scale - 1) < 0.001 then return end
+    local own, stock = self:Regions()
+    local boxes, left, right, bottom = {}, nil, nil, nil
+    for _, region in ipairs(own) do
+        local regionLeft, regionRight, regionBottom, height = UIBox(region)
+        if regionLeft then
+            boxes[#boxes + 1] = { region, regionLeft, regionRight, regionBottom, height }
+            -- The pivot comes from what shows: hidden spare slots can sit at stock places outside the bars.
+            if region:IsShown() then
+                left, right = math.min(left or regionLeft, regionLeft), math.max(right or regionRight, regionRight)
+                bottom = math.min(bottom or regionBottom, regionBottom)
+            end
+        end
+    end
+    if not left then return end
+    local stockBoxes = {}
+    for _, frame in ipairs(stock) do
+        local frameLeft, frameRight, frameBottom, _, ratio = UIBox(frame)
+        if frameLeft and ratio > 0 then stockBoxes[#stockBoxes + 1] = { frame, frameLeft, frameRight, frameBottom, ratio } end
+    end
+    local pivotX, pivotY = (left + right) / 2, bottom
+    local function X(x) return pivotX + (x - pivotX) * scale end
+    local function Y(y) return pivotY + (y - pivotY) * scale end
+    for _, box in ipairs(boxes) do
+        local region = box[1]
+        if region:IsObjectType("Frame") then
+            region:SetScale(scale)
+        else
+            region:SetSize((box[3] - box[2]) * scale, box[5] * scale)
+        end
+        MoveX(region, X(box[2]), Y(box[4]))
+    end
+    for _, box in ipairs(stockBoxes) do
+        local frame, ratio = box[1], box[5]
+        if frame == BagsBar then
+            -- Scaled with the bars, still right-aligned under the R2 half. ResetBagsScale undoes it before a rebuild.
+            local base = frame:GetScale()
+            local scaled, setScale = base * scale, frame.SetScaleBase or frame.SetScale
+            setScale(frame, scaled)
+            self.bagsBase, self.bagsApplied = base, scaled
+            local width = (box[3] - box[2]) * scale
+            ratio = ratio * scale
+            Addon.Layout:SetBottomLeft(frame, (X(box[3]) - width) / ratio, Y(box[4]) / ratio)
+        else
+            Addon.Layout:SetStatusWidth(frame, (box[3] - box[2]) * scale / ratio)
+            Addon.Layout:SetBottomLeft(frame, X(box[2]) / ratio, Y(box[4]) / ratio)
+        end
+    end
+end
+
+-- The page switcher (the up and down arrows and the page number) sits outside a gryphon. With that gryphon hidden it
+-- moves in beside the bottom row, one slot gap away, so no gryphon-wide hole is left between them. The three parts move
+-- together; with the gryphon shown nothing changes.
+function Display:AlignPageSwitcher()
+    if not self.art or not self.art[4] then return end
+    local parts = { self.art[4].texture, self.art[5] and self.art[5].texture, self.pageLabel }
+    local boxes, partsLeft, partsRight = {}, nil, nil
+    for _, part in ipairs(parts) do
+        local left, right, bottom = UIBox(part)
+        if left then
+            boxes[#boxes + 1] = { part, left, bottom }
+            partsLeft, partsRight = math.min(partsLeft or left, left), math.max(partsRight or right, right)
+        end
+    end
+    if not partsLeft then return end
+    -- The bottom row: 8 slots with compact bars, 12 without.
+    local rowLeft, rowRight, gap
+    for i = 1, Addon.Layout.compact and 8 or 12 do
+        local left, right = UIBox(self.slots[i])
+        if left then rowLeft, rowRight = math.min(rowLeft or left, left), math.max(rowRight or right, right) end
+    end
+    if not rowLeft then return end
+    -- One slot gap: the space between slots 1 and 2, whichever side 2 is on (the row can run either way).
+    local firstLeft, firstRight = UIBox(self.slots[1])
+    local secondLeft, secondRight = UIBox(self.slots[2])
+    if firstLeft and secondLeft then
+        gap = secondLeft >= firstRight and secondLeft - firstRight or firstLeft - secondRight
+    end
+    if not gap or gap < 0 then gap = 6 end
+    local shift = 0
+    if partsRight <= rowLeft and Addon.db.showLeftCap == false then
+        shift = (rowLeft - gap) - partsRight
+    elseif partsLeft >= rowRight and Addon.db.showRightCap == false then
+        shift = (rowRight + gap) - partsLeft
+    end
+    if math.abs(shift) < 0.5 then return end
+    for _, box in ipairs(boxes) do MoveX(box[1], box[2] + shift, box[3]) end
+end
+
+-- The bags back at the size they had before ApplyScale grew or shrank them, unless something else (the layout's own
+-- anchor and scale, a restore) has set their size since.
+function Display:ResetBagsScale()
+    local applied = self.bagsApplied
+    self.bagsApplied = nil
+    if not applied or not BagsBar or InCombatLockdown() then return end
+    if math.abs(BagsBar:GetScale() - applied) < 0.0001 then
+        (BagsBar.SetScaleBase or BagsBar.SetScale)(BagsBar, self.bagsBase)
+    end
+end
+
+-- Where the player put the bars, as an offset from their computed place in UIParent points. While the Edit Mode
+-- selection is being dragged (EditMode.lua), the drag so far is added on top of the saved offset.
+function Display:GetOffset()
+    return (Addon.db.barX or 0) + (self.dragX or 0), (Addon.db.barY or 0) + (self.dragY or 0)
+end
+
+-- The stock frames that travel with the classic bars: the status bars above them, and in the compact layout the bags,
+-- which AlignCompactChrome tucks under the R2 half (with 12 slots the bags keep their own place by the micro menu).
+local function TravellingFrames()
+    local frames = {}
+    for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
+        if frame and not Addon.Layout:Keeps(frame) then frames[#frames + 1] = frame end
+    end
+    if Addon.Layout.compact and BagsBar and BagsBar:IsShown() and not Addon.Layout:Keeps(BagsBar) then
+        frames[#frames + 1] = BagsBar
+    end
+    return frames
+end
+
+-- Every region the classic bars are drawn with, own (slots, art, page number) and stock.
+function Display:Regions()
+    local own, stock = {}, {}
+    for _, slot in ipairs(self.slots or {}) do own[#own + 1] = slot end
+    for _, entry in ipairs(self.art or {}) do own[#own + 1] = entry.texture end
+    if self.pageLabel then own[#own + 1] = self.pageLabel end
+    for _, frame in ipairs(TravellingFrames()) do
+        if frame then stock[#stock + 1] = frame end
+    end
+    return own, stock
+end
+
+-- Moves the whole set of classic bars by dx, dy UIParent points. Every place is measured before anything moves: the
+-- shoulder indicators hang from slots, so measuring after a move would shift them twice.
+function Display:Translate(dx, dy)
+    dx, dy = dx or 0, dy or 0
+    if math.abs(dx) < 0.01 and math.abs(dy) < 0.01 then return end
+    local own, stock = self:Regions()
+    local places = {}
+    for _, list in ipairs({ own, stock }) do
+        for _, region in ipairs(list) do
+            local left, _, bottom, _, scale = UIBox(region)
+            if left and scale and scale > 0 then places[#places + 1] = { region, left, bottom, scale, list == stock } end
+        end
+    end
+    for _, place in ipairs(places) do
+        local region, left, bottom, scale = place[1], place[2] + dx, place[3] + dy, place[4]
+        if place[5] then
+            Addon.Layout:SetBottomLeft(region, left / scale, bottom / scale)
+        else
+            MoveX(region, left, bottom)
+        end
+    end
+    self.offsetX, self.offsetY = (self.offsetX or 0) + dx, (self.offsetY or 0) + dy
+end
+
+-- Brings the bars on screen to the wanted offset without rebuilding them (each frame of an Edit Mode drag).
+function Display:FollowOffset()
+    if not self.root or not self.root:IsShown() or not self.offsetX or InCombatLockdown() then return end
+    local x, y = self:GetOffset()
+    self:Translate(x - self.offsetX, y - self.offsetY)
+end
+
+-- The rectangle the classic bars cover on screen, in UIParent points: left, bottom, right, top.
+function Display:Bounds()
+    if not self.root or not self.root:IsShown() then return end
+    local own, stock = self:Regions()
+    local left, bottom, right, top
+    for _, list in ipairs({ own, stock }) do
+        for _, region in ipairs(list) do
+            if region:IsShown() and (region.GetAlpha == nil or region:GetAlpha() > 0) then
+                local regionLeft, regionRight, regionBottom, height = UIBox(region)
+                if regionLeft then
+                    left = math.min(left or regionLeft, regionLeft)
+                    right = math.max(right or regionRight, regionRight)
+                    bottom = math.min(bottom or regionBottom, regionBottom)
+                    top = math.max(top or regionBottom + height, regionBottom + height)
+                end
+            end
+        end
+    end
+    if left then return left, bottom, right, top end
 end
 
 -- The native action editor ("Bind to Action Bar", "Edit Action Bar") draws its
@@ -449,7 +661,7 @@ function Display:GetBars()
     if bars then return native, unit, bars, false end
 end
 
--- Edit Mode (HUD layout editing) stays entirely native.
+-- Edit Mode (HUD layout editing) is open.
 function Display:IsEditing()
     return EditModeManagerFrame ~= nil and EditModeManagerFrame:IsEditModeActive()
 end
@@ -473,14 +685,15 @@ function Display:IsFlyoutOpen(bars, unit)
     return false
 end
 
--- Edit Mode stays native. A radial needs no native view: the game draws, focuses and drives it itself and shows it
+-- Edit Mode keeps the classic bars: they get a selection box of their own there (EditMode.lua) and can be dragged.
+-- Going native for it put the stock gamepad crossbar up instead, which cannot place the classic bars, and the classic
+-- bars had no place in the editor at all. A radial needs no native view: the game draws, focuses and drives it itself and shows it
 -- over whatever HUD is up (its frame hangs off UIParent and the button it belongs to moves into it, so the faded
 -- stock bar hides neither). The classic bars stay and fade while it is open (Refresh). Going native for it put the
 -- bags, micro menu, status bars and chat back in their stock places for as long as it was open, and in combat for
 -- the rest of the fight, because the classic bars cannot be built then. Only the action editor's own radials stay
 -- native: its bars are drawn above the editor's dimmed screen (SetLayer), which would put them over the radial.
 function Display:NeedsNativeView(bars, unit, editing)
-    if self:IsEditing() then return true end
     return editing and self:IsFlyoutOpen(bars, unit) or false
 end
 
@@ -988,7 +1201,7 @@ function Display:Refresh(wanted)
     if not wanted then self.reason = "disabled"; self:RestoreNative(); return false end
     if not native then self.reason = "native missing"; self:RestoreNative(); return false end
     if self:NeedsNativeView(bars, unit, editing) then
-        self.reason = self:IsEditing() and "edit mode" or "editor flyout"
+        self.reason = "editor flyout"
         self:RestoreNative()
         return false
     end
@@ -999,7 +1212,11 @@ function Display:Refresh(wanted)
     end
     local needsGeometry = not self.root or Addon.Layout.dirty
         or self.layoutRevision ~= Addon.Layout.revision
-    if needsGeometry then self:RevealTemplates() end
+    if needsGeometry then
+        self:RevealTemplates()
+        -- The layout measures the bags at their own size.
+        self:ResetBagsScale()
+    end
     local prepared = Addon.Layout:Prepare()
     if not prepared then self:HideTemplates(); self.reason = "layout"; return false end
     self:Create()
@@ -1027,8 +1244,9 @@ function Display:Refresh(wanted)
     self:SetLayer(editing)
     self.root:Show()
     if Addon.Input.disabled then Addon.Input:RestoreAfterError(); return true end
-    if editing then
-        -- Slots only mirror the editor; its own input groups own every button.
+    if editing or self:IsEditing() then
+        -- Slots only mirror the editor; its own input groups own every button. In Edit Mode the pad drives the editor,
+        -- so the classic click layer is off there too.
         pcall(Addon.Input.Refresh, Addon.Input, false)
         return true
     end
