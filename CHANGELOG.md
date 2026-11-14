@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The keyboard layout window can be used with the controller: the D-pad moves, A picks a key and gives it to a slot, X clears a slot, B goes back.
+- New defaults for a fresh install: keyboard bars on the controller on, unit frames not moved, micro menu at the right edge, larger button and trigger hints, chat anchored, the screen keyboard opens with the chat, quick item deletion on. Saved settings are kept.
+- New setting "Keyboard bars on the controller" (General tab, on by default): the bars show the actions of the keyboard's action bars 1, 2 and 3, and the controller's bar buttons use them, so an action sits in the same place with the keyboard and with the controller and nothing has to be placed twice. X, Y, B, A without a trigger stay the game's own (interact, target menu, back, jump); the targeting, shortcut, stance and possess bars stay as they are.
+- New: a keyboard layout window (General tab, "Keyboard layout of the bar slots", or /cgp keys). It shows a keyboard next to the slots of the bars (with the pad button each one is on, e.g. LT+X): click a key, then the slot that should use it, and the slot's key shows on the bar and in the window. Click the slot again to take the key away, right click a slot to clear all its keys, Shift, Ctrl and Alt add a modifier. A key the game uses for something else asks for a second click. The keys are the slot's ordinary keyboard bindings (the same ones the game's key bindings list shows), so they work on the keyboard bar and in Gamepad Mode alike. Outside combat only. Not tried in the game yet; the texts in the other languages are new and unread by native speakers.
+
 ## 0.1.0-alpha.78
 
 - Complete and delete at the chat cursor without altering links, also in lines with Polish, German or French letters (the cursor is set in bytes, as the game does); typing a word or a space in front of an existing blank steps over that blank instead of running the words together; the cursor look-up never throws; the X send binding follows predictive words.

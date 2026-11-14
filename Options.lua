@@ -10,28 +10,29 @@ local controls = {
     { key = "compact", default = true },
     { key = "groupBoth", default = false },
     { key = "crossFirst", default = false },
-    { key = "moveUnitFrames", default = true },
+    { key = "padKeyboard", default = true },
+    { key = "moveUnitFrames", default = false },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
-    { key = "menuRight", default = 12, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
+    { key = "menuRight", default = 0, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
     { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, tip = "menuTip" },
-    { key = "promptScale", default = 1, min = 0.6, max = 1.6, step = 0.05, section = "hints" },
-    { key = "modifierScale", default = 1.5, min = 0.6, max = 2.5, step = 0.05 },
+    { key = "promptScale", default = 1.05, min = 0.6, max = 1.6, step = 0.05, section = "hints" },
+    { key = "modifierScale", default = 1.75, min = 0.6, max = 2.5, step = 0.05 },
     { key = "showKeyboardHints", default = true },
     { key = "showMenuHints", default = true },
     { key = "highlightActive", default = true },
     { key = "moveLegend", default = false, section = "legend" },
-    { key = "legendX", default = 16, min = 0, max = 600, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
-    { key = "legendGap", default = 12, min = 0, max = 240, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
-    { key = "anchorChat", default = false, section = "chat" },
+    { key = "legendX", default = 90, min = 0, max = 600, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
+    { key = "legendGap", default = 74, min = 0, max = 240, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
+    { key = "anchorChat", default = true, section = "chat" },
     { key = "chatLeft", default = 0, min = 0, max = 1200, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "chatBottom", default = 0, min = 0, max = 800, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "raiseChat", default = true },
     { key = "chatGap", default = 12, min = 0, max = 100, step = 2, parent = "raiseChat" },
     { key = "keyboardEnabled", default = true },
-    { key = "autoKeyboard", default = false, parent = "keyboardEnabled" },
+    { key = "autoKeyboard", default = true, parent = "keyboardEnabled" },
     { key = "keyboardTransparency", default = 0, min = 0, max = 0.9, step = 0.05, parent = "keyboardEnabled" },
     { key = "wordHunter", default = true, parent = "keyboardEnabled" },
-    { key = "easyDelete", default = false, section = "items" },
+    { key = "easyDelete", default = true, section = "items" },
 }
 
 local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true,
@@ -85,6 +86,8 @@ function Options:Changed(key)
         Addon.WordSources:Changed()
     else
         if geometrySettings[key] then Addon.Layout.dirty = true end
+        -- The pad's keys join or leave the click layer's bindings.
+        if key == "padKeyboard" then Addon.Input.dirty = true end
         Addon:QueueRefresh(true)
     end
 end

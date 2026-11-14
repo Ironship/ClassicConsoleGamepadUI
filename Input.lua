@@ -56,7 +56,14 @@ local PRE_CLICK = [[
             source, kind = control:GetFrameRef("kbd" .. index), "delegate"
             if not source then return false end
         else
-            if group == 1 and control:GetAttribute("compact") then
+            if group == 6 then
+                -- A pad button (setting "padKeyboard"): the row in use decides, which is the game's active bar.
+                group = 1
+                for i = 2, 4 do
+                    local shown = control:RunAttribute("pickbar", i)
+                    if shown and bars[shown]:GetFrameLevel() == control:GetAttribute("activelevel") then group = i end
+                end
+            elseif group == 1 and control:GetAttribute("compact") then
                 local combined = control:RunAttribute("pickbar", 4)
                 if combined and bars[combined]:GetFrameLevel() == control:GetAttribute("activelevel") then group = 4 end
             end
@@ -64,6 +71,13 @@ local PRE_CLICK = [[
             if not key then return false end
             source = sources[key][index]
             kind = key == 5 and "pet" or (delegates[key][index] and "delegate" or "action")
+            if control:GetAttribute("padkeyboard") and key <= 4 and not delegates[key][index] then
+                -- The keyboard bar's button at the slot's place stands in for the pad's own action. The game's own
+                -- four (interact, target menu, back, jump) and the bars that take a row over stay as they are.
+                local place = control:GetAttribute("padslot" .. group .. "-" .. index)
+                local keyboardButton = place and control:GetFrameRef("kbd" .. place)
+                if keyboardButton then source, kind = keyboardButton, "delegate" end
+            end
             if kind == "action" then
                 local action = source:GetID()
                 if not action or action <= 0 then return false end
@@ -153,6 +167,33 @@ local function SlotAction(i)
     if i >= 33 and i <= 36 then return 4, Addon.Layout.RowStart(true) + i - 33 end
 end
 
+-- The bar and the native button (1-8) a slot stands for, for the key map window (KeyMap.lua).
+Input.SlotAction = SlotAction
+
+-- The slot (1-36) that shows the native button (1-8) of a row (1 no trigger, 2 LT, 3 RT, 4 both).
+function Input.PadSlot(group, native)
+    for i = 1, 36 do
+        local slotGroup, slotNative = SlotAction(i)
+        if slotGroup == group and slotNative == native then return i end
+    end
+end
+
+-- Setting "padKeyboard": the pad's eight bar buttons press the keyboard bars' buttons, so an action sits in the same
+-- place with the keyboard and with the pad. The game binds the eight with priority override bindings of UIParent
+-- (Blizzard_GamepadSharedUtility, InputBindingStack); the same kind of binding of our header takes their place, which
+-- /cgp padtest showed in game. While a menu or a window owns the pad (a binding set above the game's core set) the eight
+-- are left alone.
+local function PadFree()
+    local manager = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
+    if not manager or not manager.IsOnlyCoreBindingSetActive then return true end
+    local ok, core = pcall(manager.IsOnlyCoreBindingSetActive, manager)
+    return not ok or core == true
+end
+
+function Input:PadWanted()
+    return Addon.db.padKeyboard == true and self.padButtons ~= nil and PadFree()
+end
+
 function Input:SyncNativeMouse(restore)
     local header = self.header
     if not header or (self.disabled and not restore) or InCombatLockdown() then return end
@@ -227,6 +268,10 @@ function Input:RefreshTooltip()
     if not source then GameTooltip:Hide(); return end
     -- Native SetTooltip writes UpdateTooltip onto the Blizzard button.
     local action = source:GetID()
+    -- A keyboard bar button: GetID is its position, .action the action it holds.
+    if slot.keyboardSlot and type(source.action) == "number" and (not issecretvalue or not issecretvalue(source.action)) then
+        action = source.action
+    end
     local spellID = source.GetSingleSpellID and source:GetSingleSpellID()
     local bar = source.parentActionBar
     if bar and bar.faceLeftButton == source then spellID = bar.rangedSpellID or spellID end
@@ -323,6 +368,27 @@ function Input:Create(native, unit, bars)
     -- The keyboard bar's buttons 9-12 serve the main-row positions without a gamepad action.
     for position = 9, 12 do
         SetRef(header, "kbd" .. position, MainActionBar and MainActionBar.actionButtons[position])
+    end
+    -- Setting "padKeyboard": every slot's keyboard bar button, and one hitbox for each of the pad's eight bar buttons.
+    for i = 1, 36 do
+        local slot = Addon.Display.slots[i]
+        if slot and slot.template and (i < 9 or i > 12) then SetRef(header, "kbd" .. i, slot.template) end
+    end
+    self.padButtons = {}
+    for native = 1, 8 do
+        local button = CreateFrame("Button", "ClassicConsoleGamepadUIPadButton" .. native, header, "SecureActionButtonTemplate")
+        button:SetID(0)
+        button:SetAttribute("group", 6)
+        button:SetAttribute("index", native)
+        button:SetAttribute("checkselfcast", true)
+        button:SetAttribute("checkfocuscast", true)
+        button:RegisterForClicks("AnyDown", "AnyUp")
+        SecureHandlerWrapScript(button, "OnClick", header, PRE_CLICK)
+        SecureHandlerWrapScript(button, "OnHide", header, [[owners[self] = nil; self:SetAttribute("cgppressed", nil)]])
+        button:SetScript("OnAttributeChanged", function(_, name)
+            if name == "cgppressed" then Addon:QueueRefresh() end
+        end)
+        self.padButtons[native] = button
     end
     header:Execute(SETUP)
     for i, slot in ipairs(Addon.Display.slots) do
@@ -427,6 +493,18 @@ end
 function Input:UpdateBindings()
     local header, count = self.header, 0
     self.labelShown = {}
+    -- The pad's eight come first: BindingsLost watches the first key, and the game puts its own back on them.
+    self.padBound = self:PadWanted()
+    if self.padBound then
+        for native, button in ipairs(self.padButtons) do
+            local key = Addon.ButtonBindings:Key(native) or Addon.ButtonBindings.DEFAULT[native]
+            if key and IsBindingForGamePad(key) then
+                count = count + 1
+                header:SetAttribute("key" .. count, key)
+                header:SetAttribute("button" .. count, button:GetName())
+            end
+        end
+    end
     for i, button in pairs(self.buttons) do
         local slot = Addon.Display.slots[i]
         slot.Key:SetText("")
@@ -495,6 +573,18 @@ function Input:Refresh(wanted, native, unit, bars)
     end
     -- Labels follow the visible slots even while Settings or a flyout pauses
     -- the click layer, e.g. right after switching between 8 and 12 slots.
+    local padKeyboard = Addon.db.padKeyboard == true
+    if header:GetAttribute("padkeyboard") ~= padKeyboard then header:SetAttribute("padkeyboard", padKeyboard) end
+    if self.padRevision ~= Addon.Layout.revision then
+        -- The order within a row is a setting ("crossFirst"), so the places are told again with the geometry.
+        for group = 1, 4 do
+            for native = 1, 8 do
+                header:SetAttribute("padslot" .. group .. "-" .. native, Input.PadSlot(group, native))
+            end
+        end
+        self.padRevision = Addon.Layout.revision
+    end
+    if self:PadWanted() ~= (self.padBound == true) then self.dirty = true end
     local bindingsDirty = self.dirty
     if bindingsDirty or self.labelRevision ~= Addon.Layout.revision or self:SlotsChanged() then
         self:UpdateBindings()

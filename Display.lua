@@ -16,7 +16,7 @@ end
 -- Keyboard bar buttons carry the page-adjusted action slot in .action; GetID is only their position.
 local function ActionOf(slot, source)
     if not source or not source.GetID then return end
-    if slot and slot.keyboardSlot and source == slot.template then
+    if slot and slot.keyboardSlot and (source == slot.template or source == slot.keyboardSource) then
         local action = source.action
         if Readable(action) and type(action) == "number" and action > 0 then return action end
     end
@@ -70,6 +70,16 @@ local function BindingGlyphs(slot, command)
         local atlas = textures and InputIconTextureSetUtility.GetNormalActiveInputIconButtonTexture(key)
         if atlas then target:SetAtlas(atlas); target:Show() else target:Hide() end
     end
+end
+
+-- The glyph of the key a bar slot really has, where the player moved the eight buttons (ButtonBindings.lua): the game draws
+-- the same glyph on a slot whatever key it has. The game's own glyph stays for a slot that has its own key.
+local function BindingPrompt(slot, index)
+    local key = index and Addon.ButtonBindings and Addon.ButtonBindings:CustomKey(index)
+    if not key then return end
+    local util = InputIconTextureSetUtility
+    local atlas = util and util.GetNormalActiveInputIconButtonTexture and util.GetNormalActiveInputIconButtonTexture(key)
+    if atlas then slot.Prompt:SetAtlas(atlas); slot.Prompt:Show() end
 end
 
 local function StockTexture(parent, source, owner, layer)
@@ -491,7 +501,7 @@ function Display:GetDragAction(slot)
     if not Addon.classicVisible then return end
     if slot.keyboardSlot then
         -- A spare slot mirroring the keyboard bar: plain action-bar storage, even when empty.
-        local action = ActionOf(slot, slot.template)
+        local action = ActionOf(slot, slot.keyboardSource or slot.template)
         if type(action) == "number" and action > 0 then return action, false end
         return
     end
@@ -715,7 +725,7 @@ function Display:MirrorForeignText(slot, source)
     for i = used + 1, #mirrors do mirrors[i]:Hide() end
 end
 
-function Display:UpdateSlot(slot, source, bar, active)
+function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
     slot:Show()
     if slot.Key then slot.Key:SetShown(Addon.db.showKeyboardHints) end
     if not source then
@@ -751,6 +761,7 @@ function Display:UpdateSlot(slot, source, bar, active)
         PresentEmptySlot(slot)
     end
     CopyGlyph(slot.Prompt, source.ButtonIcon)
+    BindingPrompt(slot, buttonIndex)
     if source.Count then slot.Count:SetText(source.Count:GetText()) else slot.Count:SetText("") end
     if source.Count then
         local countShown = source.Count:IsShown()
@@ -809,13 +820,41 @@ function Display:Update(unit)
         if bar and bar:IsShown() then selected[1] = bar end
     end
     local activeBar = unit:GetActiveBar()
+    -- Setting "padKeyboard": a slot of the four standard bars shows the keyboard bar's button at its place (Input.lua
+    -- presses the same button); the game's own four (interact, target menu, back, jump) stay.
+    local standard = {}
+    if Addon.db.padKeyboard == true then
+        for _, bar in ipairs({ base.topBar, base.leftBar, base.rightBar, base.bottomBar }) do standard[bar] = true end
+    end
+    local function KeyboardButton(bar, index, native)
+        local source = bar and standard[bar] and bar.actionButtons[native]
+        if not source then return end
+        local pageSlot = source.GetGamepadPageUnitSlotID and source:GetGamepadPageUnitSlotID()
+        if not pageSlot or GamepadActionBarBindingUtil.IsReservedPageUnitSlotID(pageSlot) then return end
+        local place = Addon.Input.PadSlot(index, native)
+        return place and self.slots[place] and self.slots[place].template
+    end
     local function PaintGroup(index, firstSlot, firstButton, count)
         local bar = selected[index]
         local active = bar ~= nil and bar == activeBar
         if not bar or (bar.IsActionBarUsable and not bar:IsActionBarUsable()) then active = false end
         for j = 0, count - 1 do
             local slot = self.slots[firstSlot + j]
-            self:UpdateSlot(slot, bar and bar.actionButtons[firstButton + j], bar, active)
+            local keyboard = KeyboardButton(bar, index, firstButton + j)
+            slot.keyboardSource, slot.keyboardSlot = keyboard, keyboard ~= nil
+            if keyboard then
+                local action = ActionOf(slot, keyboard)
+                if type(action) == "number" and action > 0 and C_ActionBar.HasAction(action) then
+                    self:UpdateSlot(slot, keyboard, nil, active, firstButton + j)
+                else
+                    self:ShowPlaceholder(slot)
+                    slot.Glow:SetShown(active and Addon.db.highlightActive or false)
+                end
+                CopyGlyph(slot.Prompt, bar.actionButtons[firstButton + j].ButtonIcon)
+                BindingPrompt(slot, firstButton + j)
+            else
+                self:UpdateSlot(slot, bar and bar.actionButtons[firstButton + j], bar, active, firstButton + j)
+            end
             if bar and bar == unit.ShortcutsActionBar then
                 CopyTexture(slot.Modifiers[1], self.slots[37].Prompt)
                 CopyTexture(slot.Modifiers[2], self.slots[38].Prompt)

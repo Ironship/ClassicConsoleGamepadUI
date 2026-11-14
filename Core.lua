@@ -417,6 +417,15 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "bindings" then
         Addon.Options:OpenBindings()
         return
+    elseif command == "padtest" then
+        Addon.ButtonBindings:PadTest()
+        return
+    elseif command == "bindtest" then
+        Addon.ButtonBindings:Diagnose()
+        return
+    elseif command == "keys" or command == "keymap" then
+        Addon.KeyMap:Open()
+        return
     elseif command == "keyboard" or command == "kb" then
         local mode = input:lower():match("^%s*%S+%s+(%S+)")
         if mode == "debug" then
@@ -533,7 +542,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | language | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | keys | language | bindings | edit | resetframes | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)

@@ -129,6 +129,9 @@ local function Tabs()
             { "control", "contextGap" },
             { "header", "menu" },
             { "control", "menuRight" }, { "control", "menuBottom" },
+            { "header", "buttonsHeader" },
+            { "control", "padKeyboard" },
+            { "button", Text("keymapOpen"), Text("keymapOpenTip"), function() Addon.KeyMap:Open() end },
         } },
         { id = "hints", label = Text("tabHints"), items = {
             { "header", "hints" },
@@ -356,6 +359,38 @@ local function Choice(page, y, key, parent)
     return y + 36
 end
 
+-- One of the eight bar buttons: the key the slot has now; a click (or D-pad right) gives it the next key, right click (D-pad left)
+-- the previous one. The slot that had that key gets this slot's old key (ButtonBindings.lua).
+local function SlotKey(page, y, slot)
+    local Buttons = Addon.ButtonBindings
+    local row = CreateFrame("Frame", nil, page.content)
+    row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
+    row:SetSize(ROW_WIDTH, 34)
+    local label = Fonts:String(row, "OVERLAY", "Highlight")
+    label:SetPoint("LEFT", 2, 0)
+    label:SetText(string.format(Text("buttonSlot"), Buttons:Name(Buttons.DEFAULT[slot])))
+    local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    Fonts:Button(button)
+    button:SetSize(230, 24)
+    button:SetPoint("LEFT", row, "LEFT", 300, 0)
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    function button.StepChoice(direction)
+        local ok, why = Buttons:Step(slot, direction, function(done, reason, detail)
+            Buttons:Report(slot, done, reason, detail)
+            page.Refresh()
+            Addon:QueueRefresh()
+        end)
+        if not ok then Buttons:Report(slot, ok, why) end
+        -- a swap changes two rows
+        page.Refresh()
+        Addon:QueueRefresh()
+    end
+    button:SetScript("OnClick", function(_, mouse) button.StepChoice(mouse == "RightButton" and -1 or 1) end)
+    AddTooltip(button, Text("buttonsHeader"), Text("buttonsTip"))
+    Register(page, row, button, y, 34, function() button:SetText(Buttons:Name(Buttons:Key(slot))) end)
+    return y + 36
+end
+
 local function Button(page, y, label, tip, action, parent)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
@@ -444,6 +479,7 @@ local function BuildPage(window, tab)
         if kind == "header" then y = Header(page, y, item[2])
         elseif kind == "note" then y = Note(page, y, item[2])
         elseif kind == "choice" then y = Choice(page, y, item[2], item[3])
+        elseif kind == "slotkey" then y = SlotKey(page, y, item[2])
         elseif kind == "status" then y = Status(page, y, item[2], item[3])
         elseif kind == "button" then y = Button(page, y, item[2], item[3], item[4], item[5])
         else
@@ -510,6 +546,9 @@ function Window:PadButton(key)
     -- The keyboard owns the pad while it is shown; both reacting to one press would move two selections.
     local keyboard = Addon.Keyboard and Addon.Keyboard.frame
     if keyboard and keyboard:IsShown() and Addon:IsGamepadMode() then return false end
+    -- The keyboard layout window is in front and has the pad.
+    local keyMap = Addon.KeyMap and Addon.KeyMap.frame
+    if keyMap and keyMap:IsShown() then Addon.KeyMap:PadButton(key); return true end
     if key == "PAD2" then
         self:Hide()
         return true
