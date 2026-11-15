@@ -413,6 +413,27 @@ function Display:PlaceTotemBar()
     if left and top then Addon.Layout:PlaceTotemBar(left, top) end
 end
 
+-- The frame-rate display hangs off the micro menu (FramerateFrameMixin:UpdatePosition), so it would go with a hidden menu.
+-- While the menu is hidden it sits at the bottom right corner instead; the game's own anchor comes back with the menu.
+function Display:AnchorFramerate(hidden)
+    local frame = FramerateFrame
+    if not frame then return end
+    if hidden then
+        pcall(function()
+            frame:ClearAllPoints()
+            frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -5, Addon.db.menuBottom)
+        end)
+        self.fpsMoved = true
+    elseif self.fpsMoved then
+        self.fpsMoved = nil
+        pcall(function()
+            if MicroMenu and MicroMenu.UpdateFramerateFrameAnchor then
+                MicroMenu:UpdateFramerateFrameAnchor(FrameUtil.GetScreenQuadrant(MicroMenuContainer))
+            end
+        end)
+    end
+end
+
 -- The micro menu otherwise covers the quest tracker or the bottom row.
 -- Keep it on the right edge, flush with the bottom unless the user adds a gap.
 function Display:PlaceMicroMenuRight()
@@ -424,11 +445,19 @@ function Display:PlaceMicroMenuRight()
     if not width or width < 8 or not height or height < 8 then return end
     if Addon.db.hideMenu == true then
         -- Invisible and out of reach of the mouse: well past the right edge of the screen (also when Edit Mode keeps it).
+        -- Edit Mode systems are clamped to the screen, which would pull it back (invisible, but still clickable).
         menu:SetAlpha(0)
+        self:AnchorFramerate(true)
+        if menu.IsClampedToScreen and menu:IsClampedToScreen() then
+            menu:SetClampedToScreen(false)
+            self.menuUnclamped = true
+        end
         Addon.Layout:SetBottomLeft(menu, UIParent:GetWidth() + 64, Addon.db.menuBottom)
         return
     end
     if menu:GetAlpha() ~= 1 then menu:SetAlpha(1) end
+    if self.menuUnclamped then menu:SetClampedToScreen(true); self.menuUnclamped = nil end
+    self:AnchorFramerate(false)
     -- A menu kept by the layout (placeMenu off) stays where Edit Mode puts it.
     if Addon.Layout:Keeps(menu) then return end
     local margin = Addon.db.menuRight
@@ -596,6 +625,114 @@ end
 -- The native action editor ("Bind to Action Bar", "Edit Action Bar") draws its
 -- own crossbar from a separate page unit. Its buttons are read here exactly like
 -- the main HUD's, so the classic bars stay on screen while the editor is open.
+-- Setting "padKeyboard": the pairs (controller storage slot, keyboard bar action slot) of the first page of the four standard
+-- bars. The action editor writes the first, the bars show and press the second.
+local function ActionState(slot)
+    local kind, id, sub = GetActionInfo(slot)
+    return tostring(kind) .. ":" .. tostring(id) .. ":" .. tostring(sub)
+end
+
+function Display:EditorPairs()
+    local native = GamepadMainActionBarFrame
+    local base = native and native.PageUnit and native.PageUnit.actionBars
+    if not base or not self.slots then return end
+    local pairsList = {}
+    for group, key in ipairs({ "topBar", "leftBar", "rightBar", "bottomBar" }) do
+        local bar = base[key]
+        for index = 1, 8 do
+            local button = bar and bar.actionButtons and bar.actionButtons[index]
+            local pageSlot = button and button.GetGamepadPageUnitSlotID and button:GetGamepadPageUnitSlotID()
+            if pageSlot and GamepadActionBarBindingUtil.IsBindablePageUnitSlotID(pageSlot) then
+                local storage = GamepadActionBarBindingUtil.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID(1, pageSlot)
+                local place = Addon.Input.PadSlot(group, index)
+                local template = place and self.slots[place] and self.slots[place].template
+                local action = template and template.action
+                if storage and Readable(action) and type(action) == "number" and action > 0 then
+                    pairsList[#pairsList + 1] = { storage, action }
+                end
+            end
+        end
+    end
+    return pairsList
+end
+
+-- Remembers what the controller storage holds when the action editor opens, after making the storage a copy of the keyboard
+-- bars (the editor shows, picks up and clears what is in it, so it has to hold what the bars hold). Both ways: what the
+-- keyboard bars have goes to the editor now, what the editor changed goes back to them when it closes (SyncEditor).
+-- Puts a copy of the action in `slot` on the cursor, for the kinds of action that can be picked up again.
+local function PickupCopy(slot)
+    local kind, id = GetActionInfo(slot)
+    ClearCursor()
+    if not id then return false end
+    if kind == "spell" then
+        C_Spell.PickupSpell(id)
+    elseif kind == "item" then
+        C_Item.PickupItem(id)
+    elseif kind == "macro" then
+        PickupMacro(id)
+    end
+    return GetCursorInfo() ~= nil
+end
+
+function Display:SnapshotEditor()
+    if InCombatLockdown() or GetCursorInfo() then return end
+    local list = self:EditorPairs()
+    if not list then return end
+    local snapshot = {}
+    for _, pair in ipairs(list) do
+        local storage, action = pair[1], pair[2]
+        if ActionState(storage) ~= ActionState(action) then
+            if not GetActionInfo(action) then
+                -- Nothing on the keyboard bar: what the controller storage holds stays (it is the player's own layout of
+                -- before; nothing of it reaches the keyboard bar unless the editor changes it).
+            elseif PickupCopy(action) then
+                PlaceAction(storage)
+            elseif GetActionInfo(storage) then
+                -- A kind that cannot be copied (a flyout, a mount): the slot shows empty rather than a stale action that
+                -- the editor could then move onto the keyboard bar.
+                PickupAction(storage)
+            end
+            ClearCursor()
+        end
+        snapshot[storage] = ActionState(storage)
+    end
+    self.editorSnapshot = snapshot
+end
+
+-- When the editor has closed: every controller storage slot it changed is copied to the keyboard bar slot at the same place
+-- (the action that was there goes), and a slot it emptied empties that keyboard slot. Outside combat, with an empty cursor.
+function Display:SyncEditor()
+    local snapshot = self.editorSnapshot
+    if not snapshot then return end
+    if InCombatLockdown() or GetCursorInfo() then return end
+    self.editorSnapshot = nil
+    local list = self:EditorPairs()
+    local moved = 0
+    for _, pair in ipairs(list or {}) do
+        local storage, action = pair[1], pair[2]
+        local before = snapshot[storage]
+        if before and ActionState(storage) ~= before then
+            if GetActionInfo(storage) then
+                if PickupCopy(storage) then
+                    PlaceAction(action)
+                else
+                    -- A kind that cannot be picked up again: it moves.
+                    PickupAction(storage)
+                    PlaceAction(action)
+                end
+            else
+                PickupAction(action)
+            end
+            ClearCursor()
+            moved = moved + 1
+        end
+    end
+    if moved > 0 then
+        Addon:Print(Addon.L.editorSynced:format(moved))
+        Addon:QueueRefresh(true)
+    end
+end
+
 function Display:IsBarEditing()
     return GamepadActionBarEditFrame ~= nil and GamepadActionBarEditFrame:IsShown()
 end
@@ -1247,14 +1384,20 @@ function Display:Refresh(wanted)
     if not geometryOK then self.reason = "geometry"; self:RestoreNative(); return false end
     self.reason = editing and "shown (action editor)" or "shown"
     self.barEditing = editing
-    -- The editor fills the game's controller storage; with "padKeyboard" the bars show the keyboard bars. Said once per visit.
+    -- The editor fills the game's controller storage; with "padKeyboard" the bars show the keyboard bars, so what the
+    -- editor changed is put on the keyboard bars when it closes (SyncEditor). Said once per visit.
     if editing and Addon.db.padKeyboard == true then
         if not self.editorNoted then
             self.editorNoted = true
             Addon:Print(Addon.L.editorPadNote)
+            pcall(self.SnapshotEditor, self)
         end
     else
         self.editorNoted = nil
+        if self.editorSnapshot and not editing then
+            local ok, err = pcall(self.SyncEditor, self)
+            if not ok then self.editorSnapshot = nil; Addon:Note("Display:SyncEditor", err) end
+        end
     end
     self:Update(unit)
     -- Like the game's own bars, everything but the radial fades while one is open.

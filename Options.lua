@@ -136,6 +136,10 @@ end
 
 function Options:InitializeDefaults()
     local db = Addon.db
+    -- Every earlier version set hybridDefault, so a saved variables file without "padKeyboard" that has it is an installation
+    -- from before that setting: it stays off there (the controller's own bar layout stays what it was) until the player
+    -- turns it on. A new installation gets the default.
+    local existing = db.hybridDefault ~= nil
     db.keyboardLanguage = Addon.Languages.Valid(db.keyboardLanguage)
     -- English, unless the player chose another language (or the game's).
     if db.language ~= "auto" and not Addon.Locales.tables[db.language] then db.language = "enUS" end
@@ -147,6 +151,7 @@ function Options:InitializeDefaults()
     end
     if not Contains(KEYBOARD_INPUTS, db.keyboardPhone) then db.keyboardPhone = "t9h" end
     if not Contains(KEYBOARD_MODES, db.keyboardMode) then db.keyboardMode = db.keyboardPhone end
+    if existing and db.padKeyboard == nil then db.padKeyboard = false end
     for _, info in ipairs(controls) do
         local value = db[info.key]
         if type(value) ~= type(info.default) or (info.min and (value ~= value or value < info.min or value > info.max)) then

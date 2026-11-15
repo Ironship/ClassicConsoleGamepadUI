@@ -21,6 +21,7 @@ Version 0.1.0-alpha.79. Alpha: expect bugs.
 *   Classic action bars with the controller buttons shown on the slots (X, Y, B, A, LT, RT layers).
 *   Compact bars (8 slots) or full bars (12 slots).
 *   Mouse clicks, drag and drop and keyboard keys work on the bars.
+*   Optional: the controller buttons use your keyboard action bars ("Keyboard bars on the controller"), so a spell sits in the same slot with the keyboard and the controller. Macros work on the bars.
 *   Classic micro menu, bags, unit frames and experience bar.
 *   Move the player, target and focus frames in Edit Mode. The addon remembers where you put them.
 *   Move the classic action bars in Edit Mode: they get a selection box of their own there.
@@ -31,7 +32,7 @@ Version 0.1.0-alpha.79. Alpha: expect bugs.
 *   Settings, hints and keyboard in English, German, Polish, French, Spanish, Italian or Portuguese. You choose the language, English is the default.
 *   Controller button hints in micro menu tooltips.
 *   Easy item deletion: X, X, A, A.
-*   Chat, controller legend and micro menu position options.
+*   Chat, controller legend and micro menu position options, or hide the micro menu.
 *   Text that other addons put on action buttons (like damage numbers) shows on the classic bars.
 *   The classic bars stay visible in the game's action editor and when you pick a stance, form or aura from the radial menu.
 *   The Shaman's totem bar is placed above the bars instead of on top of them.

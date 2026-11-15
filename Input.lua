@@ -35,12 +35,27 @@ local PICK_BAR = [[
     return key
 ]]
 
+-- /cgp clicks: every click of a hitbox is printed after it ran, with what the secure code made of it (type, action, what
+-- the action is, macro text of a delegated click). A post-click script of the addon, so nothing protected is touched.
+local function TraceClick(self, _, down)
+    if not Addon.traceClicks then return end
+    local kind, action = self:GetAttribute("type"), self:GetAttribute("action")
+    local info, id
+    if type(action) == "number" then
+        local ok, first, second = pcall(GetActionInfo, action)
+        if ok then info, id = first, second end
+    end
+    Addon:Print(string.format("click %s %s: type=%s action=%s is=%s %s macrotext=%s", tostring(self:GetName()),
+        down and "down" or "up", tostring(kind), tostring(action), tostring(info), tostring(id),
+        tostring(self:GetAttribute("macrotext") or "-")))
+end
+
 local PRE_CLICK = [[
     self:SetAttribute("type", nil)
     if not down then self:SetAttribute("cgppressed", nil) end
     local keyboard = button == "Keybind"
     if (button ~= "LeftButton" and not keyboard) or not control:GetAttribute("enabled") then return false end
-    local source, kind
+    local source, kind, place, act
     if down then
         self:SetAttribute("cgppressed", true)
         local group, index = self:GetAttribute("group"), self:GetAttribute("index")
@@ -48,12 +63,14 @@ local PRE_CLICK = [[
             source, kind = control:GetFrameRef("class" .. index), "delegate"
             if not source or not source:IsShown() then
                 -- No class action: the keyboard bar's button at this position (9 or 10).
-                source = control:GetFrameRef("kbd" .. (index + 8))
+                place = index + 8
+                source, kind = control:GetFrameRef("kbd" .. place), "kbd"
                 if not source then return false end
             end
         elseif group == 5 then
             -- Spare main-row slots: the keyboard bar's button at the same position.
-            source, kind = control:GetFrameRef("kbd" .. index), "delegate"
+            place = index
+            source, kind = control:GetFrameRef("kbd" .. place), "kbd"
             if not source then return false end
         else
             if group == 6 then
@@ -74,9 +91,9 @@ local PRE_CLICK = [[
             if control:GetAttribute("padkeyboard") and key <= 4 and not delegates[key][index] then
                 -- The keyboard bar's button at the slot's place stands in for the pad's own action. The game's own
                 -- four (interact, target menu, back, jump) and the bars that take a row over stay as they are.
-                local place = control:GetAttribute("padslot" .. group .. "-" .. index)
+                place = control:GetAttribute("padslot" .. group .. "-" .. index)
                 local keyboardButton = place and control:GetFrameRef("kbd" .. place)
-                if keyboardButton then source, kind = keyboardButton, "delegate" end
+                if keyboardButton then source, kind = keyboardButton, "kbd" end
             end
             if kind == "action" then
                 local action = source:GetID()
@@ -85,14 +102,33 @@ local PRE_CLICK = [[
                 if actionType == "flyout" then kind = "delegate" end
             end
         end
+        if kind == "kbd" then
+            -- A keyboard bar's button: its action slot is worked out here (the button's position plus its bar's page, the
+            -- way the game does it) and used like the controller's own action. Clicking the button instead, as macro text
+            -- ("/click") or as a click type, does not do for macros: the game does not run a macro from within a macro,
+            -- and the "click" type needs a real frame in an attribute, which a secure snippet cannot set.
+            local page = control:GetAttribute("kbdpage" .. place)
+            if not page then
+                -- Only the main bar (places 1-12) has a page that changes; for the others it is set from outside combat.
+                if place > 12 then return false end
+                -- The main bar: the page the game's action bar controller puts on it.
+                if HasVehicleActionBar() then page = GetVehicleBarIndex()
+                elseif HasOverrideActionBar() then page = GetOverrideBarIndex()
+                elseif HasTempShapeshiftActionBar() then page = GetTempShapeshiftBarIndex()
+                elseif HasBonusActionBar() and GetActionBarPage() == 1 then page = GetBonusBarIndex()
+                else page = GetActionBarPage() end
+            end
+            act = source:GetID() + (page - 1) * 12
+            if GetActionInfo(act) == "flyout" then kind = "delegate" else kind = "action" end
+        end
         local owner = newtable()
-        owner[1], owner[2] = source, kind
+        owner[1], owner[2], owner[3] = source, kind, act
         owners[self] = owner
     else
         local owner = owners[self]
         owners[self] = nil
         if not owner then return false end
-        source, kind = owner[1], owner[2]
+        source, kind, act = owner[1], owner[2], owner[3]
     end
     if kind == "delegate" then
         self:SetAttribute("type", "macro")
@@ -101,7 +137,7 @@ local PRE_CLICK = [[
     elseif down and not keyboard then
         return false
     else
-        local action = source:GetID()
+        local action = act or source:GetID()
         if not action or action <= 0 then return false end
         if keyboard then self:SetAttribute("useOnKeyDown", nil)
         else self:SetAttribute("useOnKeyDown", false) end
@@ -332,6 +368,33 @@ local function SetRef(header, label, frame)
     if frame then pcall(header.SetFrameRef, header, label, frame) end
 end
 
+-- The page of each keyboard bar that has a fixed one (the two lower bars; the main bar's page changes and is worked out in
+-- PRE_CLICK). Taken from what the button holds: its action slot is its position plus (page - 1) * 12. (The buttons hang off a
+-- container of the bar, not off the bar, so the bar's own "actionpage" attribute is not at hand.) Outside combat; true when
+-- every place has its page.
+function Input:SetKeyboardPages()
+    local header = self.header
+    if not header or InCombatLockdown() then return false end
+    local complete = true
+    for i = 13, 36 do
+        local slot = Addon.Display.slots[i]
+        local template = slot and slot.template
+        local action, id = template and template.action, template and template:GetID()
+        local page
+        if type(action) == "number" and type(id) == "number" and id > 0 and (not issecretvalue or not issecretvalue(action))
+            and (action - id) % 12 == 0 and action - id >= 12 then
+            page = (action - id) / 12 + 1
+        end
+        if page then
+            if header:GetAttribute("kbdpage" .. i) ~= page then header:SetAttribute("kbdpage" .. i, page) end
+        else
+            complete = false
+        end
+    end
+    self.pagesSet = complete
+    return complete
+end
+
 function Input:Create(native, unit, bars)
     local header = CreateFrame("Frame", "ClassicConsoleGamepadUIInput", UIParent, "SecureHandlerShowHideTemplate")
     header:SetFrameStrata(Addon.Display.root:GetFrameStrata())
@@ -384,6 +447,7 @@ function Input:Create(native, unit, bars)
         button:SetAttribute("checkfocuscast", true)
         button:RegisterForClicks("AnyDown", "AnyUp")
         SecureHandlerWrapScript(button, "OnClick", header, PRE_CLICK)
+        button:HookScript("PostClick", TraceClick)
         SecureHandlerWrapScript(button, "OnHide", header, [[owners[self] = nil; self:SetAttribute("cgppressed", nil)]])
         button:SetScript("OnAttributeChanged", function(_, name)
             if name == "cgppressed" then Addon:QueueRefresh() end
@@ -391,6 +455,7 @@ function Input:Create(native, unit, bars)
         self.padButtons[native] = button
     end
     header:Execute(SETUP)
+    self:SetKeyboardPages()
     for i, slot in ipairs(Addon.Display.slots) do
         local group, index = SlotAction(i)
         if group then
@@ -405,6 +470,7 @@ function Input:Create(native, unit, bars)
             button:RegisterForClicks("AnyDown", "AnyUp")
             button:RegisterForDrag("LeftButton")
             SecureHandlerWrapScript(button, "OnClick", header, PRE_CLICK)
+            button:HookScript("PostClick", TraceClick)
             button:SetScript("OnDragStart", function() Addon.Display:PickupSlot(slot) end)
             SecureHandlerWrapScript(button, "OnDragStart", header, [[owners[self] = nil; self:SetAttribute("type", nil); self:SetAttribute("cgppressed", nil)]])
             SecureHandlerWrapScript(button, "OnHide", header, [[owners[self] = nil; self:SetAttribute("cgppressed", nil)]])
@@ -563,6 +629,7 @@ function Input:Refresh(wanted, native, unit, bars)
         self:Create(native, unit, bars)
     end
     local header = self.header
+    if not self.pagesSet then self:SetKeyboardPages() end
     if not wanted then
         if header:IsShown() then Addon:Trace("Input off") end
         self:SyncNativeMouse(true)

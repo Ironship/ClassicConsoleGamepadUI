@@ -70,7 +70,19 @@ matching the exported source commit's build **1.60.1 (70450)**.
   `action`/`pet` types with the current native storage ID. Reserved controls, class
   buttons and flyouts delegate native press/release through secure `/click` macro
   text, whose down argument is supported by `Blizzard_ChatFrameBase/Shared/SlashCommands.lua`.
-  Ordinary action macros use the action path rather than chained `/click` macros.
+  Ordinary action macros use the action path rather than chained `/click` macros. The same goes for the buttons of the
+  keyboard bars (slots 9-12 of the 12-slot layout, class slots without a class action, and every slot with the setting
+  `padKeyboard`): `PRE_CLICK` works out the button's action slot (`GetID()` plus `(page - 1) * 12`) and sets it as the
+  `action` of the hitbox. A `/click <keyboard button>` macro text does not do for them, since the game does not run a macro
+  from within a macro (a macro on the bars did nothing), and the `click` type does not either: a secure snippet stores a
+  frame handle in `clickbutton`, not the frame, and `SECURE_ACTIONS.click` (`SecureTemplates.lua:561`) calls
+  `HasAccessConstraints()` on it. The page of the two lower bars is fixed: `Input:SetKeyboardPages` takes it from what the
+  button holds, `(button.action - button:GetID()) / 12 + 1` (the buttons hang off a container of the bar, so the bar's own
+  `actionpage` attribute is not at hand), and puts it on the header as `kbdpage<slot>`, outside combat. The page of the main
+  bar changes and is worked out in the snippet the way `ActionBarController.lua` sets `MainActionBar`'s `actionpage`
+  (vehicle, override, temporary shapeshift and bonus bar indexes, else `GetActionBarPage()`, all in the restricted
+  environment). A flyout on a keyboard button still goes through `/click`. `/cgp clicks` prints each click after the secure
+  code handled it (type, action, what the action is, macro text of a delegated click).
 - `ActionBarActionButtonMixin:UpdateHotkeys()` supplies each stock position's
   `bindingAction`. Read its keyboard keys in the native binding context, exclude
   controller keys, and apply temporary secure binding-click overrides while the
@@ -114,8 +126,13 @@ matching the exported source commit's build **1.60.1 (70450)**.
   it sticks out, and the experience/reputation bars adopt that width. The whole
   group, including bags but not the micro menu, is then shifted so the gryphons are centered
   on UIParent. Bag anchors and status-bar width follow that centered HUD.
-  The micro menu is anchored to the right edge of UIParent, 12 points in, with its
-  bottom at UIParent y = 0 by default. The settings panel exposes both edge distances.
+  The micro menu is anchored to the right edge of UIParent, flush with it (`menuRight`, 0 by default), with its
+  bottom at UIParent y = 0 by default. The settings panel exposes both edge distances. With `hideMenu` the menu is faded
+  out (alpha 0) and moved just past the right edge; Edit Mode systems are clamped to the screen
+  (`EditModeSystemTemplates.xml`), so the clamp is switched off while it is hidden (`Display.menuUnclamped`, restored with the
+  menu and in `Layout:Restore`), else it would be pulled back, invisible but clickable. The frame-rate display is anchored to
+  the micro menu (`FramerateFrameOverrides.lua`), so `Display:AnchorFramerate` puts it at the bottom right corner while the
+  menu is hidden and asks the game to anchor it again afterwards.
   The original menu anchor, the other anchors, and keyboard status widths are restored on exit. Sizes of
   individual buttons and end-cap artwork are unchanged. Geometry changes wait
   for combat to end.
@@ -394,7 +411,8 @@ matching the exported source commit's build **1.60.1 (70450)**.
   anchoring mirror frames to protected buttons.
 - `Blizzard_ActionBar/Camelot/MainMenuBarEndCaps.xml` and
   `Blizzard_ActionBar/Mainline/MainActionBar.xml`: copy the actual end-cap textures,
-  bar artwork, page font and arrows, including their native dimensions and positions.
+  bar artwork and end caps, including their native dimensions and positions. The page number and its arrows are not drawn
+  (the classic bars have no page to switch); the action editor keeps its own page tracker.
 - `Blizzard_EditMode/Camelot/EditModeUtil.lua` and
   `Blizzard_EditMode/Camelot/EditModePresetLayoutConstants.lua`: Gamepad Mode skips
   the keyboard bottom-bar stack. Outside combat, restore its native anchors using
@@ -412,6 +430,26 @@ Native action HUD changes: temporarily set its root alpha to zero and disable
 invisible mouse hitboxes outside combat, recording click/motion flags separately.
 Restore the exact alpha/input state for native view and bindings. The visual
 mirror is intentionally not an extra set of spell-casting buttons.
+
+Unit portraits on the targeting bars: the game fills `SpecialActionIcon` of a party member's, the player's, the pet's, the
+assist target's or the focus's button with `SetPortraitTexture` (`TargetActionBars/FriendlyTargetingActionBar.lua`,
+`Shared.lua`), which a texture copy (atlas or file) cannot carry over. `Display:UpdateSlot` recognises the button by its
+secure attributes (`type` "target", `unit`) and asks for the same portrait on the slot's own icon, through a round mask
+(`CircleMask`) like the game's; the mask is taken off again for any other action.
+
+Setting `padKeyboard` ("Keyboard bars on the controller", on for a new installation, off for one that already existed,
+decided in `Options:InitializeDefaults` by `hybridDefault` that every earlier version set): the classic bars show and press
+the keyboard action bars 1-3 (the slot's keyboard button, `Input.PadSlot`), not the game's own controller storage, whose
+slots (`GamepadActionBarBindingUtil.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID`) the keyboard bars do not use. The
+native action editor ("Bind to Action Bar", "Edit Action Bars") writes that controller storage, so it is kept in step with
+the keyboard bars (`Display:EditorPairs`, `SnapshotEditor`, `SyncEditor`): when the editor opens, the storage slot of each pad
+button of page 1 is made a copy of the keyboard slot at the same place (spells, items and macros are put on the cursor again
+with `C_Spell.PickupSpell`, `C_Item.PickupItem` and `PickupMacro` and placed; a keyboard slot that is empty leaves the
+controller slot as it was; a kind that cannot be copied, such as a flyout, a mount or an equipment set, empties the controller
+slot so the editor does not show a stale action), and its state is remembered; when it closes, every controller slot that
+changed is copied to its keyboard slot (the action that was there goes; a slot that was emptied empties the keyboard slot).
+Page 1 only, outside combat, with an empty cursor (else it waits); while the editor is open the bars draw the editor's own
+buttons, not the keyboard bars.
 
 All addon state is stored in its private table or `ClassicConsoleGamepadUIDB`. Native page
 callback lists, frame methods and keybindings are never replaced or extended directly.

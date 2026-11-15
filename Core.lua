@@ -421,6 +421,11 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "bindings" then
         Addon.Options:OpenBindings()
         return
+    elseif command == "clicks" then
+        -- Prints every click of the bar slots and pad buttons as the secure code handled it (for a macro that does nothing).
+        Addon.traceClicks = not Addon.traceClicks
+        Addon:Print("clicks " .. (Addon.traceClicks and "traced: click a slot, then read the lines" or "not traced"))
+        return
     elseif command == "padtest" then
         Addon.ButtonBindings:PadTest()
         return
@@ -560,7 +565,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | keys | language | bindings | edit | resetframes | resetbars | resetlegend | legend | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | keys | language | bindings | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | debug")
         return
     end
     Addon:QueueRefresh(true)
