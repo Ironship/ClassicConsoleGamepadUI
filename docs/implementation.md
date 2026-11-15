@@ -431,6 +431,12 @@ invisible mouse hitboxes outside combat, recording click/motion flags separately
 Restore the exact alpha/input state for native view and bindings. The visual
 mirror is intentionally not an extra set of spell-casting buttons.
 
+Key ring: the bag bar shown with the classic bars has a `KeyRingButton` whose click is `ToggleBag(KEYRING_CONTAINER)`; the key
+ring is not a generic held bag, so `ContainerFrameSettingsManager:IsUsingCombinedBags` is false for it and the single-bag path
+runs, where `ContainerFrameMixin:GetRows` (gamepad interface) adds `self.shownSlots`, set only by
+`ContainerFrameCombinedBagsMixin:SetBagSize`. `Layout:BlockKeyRing` dims the button and turns its clicks off while the classic
+bars are up (restored in `Layout:Restore`); the game's own gamepad bag bar has a key ring button of its own.
+
 Unit portraits on the targeting bars: the game fills `SpecialActionIcon` of a party member's, the player's, the pet's, the
 assist target's or the focus's button with `SetPortraitTexture` (`TargetActionBars/FriendlyTargetingActionBar.lua`,
 `Shared.lua`), which a texture copy (atlas or file) cannot carry over. `Display:UpdateSlot` recognises the button by its

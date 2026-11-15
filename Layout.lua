@@ -136,6 +136,24 @@ local function ResizeStatus(frame, width, segments)
     if frame.UpdateDividers then frame:UpdateDividers(segments) end
 end
 
+-- The key ring button of the bag bar shown with the classic bars opens the key ring as a single bag (ToggleBag_Individual),
+-- which the gamepad interface does not support: ContainerFrameMixin:GetRows adds self.shownSlots, set only for the combined
+-- bag, so a click ends in "attempt to perform arithmetic on field 'shownSlots'". The game's own gamepad bag bar has a key
+-- ring button of its own; this one is left on screen, dimmed, and does not take clicks while the classic bars are up.
+function Layout:BlockKeyRing(block)
+    local button = KeyRingButton
+    if not button or not button.SetMouseClickEnabled then return end
+    if block then
+        if self.keyRingAlpha == nil then self.keyRingAlpha = button:GetAlpha() end
+        button:SetMouseClickEnabled(false)
+        button:SetAlpha(0.4)
+    elseif self.keyRingAlpha ~= nil then
+        button:SetMouseClickEnabled(true)
+        button:SetAlpha(self.keyRingAlpha)
+        self.keyRingAlpha = nil
+    end
+end
+
 function Layout:Prepare()
     if self.active and not self.dirty then return true end
     if InCombatLockdown() then return self.active end
@@ -183,6 +201,7 @@ function Layout:Prepare()
         local show = frame.ShowBase or frame.Show
         show(frame)
     end
+    self:BlockKeyRing(true)
 
     -- The same bottom-stack order and offsets as Camelot/EditModeUtil.lua.
     local y = MainActionBar:GetHeight() + BOTTOM_ACTION_BARS_SPACER_Y
@@ -290,6 +309,7 @@ function Layout:Restore(changedMode)
         if Addon.Display.menuUnclamped then MicroMenuContainer:SetClampedToScreen(true); Addon.Display.menuUnclamped = nil end
     end
     Addon.Display:AnchorFramerate(false)
+    self:BlockKeyRing(false)
     self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
 end
 

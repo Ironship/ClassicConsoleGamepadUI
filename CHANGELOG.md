@@ -2,6 +2,7 @@
 
 ## 0.1.0-alpha.79
 
+- Clicking the key ring button of the bag bar ended in "attempt to perform arithmetic on field 'shownSlots'" (Blizzard's `ContainerFrame.lua`): the key ring opens as a single bag there, which the gamepad interface does not support. While the classic bars are up the button is dimmed and takes no clicks; the key ring stays in the game's own gamepad bag bar. Not tried in the game yet.
 - Macros on the bars work again for the slots that mirror the keyboard bars ("Keyboard bars on the controller", the spare slots 9-12 and the class slots without a class action). The click was passed on as `/click <button>` macro text, so a macro in that button's slot ran inside a macro, which the game does not do. The slot's action number (the button's position plus its bar's page) is now worked out in the secure click code and the action is used like the controller's own; flyouts still go through the button. Not tried in the game yet.
 - New `/cgp clicks`: prints every click of a bar slot or pad button after the secure code handled it (type, action, what the action is, macro text of a delegated click), to find out why a macro on the bars does nothing.
 - Edit Mode support, bar size, gryphon, placement and legend options below are by vos6434 (pull request #5), merged with the other changes of this version. The page switcher they moved is gone (see above), the texts are translated into German, Spanish, French, Italian and Portuguese (not read by native speakers), and the legend's per-frame checks no longer make a table every frame.
