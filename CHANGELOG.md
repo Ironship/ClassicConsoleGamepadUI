@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.79
 
 - Edit Mode support, bar size, gryphon, placement and legend options below are by vos6434 (pull request #5), merged with the other changes of this version. The page switcher they moved is gone (see above), the texts are translated into German, Spanish, French, Italian and Portuguese (not read by native speakers), and the legend's per-frame checks no longer make a table every frame.
 - Party member portraits (and the player's, the pet's, the assist target's and the focus's) are drawn again on the targeting bar opened with L1 and the D-pad. The slots copied the game's icon, and a unit portrait cannot be copied that way, so they stayed empty (issue #6). Not tried in the game yet.
