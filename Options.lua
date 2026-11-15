@@ -13,7 +13,8 @@ local controls = {
     { key = "padKeyboard", default = true },
     { key = "moveUnitFrames", default = false },
     { key = "contextGap", default = 12, min = 0, max = 100, step = 2 },
-    { key = "menuRight", default = 0, min = 0, max = 128, step = 1, section = "menu", tip = "menuTip" },
+    { key = "hideMenu", default = false, section = "menu", tip = "hideMenuTip" },
+    { key = "menuRight", default = 0, min = 0, max = 128, step = 1, tip = "menuTip" },
     { key = "menuBottom", default = 0, min = 0, max = 240, step = 1, tip = "menuTip" },
     { key = "promptScale", default = 1.05, min = 0.6, max = 1.6, step = 0.05, section = "hints" },
     { key = "modifierScale", default = 1.75, min = 0.6, max = 2.5, step = 0.05 },
@@ -36,7 +37,7 @@ local controls = {
 }
 
 local geometrySettings = { compact = true, groupBoth = true, crossFirst = true, contextGap = true,
-    menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
+    hideMenu = true, menuRight = true, menuBottom = true, promptScale = true, modifierScale = true }
 
 -- The rows that pick one of a list: { value, label } (a language names itself) or { value, nil, text key }.
 local function LanguageChoices()

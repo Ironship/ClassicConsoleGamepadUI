@@ -128,7 +128,7 @@ local function Tabs()
             { "control", "moveUnitFrames" },
             { "control", "contextGap" },
             { "header", "menu" },
-            { "control", "menuRight" }, { "control", "menuBottom" },
+            { "control", "hideMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },
             { "header", "buttonsHeader" },
             { "control", "padKeyboard" },
             { "button", Text("keymapOpen"), Text("keymapOpenTip"), function() Addon.KeyMap:Open() end },

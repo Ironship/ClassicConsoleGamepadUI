@@ -169,18 +169,7 @@ function Display:Create()
         holder:SetFrameLevel(source:GetParent():GetFrameLevel())
         self.art[#self.art + 1] = { source = source, texture = StockTexture(holder, source, nil, "BACKGROUND") }
     end
-    local page = MainActionBar.ActionBarPageNumber
-    local pageHolder = CreateFrame("Frame", nil, root)
-    pageHolder:SetAllPoints(root)
-    pageHolder:SetFrameLevel(page:GetFrameLevel())
-    self.pageLabel = pageHolder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    self.pageLabel:SetFont(page.Text:GetFont())
-    self.pageLabel:SetTextColor(page.Text:GetTextColor())
-    self.pageSource = page.Text
-    for _, button in ipairs({ page.UpButton, page.DownButton }) do
-        self.art[#self.art + 1] = { source = button:GetNormalTexture(),
-            texture = StockTexture(pageHolder, button:GetNormalTexture(), nil) }
-    end
+    -- The stock page number and its arrows are not drawn: the classic bars have no page to switch.
     root:Hide()
 end
 
@@ -251,8 +240,6 @@ function Display:RefreshGeometry()
         CopyTexture(entry.texture, entry.source)
         if not Addon.Layout:Place(entry.texture, entry.source) then return false end
     end
-    Addon.Layout:Place(self.pageLabel, self.pageSource, nil, MainActionBar.ActionBarPageNumber)
-    self.pageLabel:SetFont(self.pageSource:GetFont())
     self:AlignCompactChrome()
     -- An extra: a failure here must not switch the classic bars off.
     pcall(self.PlaceTotemBar, self)
@@ -368,7 +355,6 @@ function Display:AlignCompactChrome()
         if regionLeft then snapshot[region] = { regionLeft, bottom } end
     end
     for _, entry in ipairs(self.art) do Remember(entry.texture) end
-    Remember(self.pageLabel)
     for region, point in pairs(snapshot) do
         local shift = centerShift
         if region == leftTex then shift = centerShift + leftShift
@@ -423,6 +409,13 @@ function Display:PlaceMicroMenuRight()
     if not scale or scale <= 0 then return end
     local width, height = menu:GetWidth() * scale, menu:GetHeight() * scale
     if not width or width < 8 or not height or height < 8 then return end
+    if Addon.db.hideMenu == true then
+        -- Invisible and out of reach of the mouse: well past the right edge of the screen.
+        menu:SetAlpha(0)
+        Addon.Layout:SetBottomLeft(menu, UIParent:GetWidth() + 64, Addon.db.menuBottom)
+        return
+    end
+    if menu:GetAlpha() ~= 1 then menu:SetAlpha(1) end
     local margin = Addon.db.menuRight
     local x = UIParent:GetWidth() - width - margin
     if x < margin then x = margin end
@@ -632,7 +625,38 @@ local function PresentActionIcon(slot, icon)
     end
 end
 
+-- A unit portrait (party members, the player, the pet, the assist target, the focus on the targeting bars) is not a file
+-- or an atlas: the game fills the stock texture with SetPortraitTexture, and a texture copy cannot carry it over. So the
+-- slot asks for the same portrait itself, through a round mask like the game's.
+local function PortraitUnit(source, icon)
+    if not source.SpecialActionIcon or icon ~= source.SpecialActionIcon or not source.GetAttribute then return end
+    if source:GetAttribute("type") ~= "target" then return end
+    local unit = source:GetAttribute("unit")
+    if type(unit) == "string" and Readable(unit) and unit ~= "" then return unit end
+end
+
+local function SetPortrait(slot, unit)
+    if not slot.PortraitMask then
+        slot.PortraitMask = slot:CreateMaskTexture(nil, "ARTWORK")
+        slot.PortraitMask:SetAtlas("CircleMask")
+        slot.PortraitMask:SetAllPoints(slot.Icon)
+    end
+    if not slot.portrait then
+        slot.Icon:AddMaskTexture(slot.PortraitMask)
+        slot.portrait = true
+    end
+    slot.Icon:SetTexCoord(0, 1, 0, 1)
+    SetPortraitTexture(slot.Icon, unit)
+end
+
+local function ClearPortrait(slot)
+    if not slot.portrait then return end
+    slot.Icon:RemoveMaskTexture(slot.PortraitMask)
+    slot.portrait = nil
+end
+
 local function PresentEmptySlot(slot)
+    ClearPortrait(slot)
     slot.Icon:Hide()
     slot.SlotArt:Hide()
     slot.Background:Show()
@@ -757,6 +781,13 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
     if source.SpecialActionIcon and RegionShown(source.SpecialActionIcon) then icon = source.SpecialActionIcon end
     if RegionShown(icon) then
         PresentActionIcon(slot, icon)
+        local unit = PortraitUnit(source, icon)
+        if unit then
+            -- Never let a portrait failure switch the classic bars off.
+            if not pcall(SetPortrait, slot, unit) then ClearPortrait(slot) end
+        else
+            ClearPortrait(slot)
+        end
     else
         PresentEmptySlot(slot)
     end
@@ -822,8 +853,9 @@ function Display:Update(unit)
     local activeBar = unit:GetActiveBar()
     -- Setting "padKeyboard": a slot of the four standard bars shows the keyboard bar's button at its place (Input.lua
     -- presses the same button); the game's own four (interact, target menu, back, jump) stay.
+    -- Not in the action editor: it writes the game's own gamepad storage, which the keyboard bars do not show.
     local standard = {}
-    if Addon.db.padKeyboard == true then
+    if Addon.db.padKeyboard == true and not self.barEditing then
         for _, bar in ipairs({ base.topBar, base.leftBar, base.rightBar, base.bottomBar }) do standard[bar] = true end
     end
     local function KeyboardButton(bar, index, native)
@@ -895,7 +927,6 @@ function Display:Update(unit)
         slot.keyboardSlot = not compact
         if compact then slot:Hide() else self:ShowKeyboardSlot(slot) end
     end
-    self.pageLabel:SetText(page)
     for i, key in ipairs({ "LeftClassAction", "RightClassAction" }) do
         local source = unit[key]
         local slot = self.slots[8 + i]
@@ -996,7 +1027,6 @@ function Display:RevealTemplates()
     Reveal(store, MultiBarBottomRight)
     if MainActionBar then
         local caps = MainActionBar.EndCaps
-        local page = MainActionBar.ActionBarPageNumber
         Reveal(store, MainActionBar.BorderArt)
         Reveal(store, caps)
         -- Showing the bar re-hides the caps while the gamepad UI is active.
@@ -1005,12 +1035,6 @@ function Display:RevealTemplates()
         Reveal(store, caps and caps.LeftEndCap and caps.LeftEndCap.Texture)
         Reveal(store, caps and caps.RightEndCap)
         Reveal(store, caps and caps.RightEndCap and caps.RightEndCap.Texture)
-        Reveal(store, page)
-        Reveal(store, page and page.Text)
-        Reveal(store, page and page.UpButton)
-        Reveal(store, page and page.DownButton)
-        Reveal(store, page and page.UpButton and page.UpButton:GetNormalTexture())
-        Reveal(store, page and page.DownButton and page.DownButton:GetNormalTexture())
     end
 end
 
@@ -1047,6 +1071,15 @@ function Display:Refresh(wanted)
     if not geometryOK then self.reason = "geometry"; self:RestoreNative(); return false end
     self.reason = editing and "shown (action editor)" or "shown"
     self.barEditing = editing
+    -- The editor fills the game's controller storage; with "padKeyboard" the bars show the keyboard bars. Said once per visit.
+    if editing and Addon.db.padKeyboard == true then
+        if not self.editorNoted then
+            self.editorNoted = true
+            Addon:Print(Addon.L.editorPadNote)
+        end
+    else
+        self.editorNoted = nil
+    end
     self:Update(unit)
     -- Like the game's own bars, everything but the radial fades while one is open.
     self.root:SetAlpha(self:IsFlyoutOpen(bars, unit) and FLYOUT_ALPHA or 1)

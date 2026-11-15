@@ -216,6 +216,8 @@ function Layout:Restore(changedMode)
     for frame, shown in pairs(self.visibility or {}) do
         (frame.SetShownBase or frame.SetShown)(frame, shown)
     end
+    -- Display:PlaceMicroMenuRight may have faded the micro menu out (setting "hideMenu").
+    if MicroMenuContainer then MicroMenuContainer:SetAlpha(1) end
     self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
 end
 

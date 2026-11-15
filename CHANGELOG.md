@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Party member portraits (and the player's, the pet's, the assist target's and the focus's) are drawn again on the targeting bar opened with L1 and the D-pad. The slots copied the game's icon, and a unit portrait cannot be copied that way, so they stayed empty (issue #6). Not tried in the game yet.
+- The page number with its two arrows left of the bars is no longer drawn (the classic bars have no page to switch).
+- New setting "Hide the micro menu" (General tab): hides the menu with the character, talents and quest buttons completely, instead of only moving it to the right edge.
+- In the action editor ("Bind to Action Bar") the bars now show what the editor really writes. With "Keyboard bars on the controller" on they showed the keyboard bars instead, so an action placed in the editor looked as if it had gone somewhere else. Note: the editor fills the game's own controller storage, which the keyboard bars do not use; with that setting on, place actions by dragging them onto the bars.
 - The keyboard layout window can be used with the controller: the D-pad moves, A picks a key and gives it to a slot, X clears a slot, B goes back.
 - New defaults for a fresh install: keyboard bars on the controller on, unit frames not moved, micro menu at the right edge, larger button and trigger hints, chat anchored, the screen keyboard opens with the chat, quick item deletion on. Saved settings are kept.
 - New setting "Keyboard bars on the controller" (General tab, on by default): the bars show the actions of the keyboard's action bars 1, 2 and 3, and the controller's bar buttons use them, so an action sits in the same place with the keyboard and with the controller and nothing has to be placed twice. X, Y, B, A without a trigger stay the game's own (interact, target menu, back, jump); the targeting, shortcut, stance and possess bars stay as they are.
