@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Edit Mode support, bar size, gryphon, placement and legend options below are by vos6434 (pull request #5), merged with the other changes of this version. The page switcher they moved is gone (see above), the texts are translated into German, Spanish, French, Italian and Portuguese (not read by native speakers), and the legend's per-frame checks no longer make a table every frame.
 - Party member portraits (and the player's, the pet's, the assist target's and the focus's) are drawn again on the targeting bar opened with L1 and the D-pad. The slots copied the game's icon, and a unit portrait cannot be copied that way, so they stayed empty (issue #6). Not tried in the game yet.
 - The page number with its two arrows left of the bars is no longer drawn (the classic bars have no page to switch).
 - New setting "Hide the micro menu" (General tab): hides the menu with the character, talents and quest buttons completely, instead of only moving it to the right edge.
@@ -10,6 +11,33 @@
 - New defaults for a fresh install: keyboard bars on the controller on, unit frames not moved, micro menu at the right edge, larger button and trigger hints, chat anchored, the screen keyboard opens with the chat, quick item deletion on. Saved settings are kept.
 - New setting "Keyboard bars on the controller" (General tab, on by default): the bars show the actions of the keyboard's action bars 1, 2 and 3, and the controller's bar buttons use them, so an action sits in the same place with the keyboard and with the controller and nothing has to be placed twice. X, Y, B, A without a trigger stay the game's own (interact, target menu, back, jump); the targeting, shortcut, stance and possess bars stay as they are.
 - New: a keyboard layout window (General tab, "Keyboard layout of the bar slots", or /cgp keys). It shows a keyboard next to the slots of the bars (with the pad button each one is on, e.g. LT+X): click a key, then the slot that should use it, and the slot's key shows on the bar and in the window. Click the slot again to take the key away, right click a slot to clear all its keys, Shift, Ctrl and Alt add a modifier. A key the game uses for something else asks for a second click. The keys are the slot's ordinary keyboard bindings (the same ones the game's key bindings list shows), so they work on the keyboard bar and in Gamepad Mode alike. Outside combat only. Not tried in the game yet; the texts in the other languages are new and unread by native speakers.
+- "Classic bars size" (50% to 150%, General tab and the Edit Mode panel of the classic bars) grows or shrinks the classic
+  bars with their gryphons, indicators, experience bar and compact bags, centered on the bottom of the screen. 100% is the size so far.
+- "Reset all settings" on the Tools tab puts every setting back to its default, with the places the addon keeps (the
+  classic bars and the legend dragged in Edit Mode, the unit frames, the on-screen keyboard). The interface language and
+  the learned words stay. It asks for a second click, like "Reset learned words".
+- Every stock frame the classic layout places has a setting now, all on by default as before: "Micro menu at the right
+  edge", "Bags with the classic bars", "Experience and reputation bars above the classic bars" and "Totem bar above the
+  classic bars" (General tab). Off, the frame is left to the gamepad layout's Edit Mode, so players can make a layout of
+  their own; chat, the legend and the unit frames already had theirs. Before, a micro menu moved in Edit Mode snapped
+  back to the right edge every time the bars were laid out, saving the layout included; now "Micro menu at the right
+  edge" off keeps it where Edit Mode puts it, at its Edit Mode size.
+- The classic action bars show up in the game's Edit Mode. While Edit Mode is open they get a selection box of their own
+  ("Classic Action Bars"): drag it, or click it and nudge the bars from its panel, to move the whole HUD (bars, gryphons,
+  experience bar and, in the compact layout, the bags). The place is saved at once; `/cgp resetbars` or the panel's
+  "Reset position" button puts the bars back. Before, Edit Mode swapped the classic bars for the stock gamepad crossbar,
+  so they could not be placed at all. The classic button layer stays off while Edit Mode is open.
+- The gryphons at the ends of the classic bars can be hidden one by one, like the end caps of the game's own action bar:
+  "Left gryphon" and "Right gryphon" on the General tab and on the Edit Mode panel of the classic bars. The bars keep their
+  place when a gryphon is hidden.
+- The gamepad legend (the box of button hints) can be moved in Edit Mode too, as "Gamepad Legend": drag it or nudge it
+  from its panel. The place is kept at once, also in Edit Mode, and wins over the experimental "Move the legend below the
+  player frame"; `/cgp resetlegend` or the panel's "Reset position" button puts it back.
+- "Grow upwards" on the legend's Edit Mode panel: the legend keeps its bottom edge and more hints push it up, instead of
+  hanging further down. It follows its hints as they change, in combat too while the game lets the legend move.
+- The legend's gold frame can be switched off and its dark shade made lighter: "Show frame" and "Background opacity" on
+  the legend's Edit Mode panel and in the Hints tab. `/cgp legend` lists the legend's textures and which option each
+  follows.
 
 ## 0.1.0-alpha.78
 
