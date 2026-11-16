@@ -15,6 +15,8 @@ Addon.Locales.Register("esES", "Español", {
     crossFirstTip = "Cada fila de ocho empieza con los cuatro botones de acción (X, Y, B, A) y termina con la cruceta. Con esta opción la fila empieza con la cruceta. Solo cambia el orden: cada casilla conserva su acción y su tecla, y un clic o una tecla sigue haciendo lo que muestra la casilla.",
     padKeyboard = "Barras del teclado en el mando",
     padKeyboardTip = "Las barras muestran lo que hay en las barras de acción 1, 2 y 3 del teclado, y el mando usa esas acciones: un hechizo está en la misma casilla con teclado o con mando, y no hay que colocar nada dos veces. X, Y, B, A sin gatillo siguen siendo los del juego (interactuar, menú del objetivo, atrás, saltar); las cuatro casillas del teclado en su lugar solo funcionan con el teclado. Desactivado: el mando tiene sus propias acciones, como hace el juego.",
+    attackStart = "El botón de ataque solo inicia el ataque",
+    attackStartTip = "Una casilla con Ataque automático solo inicia el ataque; pulsarla otra vez no lo detiene (el botón del juego alterna). El ataque termina al perder o quitar el objetivo.",
     groupBoth = "Mantener juntos los botones L2+R2 (12 casillas)",
     groupBothTip = "En la disposición de 12 casillas los botones que se usan con ambos gatillos están separados: cuatro tras la fila L2 y cuatro al final. Esta opción coloca los ocho juntos, entre la fila L2 y la fila R2. No tiene efecto con barras compactas.",
     moveUnitFrames = "Marcos clásicos de jugador, objetivo y foco",

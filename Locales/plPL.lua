@@ -15,6 +15,8 @@ Addon.Locales.Register("plPL", "Polski", {
     crossFirstTip = "Każdy rząd ośmiu pól zaczyna się od czterech przycisków akcji (X, Y, B, A), a kończy krzyżakiem. Po włączeniu rząd zaczyna się od krzyżaka. Zmienia się tylko kolejność: każde pole zachowuje akcję i klawisz, a klik lub klawisz robi to, co pokazuje pole.",
     padKeyboard = "Paski klawiatury na padzie",
     padKeyboardTip = "Paski pokazują to, co leży na paskach akcji 1, 2 i 3 klawiatury, a pad używa tych akcji: czar jest w tym samym polu przy grze na klawiaturze i na padzie, i niczego nie trzeba układać dwa razy. X, Y, B, A bez triggera zostają przyciskami gry (interakcja, menu celu, cofnij, skok); cztery pola klawiatury w ich miejscu działają tylko z klawiatury. Wyłączone: pad ma własny zestaw akcji, tak jak robi to gra.",
+    attackStart = "Przycisk ataku tylko włącza atak",
+    attackStartTip = "Pole z Automatycznym atakiem tylko włącza atak; ponowne naciśnięcie go nie wyłącza (przycisk gry przełącza). Atak kończy się po utracie lub odznaczeniu celu.",
     groupBoth = "Trzymaj przyciski L2+R2 razem (12 pól)",
     groupBothTip = "W układzie 12 pól przyciski używane z oboma triggerami są rozdzielone: cztery za rzędem L2 i cztery na samym końcu. Ta opcja zbiera wszystkie osiem między rzędem L2 a rzędem R2. Nie działa przy kompaktowych paskach.",
     moveUnitFrames = "Klasyczne ramki gracza, celu i focusu",

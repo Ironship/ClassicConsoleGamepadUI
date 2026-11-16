@@ -15,6 +15,8 @@ Addon.Locales.Register("ptBR", "Português", {
     crossFirstTip = "Cada fileira de oito começa com os quatro botões de ação (X, Y, B, A) e termina com o direcional. Com esta opção a fileira começa pelo direcional. Só a ordem muda: cada espaço mantém sua ação e sua tecla, e um clique ou tecla continua fazendo o que o espaço mostra.",
     padKeyboard = "Barras do teclado no controle",
     padKeyboardTip = "As barras mostram o que está nas barras de ação 1, 2 e 3 do teclado, e o controle usa essas ações: um feitiço fica no mesmo espaço com o teclado ou com o controle, e nada precisa ser colocado duas vezes. X, Y, B, A sem gatilho continuam sendo os do jogo (interagir, menu do alvo, voltar, pular); os quatro espaços do teclado no lugar deles funcionam só pelo teclado. Desligado: o controle tem suas próprias ações, como o jogo faz.",
+    attackStart = "O botão de ataque só inicia o ataque",
+    attackStartTip = "Um espaço com Ataque automático só inicia o ataque; apertar de novo não o interrompe (o botão do jogo alterna). O ataque termina ao perder ou desmarcar o alvo.",
     groupBoth = "Manter os botões L2+R2 juntos (12 espaços)",
     groupBothTip = "No layout de 12 espaços, os botões usados com os dois gatilhos ficam separados: quatro depois da fileira L2 e quatro no final. Esta opção coloca os oito juntos, entre a fileira L2 e a fileira R2. Não tem efeito com barras compactas.",
     moveUnitFrames = "Quadros clássicos de jogador, alvo e foco",

@@ -132,7 +132,7 @@ local function Tabs()
             { "header", "menu" },
             { "control", "hideMenu" }, { "control", "placeMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },
             { "header", "buttonsHeader" },
-            { "control", "padKeyboard" },
+            { "control", "padKeyboard" }, { "control", "attackStart" },
             { "button", Text("keymapOpen"), Text("keymapOpenTip"), function() Addon.KeyMap:Open() end },
         } },
         { id = "hints", label = Text("tabHints"), items = {

@@ -15,6 +15,8 @@ Addon.Locales.Register("itIT", "Italiano", {
     crossFirstTip = "Ogni riga di otto inizia con i quattro pulsanti azione (X, Y, B, A) e finisce con la croce direzionale. Con questa opzione la riga inizia con la croce. Cambia solo l'ordine: ogni slot mantiene azione e tasto, e un clic o un tasto fa sempre ciò che lo slot mostra.",
     padKeyboard = "Barre della tastiera sul controller",
     padKeyboardTip = "Le barre mostrano ciò che si trova sulle barre delle azioni 1, 2 e 3 della tastiera, e il controller usa quelle azioni: un incantesimo resta nello stesso slot con la tastiera o con il controller, e non serve piazzare nulla due volte. X, Y, B, A senza grilletto restano quelli del gioco (interagisci, menu del bersaglio, indietro, salto); i quattro slot della tastiera al loro posto funzionano solo dalla tastiera. Disattivato: il controller ha le proprie azioni, come fa il gioco.",
+    attackStart = "Il pulsante di attacco avvia soltanto l'attacco",
+    attackStartTip = "Uno slot con Attacco automatico avvia soltanto l'attacco; premerlo di nuovo non lo ferma (il pulsante del gioco alterna). L'attacco finisce quando il bersaglio si perde o viene deselezionato.",
     groupBoth = "Tieni insieme i pulsanti L2+R2 (12 slot)",
     groupBothTip = "Nella disposizione a 12 slot i pulsanti usati con entrambi i grilletti sono separati: quattro dopo la riga L2 e quattro in fondo. Questa opzione li mette tutti e otto insieme, tra la riga L2 e la riga R2. Non ha effetto con le barre compatte.",
     moveUnitFrames = "Riquadri classici di giocatore, bersaglio e focus",

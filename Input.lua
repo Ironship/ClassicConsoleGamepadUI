@@ -141,8 +141,20 @@ local PRE_CLICK = [[
         if not action or action <= 0 then return false end
         if keyboard then self:SetAttribute("useOnKeyDown", nil)
         else self:SetAttribute("useOnKeyDown", false) end
-        self:SetAttribute("type", kind)
-        self:SetAttribute("action", action)
+        local attack
+        if kind == "action" and control:GetAttribute("attackstart") then
+            -- Setting "attackStart": the Auto Attack action only starts the attack. The action itself is a toggle, so a second
+            -- press would stop it, which a /startattack does not.
+            local actionType, actionId = GetActionInfo(action)
+            attack = actionType == "spell" and actionId == 6603
+        end
+        if attack then
+            self:SetAttribute("type", "macro")
+            self:SetAttribute("macrotext", "/startattack")
+        else
+            self:SetAttribute("type", kind)
+            self:SetAttribute("action", action)
+        end
     end
     return "LeftButton"
 ]]
@@ -642,6 +654,8 @@ function Input:Refresh(wanted, native, unit, bars)
     -- the click layer, e.g. right after switching between 8 and 12 slots.
     local padKeyboard = Addon.db.padKeyboard == true
     if header:GetAttribute("padkeyboard") ~= padKeyboard then header:SetAttribute("padkeyboard", padKeyboard) end
+    local attackStart = Addon.db.attackStart == true
+    if header:GetAttribute("attackstart") ~= attackStart then header:SetAttribute("attackstart", attackStart) end
     if self.padRevision ~= Addon.Layout.revision then
         -- The order within a row is a setting ("crossFirst"), so the places are told again with the geometry.
         for group = 1, 4 do

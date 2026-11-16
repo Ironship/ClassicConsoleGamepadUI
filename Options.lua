@@ -11,6 +11,7 @@ local controls = {
     { key = "groupBoth", default = false },
     { key = "crossFirst", default = false },
     { key = "padKeyboard", default = true },
+    { key = "attackStart", default = false },
     { key = "moveUnitFrames", default = false },
     -- The stock frames the classic layout places (Layout.lua PLACED, PlaceTotemBar). Off: Edit Mode places them.
     { key = "placeBags", default = true },
@@ -43,7 +44,7 @@ local controls = {
     { key = "legendFrame", default = true },
     { key = "legendShade", default = 1, min = 0, max = 1, step = 0.05 },
     { key = "legendGap", default = 74, min = 0, max = 240, step = 2, parent = "moveLegend", tip = "legendPositionTip" },
-    { key = "anchorChat", default = true, section = "chat" },
+    { key = "anchorChat", default = false, section = "chat" },
     { key = "chatLeft", default = 0, min = 0, max = 1200, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "chatBottom", default = 0, min = 0, max = 800, step = 1, parent = "anchorChat", tip = "chatPositionTip" },
     { key = "raiseChat", default = true },
@@ -152,6 +153,13 @@ function Options:InitializeDefaults()
     if not Contains(KEYBOARD_INPUTS, db.keyboardPhone) then db.keyboardPhone = "t9h" end
     if not Contains(KEYBOARD_MODES, db.keyboardMode) then db.keyboardMode = db.keyboardPhone end
     if existing and db.padKeyboard == nil then db.padKeyboard = false end
+    -- Two settings overrode the game's own Edit Mode places (chat at the screen corner, the unit frames at their classic
+    -- places), so players could not move those frames. They are off by default now; an installation from before that has
+    -- the old default saved, so it is switched off once. Turned on again later, they stay on.
+    if (db.defaultsRev or 0) < 1 then
+        if existing then db.anchorChat, db.moveUnitFrames = false, false end
+        db.defaultsRev = 1
+    end
     for _, info in ipairs(controls) do
         local value = db[info.key]
         if type(value) ~= type(info.default) or (info.min and (value ~= value or value < info.min or value > info.max)) then

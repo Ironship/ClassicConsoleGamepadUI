@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.80
+
+- "Position chat from screen edges" and "Classic player, target and focus frames" are off by default now, and are switched off once in an existing installation (turn them on again if you want them; they stay on after that). Both overrode the game's Edit Mode, so chat sat in the screen corner and the unit frames went back to the top left corner, whatever the player did there. With them off, Edit Mode places chat and the frames. Reported on CurseForge. Not tried in the game yet.
+- New setting "Attack button only starts attacking" (General tab, off by default): a bar slot that holds Auto Attack runs `/startattack` instead of the action, so pressing it again no longer switches the attack off (the stock action is a toggle, as the game's own button). Asked on CurseForge. Not tried in the game yet.
+
 ## 0.1.0-alpha.79
 
 - Clicking the key ring button of the bag bar ended in "attempt to perform arithmetic on field 'shownSlots'" (Blizzard's `ContainerFrame.lua`): the key ring opens as a single bag there, which the gamepad interface does not support. While the classic bars are up the button is dimmed and takes no clicks; the key ring stays in the game's own gamepad bag bar. Not tried in the game yet.

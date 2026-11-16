@@ -15,6 +15,8 @@ Addon.Locales.Register("deDE", "Deutsch", {
     crossFirstTip = "Jede Reihe aus acht beginnt mit den vier Aktionstasten (X, Y, B, A) und endet mit dem Steuerkreuz. Mit dieser Option beginnt sie mit den Steuerkreuz-Tasten. Nur die Reihenfolge ändert sich: Jeder Platz behält Aktion und Taste, und ein Klick oder Tastendruck löst weiter aus, was der Platz zeigt.",
     padKeyboard = "Tastaturleisten auf dem Controller",
     padKeyboardTip = "Die Leisten zeigen, was auf den Aktionsleisten 1, 2 und 3 der Tastatur liegt, und der Controller benutzt diese Aktionen: Ein Zauber liegt am selben Platz, egal ob mit Tastatur oder Controller gespielt wird, und nichts muss doppelt belegt werden. X, Y, B, A ohne Trigger bleiben die des Spiels (Interagieren, Zielmenü, Zurück, Springen); die vier Tastaturplätze an ihrer Stelle gehen nur über die Tastatur. Aus: Der Controller hat seine eigene Belegung, wie im Spiel üblich.",
+    attackStart = "Angriffstaste startet nur den Angriff",
+    attackStartTip = "Ein Platz mit Automatischem Angriff startet den Angriff nur; ein zweiter Druck beendet ihn nicht (die Taste des Spiels schaltet um). Der Angriff endet, wenn das Ziel verloren geht oder abgewählt wird.",
     groupBoth = "L2+R2-Tasten zusammenhalten (12 Plätze)",
     groupBothTip = "Im 12-Plätze-Layout sind die Tasten für beide Trigger getrennt: vier hinter der L2-Reihe und vier ganz am Ende. Diese Option stellt alle acht zwischen die L2- und die R2-Reihe. Wirkt nicht bei kompakten Leisten.",
     moveUnitFrames = "Klassische Spieler-, Ziel- und Fokusrahmen",

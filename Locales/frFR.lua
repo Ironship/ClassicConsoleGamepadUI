@@ -15,6 +15,8 @@ Addon.Locales.Register("frFR", "Français", {
     crossFirstTip = "Chaque rangée de huit commence par les quatre boutons d'action (X, Y, B, A) et finit par la croix directionnelle. Avec cette option, la rangée commence par la croix. Seul l'ordre change : chaque emplacement garde son action et sa touche, et un clic ou une touche fait toujours ce que l'emplacement affiche.",
     padKeyboard = "Barres du clavier sur la manette",
     padKeyboardTip = "Les barres montrent ce qui se trouve sur les barres d'action 1, 2 et 3 du clavier, et la manette utilise ces actions : un sort reste au même emplacement au clavier comme à la manette, et rien n'est à placer deux fois. X, Y, B, A sans gâchette restent ceux du jeu (interagir, menu de la cible, retour, saut) ; les quatre emplacements du clavier à leur place ne servent qu'au clavier. Désactivé : la manette a ses propres actions, comme le fait le jeu.",
+    attackStart = "Le bouton d'attaque ne fait que lancer l'attaque",
+    attackStartTip = "Un emplacement avec Attaque automatique ne fait que lancer l'attaque ; un second appui ne l'arrête pas (le bouton du jeu bascule). L'attaque s'arrête quand la cible est perdue ou désélectionnée.",
     groupBoth = "Garder les boutons L2+R2 ensemble (12 emplacements)",
     groupBothTip = "Dans la disposition à 12 emplacements, les boutons utilisés avec les deux gâchettes sont séparés : quatre après la rangée L2 et quatre tout au bout. Cette option place les huit ensemble, entre la rangée L2 et la rangée R2. Sans effet avec les barres compactes.",
     moveUnitFrames = "Cadres classiques du joueur, de la cible et du focus",

@@ -17,6 +17,8 @@ Addon.Locales.Register("enUS", "English", {
     crossFirstTip = "Each row of eight starts with the four face buttons (X, Y, B, A) and ends with the D-pad. With this on, the row starts with the D-pad buttons instead. Only the order changes: every slot keeps its action and its key, and a click or key press still does what the slot shows.",
     padKeyboard = "Keyboard bars on the controller",
     padKeyboardTip = "The bars show what is on the keyboard's action bars 1, 2 and 3, and the controller uses those actions: a spell sits in the same slot whether you play with the keyboard or the controller, and nothing has to be placed twice. X, Y, B, A without a trigger stay the game's own (interact, target menu, back, jump), so the four keyboard slots at their places work from the keyboard only. Off: the controller has its own set of actions, as the game does it.",
+    attackStart = "Attack button only starts attacking",
+    attackStartTip = "A slot that holds Auto Attack only starts the attack, so pressing it again does not stop it (the game's own button toggles). The attack ends when the target is lost or cleared.",
     groupBoth = "Keep the L2+R2 buttons together (12 slots)",
     groupBothTip = "In the 12-slot layout the buttons used with both triggers are split: four after the L2 row and four at the far end. This puts all eight together, between the L2 row and the R2 row. It has no effect with compact bars.",
     moveUnitFrames = "Classic player, target and focus frames",
