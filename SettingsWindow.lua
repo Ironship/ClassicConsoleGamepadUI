@@ -13,9 +13,9 @@ Addon.SettingsWindow = Window
 local Fonts = Addon.Fonts
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WIDTH, BODY_HEIGHT = 660, 330
+local WIDTH, BODY_HEIGHT = 660, 302
 local HEADER, TAB_HEIGHT, MARGIN, SCROLL_WIDTH = 40, 26, 10, 16
-local SWITCH_HEIGHT, HELP_HEIGHT, FOOT_HEIGHT = 54, 62, 34
+local SWITCH_HEIGHT, HELP_HEIGHT, FOOT_HEIGHT = 54, 90, 34 -- the help line holds four lines: the longest descriptions run to that
 local PANEL_PAD = 6
 local ROW_WIDTH = WIDTH - 2 * MARGIN - 2 * PANEL_PAD - SCROLL_WIDTH
 local LABEL_WIDTH, CONTROL_X = 330, 344
@@ -706,6 +706,13 @@ local function LanguageName()
     return tostring(Addon.db.language)
 end
 
+-- A button as wide as its text needs (a long translation would be cut off), never narrower than `least`.
+local function FitButton(button, least)
+    local label = button.GetFontString and button:GetFontString()
+    local width = label and tonumber(label:GetStringWidth()) or 0
+    button:SetWidth(math.max(least, math.ceil(width) + 28))
+end
+
 -- The texts that are not on the pages: the switch, the help line, the footer, the language button.
 function Window:UpdateTexts()
     self.switchLabel:SetText(Text("enabled"))
@@ -713,6 +720,8 @@ function Window:UpdateTexts()
     self.resetButton:SetText(Text("resetSettings"))
     self.resetButton.baseText = Text("resetSettings")
     self.languageButton:SetText("Language: " .. LanguageName())
+    FitButton(self.resetButton, 190)
+    FitButton(self.languageButton, 170)
     local tip = Text("enabledTip")
     AddHelp(self.switchBox, Text("enabled"), tip)
     AddHelp(self.switchRow, Text("enabled"), tip)
@@ -868,6 +877,7 @@ function Window:Create()
         Addon.db.language = value
         Changed("language")
         language:SetText("Language: " .. LanguageName())
+        FitButton(language, 170)
     end
     function language.StepChoice(direction)
         local choices, index = Addon.Options.choices.language, 1
