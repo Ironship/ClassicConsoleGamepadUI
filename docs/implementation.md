@@ -443,8 +443,8 @@ assist target's or the focus's button with `SetPortraitTexture` (`TargetActionBa
 secure attributes (`type` "target", `unit`) and asks for the same portrait on the slot's own icon, through a round mask
 (`CircleMask`) like the game's; the mask is taken off again for any other action.
 
-Setting `padKeyboard` ("Keyboard bars on the controller", on for a new installation, off for one that already existed,
-decided in `Options:InitializeDefaults` by `hybridDefault` that every earlier version set): the classic bars show and press
+Setting `padKeyboard` ("Keyboard bars on the controller", off by default since 0.1.0-alpha.84 (it was on for new installations before; a saved value is kept; an installation from before the setting
+existed is told apart in `Options:InitializeDefaults` by `hybridDefault` that every earlier version set): the classic bars show and press
 the keyboard action bars 1-3 (the slot's keyboard button, `Input.PadSlot`), not the game's own controller storage, whose
 slots (`GamepadActionBarBindingUtil.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID`) the keyboard bars do not use. The
 native action editor ("Bind to Action Bar", "Edit Action Bars") writes that controller storage, so it is kept in step with
