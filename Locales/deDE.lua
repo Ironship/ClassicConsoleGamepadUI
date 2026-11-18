@@ -180,6 +180,7 @@ Addon.Locales.Register("deDE", "Deutsch", {
     scaleHelp = "Die UI-Skalierung und den Bearbeitungsmodus des Spiels verwenden: Spieler-, Ziel- und Fokusrahmen dort ziehen und das Layout speichern.",
     notInCombat = "Nicht im Kampf.",
     framesBack = "Spieler-, Ziel- und Fokusrahmen sind wieder an ihren klassischen Plätzen.",
+    foreignTaint = "Das Addon %s hat die Gamepad-Oberfläche gestört: Das Spiel hat wegen des Codes dieses Addons einen Aufruf blockiert (SetPreferredGamepadInteractTarget), und der Controller funktioniert eventuell nicht mehr. Gib /reload ein; wenn es wieder passiert, aktualisiere oder deaktiviere %s.",
     stickCenter = "Stick zur Mitte zurückführen",
 
     -- Bildschirmtastatur

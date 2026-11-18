@@ -180,6 +180,7 @@ Addon.Locales.Register("frFR", "Français", {
     scaleHelp = "Utilisez l'échelle de l'interface et le mode Édition du jeu : faites-y glisser les cadres du joueur, de la cible et du focus, puis enregistrez la disposition.",
     notInCombat = "Pas en combat.",
     framesBack = "Les cadres du joueur, de la cible et du focus sont revenus à leur place classique.",
+    foreignTaint = "L'addon %s a perturbé l'interface manette : le jeu a bloqué un appel (SetPreferredGamepadInteractTarget) à cause du code de cet addon, et la manette peut cesser de fonctionner. Tapez /reload ; si cela se reproduit, mettez à jour ou désactivez %s.",
     stickCenter = "ramenez le stick au centre",
 
     -- Clavier à l'écran

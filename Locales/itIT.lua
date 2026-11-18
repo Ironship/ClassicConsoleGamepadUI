@@ -180,6 +180,7 @@ Addon.Locales.Register("itIT", "Italiano", {
     scaleHelp = "Usa la scala dell'interfaccia e la modalità modifica del gioco: trascina lì i riquadri di giocatore, bersaglio e focus e salva la disposizione.",
     notInCombat = "Non in combattimento.",
     framesBack = "I riquadri di giocatore, bersaglio e focus sono tornati ai loro posti classici.",
+    foreignTaint = "L'addon %s ha rotto l'interfaccia del controller: il gioco ha bloccato una chiamata (SetPreferredGamepadInteractTarget) a causa del codice di quell'addon e il controller potrebbe smettere di funzionare. Scrivi /reload; se succede ancora, aggiorna o disattiva %s.",
     stickCenter = "riporta lo stick al centro",
 
     -- Tastiera su schermo

@@ -203,6 +203,7 @@ Addon.Locales.Register("enUS", "English", {
     scaleHelp = "Use the game's UI scale and Edit Mode: drag the player, target and focus frames there and save the layout.",
     notInCombat = "Not in combat.",
     framesBack = "Player, target and focus frames are back at their classic places.",
+    foreignTaint = "The addon %s broke the gamepad interface: the game blocked a call (SetPreferredGamepadInteractTarget) because of that addon's code, and the controller may stop working. Type /reload, and if it keeps happening update or disable %s.",
     barsBack = "The classic bars are back at their default place.",
 
     -- Edit Mode: the selection box over the classic bars

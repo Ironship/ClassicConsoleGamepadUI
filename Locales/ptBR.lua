@@ -180,6 +180,7 @@ Addon.Locales.Register("ptBR", "Português", {
     scaleHelp = "Use a escala da interface e o modo de edição do jogo: arraste lá os quadros de jogador, alvo e foco e salve o layout.",
     notInCombat = "Fora de combate.",
     framesBack = "Os quadros de jogador, alvo e foco voltaram aos seus lugares clássicos.",
+    foreignTaint = "O addon %s quebrou a interface do controle: o jogo bloqueou uma chamada (SetPreferredGamepadInteractTarget) por causa do código desse addon e o controle pode parar de funcionar. Digite /reload; se continuar acontecendo, atualize ou desative %s.",
     stickCenter = "volte o analógico ao centro",
 
     -- Teclado na tela

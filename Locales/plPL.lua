@@ -202,6 +202,7 @@ Addon.Locales.Register("plPL", "Polski", {
     scaleHelp = "Użyj skali interfejsu gry i trybu edycji: przeciągnij tam ramki gracza, celu i focusu i zapisz układ.",
     notInCombat = "Poza walką.",
     framesBack = "Ramki gracza, celu i focusu wróciły na swoje klasyczne miejsca.",
+    foreignTaint = "Dodatek %s zepsuł interfejs pada: gra zablokowała wywołanie (SetPreferredGamepadInteractTarget) z powodu kodu tego dodatku i pad może przestać działać. Wpisz /reload, a jeśli to się powtarza, zaktualizuj lub wyłącz %s.",
     barsBack = "Klasyczne paski wróciły na domyślne miejsce.",
 
     -- Tryb edycji: ramka zaznaczenia nad klasycznymi paskami

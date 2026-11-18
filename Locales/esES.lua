@@ -180,6 +180,7 @@ Addon.Locales.Register("esES", "Español", {
     scaleHelp = "Usa la escala de la interfaz y el modo de edición del juego: arrastra allí los marcos de jugador, objetivo y foco y guarda la disposición.",
     notInCombat = "No estás en combate.",
     framesBack = "Los marcos de jugador, objetivo y foco han vuelto a sus sitios clásicos.",
+    foreignTaint = "El addon %s ha roto la interfaz del mando: el juego bloqueó una llamada (SetPreferredGamepadInteractTarget) por el código de ese addon y el mando puede dejar de funcionar. Escribe /reload; si vuelve a pasar, actualiza o desactiva %s.",
     stickCenter = "devuelve el stick al centro",
 
     -- Teclado en pantalla
