@@ -471,6 +471,10 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     elseif command == "edit" then
         Addon.Options:EditActions()
         return
+    elseif command == "perf" then
+        -- /cgp perf [on | off | reset | slow]: where the time goes (Perf.lua).
+        Addon.Perf.Command(input:lower():match("^%s*%S+%s+(%S+)"))
+        return
     elseif command == "fonts" then
         Addon.Fonts:Debug()
         return
@@ -577,7 +581,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | keys | language | bindings | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | debug")
+        Addon:Print("/cgp settings | keyboard | keys | language | bindings | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | perf | debug")
         return
     end
     Addon:QueueRefresh(true)

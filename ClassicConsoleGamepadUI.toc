@@ -18,6 +18,7 @@ Locales/esES.lua
 Locales/itIT.lua
 Locales/ptBR.lua
 Languages.lua
+Perf.lua
 Fonts.lua
 Layout.lua
 ButtonBindings.lua
