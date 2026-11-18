@@ -242,4 +242,23 @@ Addon.Locales.Register("esES", "Español", {
     legendGrowUp = "Crecer hacia arriba",
     legendNudgeHint = "Arrastra la leyenda o muévela con las flechas (Mayús: 10 puntos).",
     legendBack = "La leyenda del mando ha vuelto a su sitio por defecto.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barras",
+    tabControls = "Controles",
+    tabPrompts = "Indicaciones",
+    tabInterface = "Interfaz",
+    secLayout = "Disposición de las barras",
+    secGryphons = "Grifos",
+    secFrames = "Marcos colocados por ti",
+    secKeys = "Teclas de las barras",
+    secAssign = "Asignar teclas",
+    secGame = "Páginas del juego",
+    secPrompts = "Indicaciones de botones",
+    secWords = "Sugerencias de palabras",
+    btnOpen = "Abrir",
+    btnStart = "Iniciar",
+    btnShow = "Mostrar",
+    btnReset = "Restablecer",
+    keyboardShow = "Mostrar el teclado",
 })

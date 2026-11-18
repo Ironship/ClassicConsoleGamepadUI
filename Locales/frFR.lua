@@ -242,4 +242,23 @@ Addon.Locales.Register("frFR", "Français", {
     legendGrowUp = "Croître vers le haut",
     legendNudgeHint = "Faites glisser la légende ou déplacez-la avec les flèches (Maj : 10 points).",
     legendBack = "La légende de la manette est revenue à sa place par défaut.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barres",
+    tabControls = "Commandes",
+    tabPrompts = "Indications",
+    tabInterface = "Interface",
+    secLayout = "Disposition des barres",
+    secGryphons = "Griffons",
+    secFrames = "Cadres placés pour vous",
+    secKeys = "Touches des barres",
+    secAssign = "Assigner des touches",
+    secGame = "Pages du jeu",
+    secPrompts = "Indications des boutons",
+    secWords = "Suggestions de mots",
+    btnOpen = "Ouvrir",
+    btnStart = "Démarrer",
+    btnShow = "Afficher",
+    btnReset = "Réinitialiser",
+    keyboardShow = "Afficher le clavier",
 })

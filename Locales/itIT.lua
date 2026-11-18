@@ -242,4 +242,23 @@ Addon.Locales.Register("itIT", "Italiano", {
     legendGrowUp = "Cresci verso l'alto",
     legendNudgeHint = "Trascina la legenda o spostala con le frecce (Maiusc: 10 punti).",
     legendBack = "La legenda del controller è tornata al posto predefinito.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barre",
+    tabControls = "Comandi",
+    tabPrompts = "Suggerimenti",
+    tabInterface = "Interfaccia",
+    secLayout = "Disposizione delle barre",
+    secGryphons = "Grifoni",
+    secFrames = "Riquadri posizionati per te",
+    secKeys = "Tasti delle barre",
+    secAssign = "Assegna tasti",
+    secGame = "Pagine del gioco",
+    secPrompts = "Indicazioni dei pulsanti",
+    secWords = "Suggerimenti di parole",
+    btnOpen = "Apri",
+    btnStart = "Avvia",
+    btnShow = "Mostra",
+    btnReset = "Ripristina",
+    keyboardShow = "Mostra la tastiera",
 })

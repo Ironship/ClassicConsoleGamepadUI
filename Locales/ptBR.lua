@@ -242,4 +242,23 @@ Addon.Locales.Register("ptBR", "Português", {
     legendGrowUp = "Crescer para cima",
     legendNudgeHint = "Arraste a legenda ou mova-a com as setas (Shift: 10 pontos).",
     legendBack = "A legenda do controle voltou ao lugar padrão.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barras",
+    tabControls = "Controles",
+    tabPrompts = "Indicações",
+    tabInterface = "Interface",
+    secLayout = "Disposição das barras",
+    secGryphons = "Grifos",
+    secFrames = "Quadros posicionados por você",
+    secKeys = "Teclas das barras",
+    secAssign = "Atribuir teclas",
+    secGame = "Páginas do jogo",
+    secPrompts = "Indicações dos botões",
+    secWords = "Sugestões de palavras",
+    btnOpen = "Abrir",
+    btnStart = "Iniciar",
+    btnShow = "Mostrar",
+    btnReset = "Redefinir",
+    keyboardShow = "Mostrar o teclado",
 })

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The settings window is rebuilt to look and work like the settings of UsefulPlatesAndTooltips, and its tabs now follow what you want to do instead of where an option happened to land. **Bars** (layout, gryphons and the frames the layout places), **Controls** (the keys of the bar slots and the shortcuts to the game's own pages), **Prompts** (button glyphs and the gamepad legend), **Interface** (micro menu, chat, item deletion) and **Keyboard** (the on-screen keyboard and its word suggestions) replace General, Hints, Chat, Keyboard and Tools.
+- The switch for the whole addon ("Classic interface") sits above the tabs and dims the Bars and Prompts tabs while it is off. The language is a button in the window's header (the word "Language" is the same in every language, so it can always be found) and changes the window at once. "Reset all settings" is in the foot of the window.
+- A black panel with the rows in two columns (what it is on the left, the control on the right), a gold heading for each group with one line saying what the group is for, sliders in one line with their value, and drop-down lists for the choices (the language, the keyboard language and layout) instead of buttons that stepped to the next choice when clicked. A help line under the panel shows the description of the row under the mouse or under the pad's selection, so the text is there for a controller too and uses the addon's own fonts in every language.
+- Rows that only mean something while another setting is in a certain state are dimmed now: "Keep L2+R2 slots together" with compact bars, the micro menu's place with the menu hidden, the legend's, chat's and menu's distances and the keyboard's settings with their switch off. The pad skips dimmed rows.
+- Shorter labels and descriptions: each says what it does and when to turn it off, in one or two sentences (the old ones ran to five). English, German and Polish have all the new texts; French, Spanish, Italian and Portuguese have the new tab, group and button names and show the rest in English until they are translated. Not tried in the game yet.
+
 ## 0.1.0-alpha.80
 
 - "Position chat from screen edges" and "Classic player, target and focus frames" are off by default now, and are switched off once in an existing installation (turn them on again if you want them; they stay on after that). Both overrode the game's Edit Mode, so chat sat in the screen corner and the unit frames went back to the top left corner, whatever the player did there. With them off, Edit Mode places chat and the frames. Reported on CurseForge. Not tried in the game yet.
