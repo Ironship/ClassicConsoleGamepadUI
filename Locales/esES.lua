@@ -180,6 +180,7 @@ Addon.Locales.Register("esES", "Español", {
     scaleHelp = "Usa la escala de la interfaz y el modo de edición del juego: arrastra allí los marcos de jugador, objetivo y foco y guarda la disposición.",
     notInCombat = "No estás en combate.",
     framesBack = "Los marcos de jugador, objetivo y foco han vuelto a sus sitios clásicos.",
+    foreignTaint = "El addon %s ha roto la interfaz del mando: el juego bloqueó una llamada (SetPreferredGamepadInteractTarget) por el código de ese addon y el mando puede dejar de funcionar. Escribe /reload; si vuelve a pasar, actualiza o desactiva %s.",
     stickCenter = "devuelve el stick al centro",
 
     -- Teclado en pantalla
@@ -242,4 +243,23 @@ Addon.Locales.Register("esES", "Español", {
     legendGrowUp = "Crecer hacia arriba",
     legendNudgeHint = "Arrastra la leyenda o muévela con las flechas (Mayús: 10 puntos).",
     legendBack = "La leyenda del mando ha vuelto a su sitio por defecto.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barras",
+    tabControls = "Controles",
+    tabPrompts = "Indicaciones",
+    tabInterface = "Interfaz",
+    secLayout = "Disposición de las barras",
+    secGryphons = "Grifos",
+    secFrames = "Marcos colocados por ti",
+    secKeys = "Teclas de las barras",
+    secAssign = "Asignar teclas",
+    secGame = "Páginas del juego",
+    secPrompts = "Indicaciones de botones",
+    secWords = "Sugerencias de palabras",
+    btnOpen = "Abrir",
+    btnStart = "Iniciar",
+    btnShow = "Mostrar",
+    btnReset = "Restablecer",
+    keyboardShow = "Mostrar el teclado",
 })

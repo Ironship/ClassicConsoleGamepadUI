@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.80"
+Addon.version = "0.1.0-alpha.81"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -132,9 +132,21 @@ function Addon:CheckNativeTaint(stage)
         stack = debugstack(2, 20, 0) }
 end
 
+-- The game blocks this call when another addon's code ran just before it, and the interrupted code leaves the gamepad
+-- bindings stale until a /reload (InputBindingManager's listeners). Nothing here can undo that, so the player is told
+-- once per addon which one it was.
+local foreignWarned = {}
+local function WarnForeign(addon, action)
+    if type(addon) ~= "string" or addon == "" or foreignWarned[addon] then return end
+    if not action:find("SetPreferredGamepadInteractTarget", 1, true) then return end
+    foreignWarned[addon] = true
+    Addon:Print(Addon.L.foreignTaint:format(addon, addon))
+end
+
 -- Every blocked or forbidden call attributed to this addon, up to six per session:
 -- which protected function, the stack, and what this addon had done just before.
 function Addon:CaptureBlockedAction(event, addon, action)
+    if addon ~= name and type(action) == "string" then WarnForeign(addon, action) end
     if not self.diagnostics or addon ~= name or type(action) ~= "string" then return end
     local list = self.diagnostics.blocked
     if type(list) ~= "table" or list.version ~= self.version then

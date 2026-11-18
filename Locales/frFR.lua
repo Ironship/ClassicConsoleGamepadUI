@@ -180,6 +180,7 @@ Addon.Locales.Register("frFR", "Français", {
     scaleHelp = "Utilisez l'échelle de l'interface et le mode Édition du jeu : faites-y glisser les cadres du joueur, de la cible et du focus, puis enregistrez la disposition.",
     notInCombat = "Pas en combat.",
     framesBack = "Les cadres du joueur, de la cible et du focus sont revenus à leur place classique.",
+    foreignTaint = "L'addon %s a perturbé l'interface manette : le jeu a bloqué un appel (SetPreferredGamepadInteractTarget) à cause du code de cet addon, et la manette peut cesser de fonctionner. Tapez /reload ; si cela se reproduit, mettez à jour ou désactivez %s.",
     stickCenter = "ramenez le stick au centre",
 
     -- Clavier à l'écran
@@ -242,4 +243,23 @@ Addon.Locales.Register("frFR", "Français", {
     legendGrowUp = "Croître vers le haut",
     legendNudgeHint = "Faites glisser la légende ou déplacez-la avec les flèches (Maj : 10 points).",
     legendBack = "La légende de la manette est revenue à sa place par défaut.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barres",
+    tabControls = "Commandes",
+    tabPrompts = "Indications",
+    tabInterface = "Interface",
+    secLayout = "Disposition des barres",
+    secGryphons = "Griffons",
+    secFrames = "Cadres placés pour vous",
+    secKeys = "Touches des barres",
+    secAssign = "Assigner des touches",
+    secGame = "Pages du jeu",
+    secPrompts = "Indications des boutons",
+    secWords = "Suggestions de mots",
+    btnOpen = "Ouvrir",
+    btnStart = "Démarrer",
+    btnShow = "Afficher",
+    btnReset = "Réinitialiser",
+    keyboardShow = "Afficher le clavier",
 })

@@ -180,6 +180,7 @@ Addon.Locales.Register("itIT", "Italiano", {
     scaleHelp = "Usa la scala dell'interfaccia e la modalità modifica del gioco: trascina lì i riquadri di giocatore, bersaglio e focus e salva la disposizione.",
     notInCombat = "Non in combattimento.",
     framesBack = "I riquadri di giocatore, bersaglio e focus sono tornati ai loro posti classici.",
+    foreignTaint = "L'addon %s ha rotto l'interfaccia del controller: il gioco ha bloccato una chiamata (SetPreferredGamepadInteractTarget) a causa del codice di quell'addon e il controller potrebbe smettere di funzionare. Scrivi /reload; se succede ancora, aggiorna o disattiva %s.",
     stickCenter = "riporta lo stick al centro",
 
     -- Tastiera su schermo
@@ -242,4 +243,23 @@ Addon.Locales.Register("itIT", "Italiano", {
     legendGrowUp = "Cresci verso l'alto",
     legendNudgeHint = "Trascina la legenda o spostala con le frecce (Maiusc: 10 punti).",
     legendBack = "La legenda del controller è tornata al posto predefinito.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barre",
+    tabControls = "Comandi",
+    tabPrompts = "Suggerimenti",
+    tabInterface = "Interfaccia",
+    secLayout = "Disposizione delle barre",
+    secGryphons = "Grifoni",
+    secFrames = "Riquadri posizionati per te",
+    secKeys = "Tasti delle barre",
+    secAssign = "Assegna tasti",
+    secGame = "Pagine del gioco",
+    secPrompts = "Indicazioni dei pulsanti",
+    secWords = "Suggerimenti di parole",
+    btnOpen = "Apri",
+    btnStart = "Avvia",
+    btnShow = "Mostra",
+    btnReset = "Ripristina",
+    keyboardShow = "Mostra la tastiera",
 })

@@ -1,7 +1,11 @@
 local _, Addon = ...
--- The settings window (/cgp): a window of its own with a tab per topic, instead of one long list in the game's
+-- The settings window (/cgp): a window of its own with a tab per task, instead of one long list in the game's
 -- Settings panel. It is made of plain frames only (no secure templates, no protected calls), so it opens in
 -- combat and in Gamepad Mode without touching the game's own panels; Options > AddOns has a button that opens it.
+-- Layout (the same as the settings of UsefulPlatesAndTooltips): a switch for the whole addon above the tabs, a black
+-- panel with the rows (label on the left, control in a column on the right, a gold heading and a line about what the
+-- group is for), a help line under it that shows what the row under the mouse or the pad does, and the language and the
+-- reset where they are always at hand.
 -- In Gamepad Mode the window takes the pad: D-pad up/down select, left/right adjust, A activates, LB/RB switch
 -- tabs, B closes. Pad input is switched on out of combat only (the calls are protected in combat).
 local Window = {}
@@ -9,9 +13,13 @@ Addon.SettingsWindow = Window
 local Fonts = Addon.Fonts
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WIDTH, BODY_HEIGHT = 640, 430
-local HEADER, TAB_HEIGHT, MARGIN, SCROLL_WIDTH, HINT_HEIGHT = 40, 26, 10, 16, 30
-local ROW_WIDTH = WIDTH - 2 * MARGIN - SCROLL_WIDTH - 12
+local WIDTH, BODY_HEIGHT = 660, 302
+local HEADER, TAB_HEIGHT, MARGIN, SCROLL_WIDTH = 40, 26, 10, 16
+local SWITCH_HEIGHT, HELP_HEIGHT, FOOT_HEIGHT = 54, 90, 34 -- the help line holds four lines: the longest descriptions run to that
+local PANEL_PAD = 6
+local ROW_WIDTH = WIDTH - 2 * MARGIN - 2 * PANEL_PAD - SCROLL_WIDTH
+local LABEL_WIDTH, CONTROL_X = 330, 344
+local CONTROL_WIDTH = ROW_WIDTH - CONTROL_X - 8
 
 -- The text of a key in the language in use (Locales/).
 local function Text(key)
@@ -24,63 +32,14 @@ local function Control(key)
     end
 end
 
--- The game's tooltip draws with its own font, which has no Polish letters. While the interface is in Polish the window shows
--- its tips in a small tooltip of its own, made with the addon's fonts (Fonts.lua).
-local TIP_WIDTH = 300
-
-local function OwnTip()
-    if Window.tip then return Window.tip end
-    local tip = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    tip:SetFrameStrata("TOOLTIP")
-    tip:SetClampedToScreen(true)
-    tip:EnableMouse(false)
-    if tip.SetBackdrop then
-        tip:SetBackdrop({ bgFile = WHITE, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-        tip:SetBackdropColor(0.03, 0.03, 0.05, 0.96)
-        tip:SetBackdropBorderColor(0.7, 0.7, 0.7, 1)
-    end
-    tip.title = Fonts:String(tip, "OVERLAY", "Normal")
-    tip.title:SetPoint("TOPLEFT", 10, -9)
-    tip.title:SetWidth(TIP_WIDTH)
-    tip.title:SetJustifyH("LEFT")
-    tip.body = Fonts:String(tip, "OVERLAY", "Highlight")
-    tip.body:SetPoint("TOPLEFT", tip.title, "BOTTOMLEFT", 0, -4)
-    tip.body:SetWidth(TIP_WIDTH)
-    tip.body:SetJustifyH("LEFT")
-    tip:Hide()
-    Window.tip = tip
-    return tip
-end
-
-local function Tooltip(frame, title, body)
-    if Fonts.InterfaceWide() then
-        local tip = OwnTip()
-        tip.title:SetText(title or "")
-        tip.body:SetText(body or "")
-        local height = 9 + math.ceil(tonumber(tip.title:GetStringHeight()) or 14) + 10
-        if body and body ~= "" then height = height + 4 + math.ceil(tonumber(tip.body:GetStringHeight()) or 14) end
-        tip:SetSize(TIP_WIDTH + 20, height)
-        tip:ClearAllPoints()
-        tip:SetPoint("LEFT", frame, "RIGHT", 8, 0)
-        tip:Show()
-        return
-    end
-    GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
-    GameTooltip:SetText(title, 1, 0.82, 0)
-    if body and body ~= "" then GameTooltip:AddLine(body, 1, 1, 1, true) end
-    GameTooltip:Show()
-end
-
-local function HideTip()
-    GameTooltip:Hide()
-    if Window.tip then Window.tip:Hide() end
-end
-
-local function AddTooltip(frame, title, body)
-    frame:SetScript("OnEnter", function(self) Tooltip(self, title, body) end)
-    frame:SetScript("OnLeave", HideTip)
-end
+-- Rows that only mean something while another setting is in a state (the ones with a "parent" in Options.lua are dimmed
+-- while their check box is off; these are dimmed while the condition is true).
+local DIM = {
+    groupBoth = function(db) return db.compact end,
+    placeMenu = function(db) return db.hideMenu end,
+    menuRight = function(db) return db.hideMenu end,
+    menuBottom = function(db) return db.hideMenu end,
+}
 
 local function SetEnabled(frame, enabled)
     if frame.SetEnabled then frame:SetEnabled(enabled)
@@ -88,12 +47,103 @@ local function SetEnabled(frame, enabled)
     elseif frame.Disable then frame:Disable() end
 end
 
+-- A black panel like the game's tooltips and the settings of UsefulPlatesAndTooltips.
+local function Panel(frame, alpha)
+    if frame.SetBackdrop then
+        frame:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+        frame:SetBackdropColor(0, 0, 0, alpha or 1)
+        frame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+    end
+end
+
 -- ---------------------------------------------------------------------------------------------
--- What the tabs hold. {"header", text}, {"control", key} (a check box or a slider, by its entry in the
--- options), {"choice", key[, parent]}, {"button", label, tooltip, function[, parent]}, {"note", text},
--- {"status", function that returns a text[, parent]} (a line that is kept up to date while the window is open). A row
--- with a parent (the key of a check box) is dimmed while that box is off.
+-- The help line: what the row under the mouse (or under the pad's selection) does. It is the place for the long text,
+-- it works with a controller and it uses the addon's fonts, so the letters of every language are there (Fonts.lua).
 -- ---------------------------------------------------------------------------------------------
+
+local function ShowHelp(title, body)
+    local help = Window.help
+    if not help then return end
+    help.title:SetText(title or "")
+    help.body:SetText(body or "")
+end
+
+local function AddHelp(frame, title, body)
+    frame:SetScript("OnEnter", function() ShowHelp(title, body) end)
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- The list a choice opens (the languages, the keyboard layouts): one list for the whole window.
+-- ---------------------------------------------------------------------------------------------
+
+local LIST_ROW = 22
+
+local function CloseList()
+    if Window.list then Window.list:Hide() end
+    if Window.listCatcher then Window.listCatcher:Hide() end
+end
+
+local function EnsureList()
+    if Window.list then return end
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:SetScript("OnClick", CloseList)
+    catcher:Hide()
+    local list = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    list:SetFrameStrata("FULLSCREEN_DIALOG")
+    list:SetFrameLevel(catcher:GetFrameLevel() + 2)
+    list:EnableMouse(true)
+    Panel(list, 1)
+    list:Hide()
+    list.rows = {}
+    Window.list, Window.listCatcher = list, catcher
+end
+
+-- entries: { { value, label }, ... }; pick(value) is called with the one clicked.
+local function OpenList(owner, entries, current, pick)
+    EnsureList()
+    local list = Window.list
+    if list:IsShown() and list.owner == owner then CloseList() return end
+    list.owner = owner
+    list:SetParent(UIParent)
+    list:ClearAllPoints()
+    list:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+    list:SetWidth(math.max(owner:GetWidth() or 200, 160))
+    list:SetHeight(#entries * LIST_ROW + 8)
+    for i, entry in ipairs(entries) do
+        local row = list.rows[i]
+        if not row then
+            row = CreateFrame("Button", nil, list)
+            row:SetHeight(LIST_ROW)
+            row.label = Fonts:String(row, "OVERLAY", "Highlight")
+            row.label:SetPoint("LEFT", 8, 0)
+            row.mark = row:CreateTexture(nil, "BACKGROUND")
+            row.mark:SetAllPoints()
+            row.mark:SetTexture(WHITE)
+            row.mark:SetVertexColor(1, 0.82, 0, 0.18)
+            local highlight = row:CreateTexture(nil, "HIGHLIGHT")
+            highlight:SetAllPoints()
+            highlight:SetTexture(WHITE)
+            highlight:SetVertexColor(1, 1, 1, 0.12)
+            list.rows[i] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -4 - (i - 1) * LIST_ROW)
+        row:SetPoint("RIGHT", list, "RIGHT", -4, 0)
+        row.label:SetText(entry[2])
+        row.mark:SetShown(entry[1] == current)
+        row:SetScript("OnClick", function()
+            CloseList()
+            pick(entry[1])
+        end)
+        row:Show()
+    end
+    for i = #entries + 1, #list.rows do list.rows[i]:Hide() end
+    Window.listCatcher:Show()
+    list:Show()
+end
 
 -- A destructive button asks twice: the first click changes its label, a second one within four seconds does it.
 local function Confirmed(action)
@@ -117,63 +167,69 @@ local function Confirmed(action)
     end
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- What the tabs hold, by task. {"header", text key, note key}, {"control", key} (a check box or a slider, by its entry in
+-- the options), {"choice", key[, parent]}, {"button", label key, button text key, tip key, function[, parent[, literal
+-- label]]}, {"status", function that returns a text[, parent]} (a line that is kept up to date while the window is
+-- open). A row with a parent (the key of a check box) is dimmed while that box is off. A tab with `master` is dimmed
+-- while the classic interface is switched off.
+-- ---------------------------------------------------------------------------------------------
+
 local function Tabs()
     local options = Addon.Options
     return {
-        { id = "general", label = Text("tabGeneral"), items = {
-            { "header", "languageHeader" },
-            { "choice", "language" },
-            { "header", "layout" },
-            { "control", "enabled" }, { "control", "compact" }, { "control", "groupBoth" }, { "control", "crossFirst" },
-            { "control", "moveUnitFrames" },
-            { "control", "placeBags" }, { "control", "placeStatusBars" }, { "control", "placeTotemBar" },
+        { id = "bars", label = Text("tabBars"), master = true, items = {
+            { "header", "secLayout", "secLayoutNote" },
+            { "control", "compact" }, { "control", "groupBoth" }, { "control", "crossFirst" },
             { "control", "barScale" }, { "control", "contextGap" },
+            { "header", "secGryphons", "secGryphonsNote" },
             { "control", "showLeftCap" }, { "control", "showRightCap" },
-            { "header", "menu" },
-            { "control", "hideMenu" }, { "control", "placeMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },
-            { "header", "buttonsHeader" },
-            { "control", "padKeyboard" }, { "control", "attackStart" },
-            { "button", Text("keymapOpen"), Text("keymapOpenTip"), function() Addon.KeyMap:Open() end },
+            { "header", "secFrames", "secFramesNote" },
+            { "control", "moveUnitFrames" }, { "control", "placeBags" }, { "control", "placeStatusBars" },
+            { "control", "placeTotemBar" },
         } },
-        { id = "hints", label = Text("tabHints"), items = {
-            { "header", "hints" },
+        { id = "controls", label = Text("tabControls"), items = {
+            { "header", "secKeys", "secKeysNote" },
+            { "control", "padKeyboard" }, { "control", "attackStart" },
+            { "button", "keymapOpen", "btnOpen", "keymapOpenTip", function() Addon.KeyMap:Open() end },
+            { "header", "secAssign", "secAssignNote" },
+            { "button", "bind", "btnStart", "bindTip", function() options:BindFromBars() end },
+            { "header", "secGame", "secGameNote" },
+            { "button", "", "btnOpen", "bindingsTip", function() options:OpenBindings() end, nil, SETTINGS_KEYBINDINGS_LABEL },
+            { "button", "actions", "btnOpen", "actionsTip", function() options:EditActions() end },
+            { "button", "", "btnOpen", "controlsTip", function() options:OpenGamepad() end, nil, GAMEPAD_LABEL },
+        } },
+        { id = "prompts", label = Text("tabPrompts"), master = true, items = {
+            { "header", "secPrompts", "secPromptsNote" },
             { "control", "promptScale" }, { "control", "modifierScale" }, { "control", "showKeyboardHints" },
             { "control", "showMenuHints" }, { "control", "highlightActive" },
-            { "header", "legend" },
-            { "control", "moveLegend" }, { "control", "legendX" }, { "control", "legendGap" },
+            { "header", "legend", "secLegendNote" },
             { "control", "legendFrame" }, { "control", "legendShade" },
+            { "control", "moveLegend" }, { "control", "legendX" }, { "control", "legendGap" },
         } },
-        { id = "chat", label = Text("chat"), items = {
-            { "header", "chat" },
+        { id = "interface", label = Text("tabInterface"), items = {
+            { "header", "menu", "menuNote" },
+            { "control", "hideMenu" }, { "control", "placeMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },
+            { "header", "chat", "chatNote" },
             { "control", "raiseChat" }, { "control", "chatGap" },
             { "control", "anchorChat" }, { "control", "chatLeft" }, { "control", "chatBottom" },
+            { "header", "items" },
+            { "control", "easyDelete" },
         } },
         { id = "keyboard", label = Text("tabKeyboard"), items = {
-            { "header", "keyboard" },
+            { "header", "keyboard", "keyboardNote" },
             { "control", "keyboardEnabled" },
             { "control", "autoKeyboard" },
             { "choice", "keyboardLanguage", "keyboardEnabled" }, { "choice", "keyboardMode", "keyboardEnabled" },
             { "control", "keyboardTransparency" },
+            { "button", "keyboardShow", "btnShow", "keyboardTip", function() Addon.Keyboard:Toggle() end, "keyboardEnabled" },
+            { "header", "secWords", "secWordsNote" },
             { "control", "wordHunter" },
             { "status", function() return Addon.WordSources:Status() end, "wordHunter" },
-            { "button", Text("keyboard"), Text("keyboardTip"), function() Addon.Keyboard:Toggle() end, "keyboardEnabled" },
-            { "header", "learnedHeader" },
             { "status", function() return Addon.Words:Summary() end },
-            { "button", Text("forgetWords"), Text("forgetWordsTip"), Confirmed(function()
+            { "button", "forgetWords", "btnReset", "forgetWordsTip", Confirmed(function()
                 Addon.Words:Forget()
                 Addon:Print(Text("wordsForgotten"))
-            end) },
-        } },
-        { id = "tools", label = Text("tabTools"), items = {
-            { "header", "items" },
-            { "control", "easyDelete" },
-            { "header", "tabTools" },
-            { "button", Text("bind"), Text("bindTip"), function() options:BindFromBars() end },
-            { "button", SETTINGS_KEYBINDINGS_LABEL, Text("bindingsTip"), function() options:OpenBindings() end },
-            { "button", Text("actions"), Text("actionsTip"), function() options:EditActions() end },
-            { "button", GAMEPAD_LABEL, Text("controlsTip"), function() options:OpenGamepad() end },
-            { "button", Text("resetSettings"), Text("resetSettingsTip"), Confirmed(function()
-                if options:ResetAll() then Window:RefreshPages() end
             end) },
         } },
     }
@@ -195,7 +251,8 @@ local function Changed(key)
     end)
 end
 
-local function Header(page, y, key)
+-- A gold heading with a line, and under it what the group is for.
+local function Header(page, y, key, noteKey)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y - 6)
     row:SetSize(ROW_WIDTH, 18)
@@ -208,25 +265,27 @@ local function Header(page, y, key)
     rule:SetHeight(1)
     rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
     rule:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    return y + 30
+    y = y + 28
+    if noteKey then
+        local note = Fonts:String(page.content, "OVERLAY", "DisableSmall")
+        note:SetPoint("TOPLEFT", page.content, "TOPLEFT", 8, -y)
+        note:SetWidth(ROW_WIDTH - 4)
+        note:SetJustifyH("LEFT")
+        note:SetText(Text(noteKey))
+        y = y + math.max(14, math.ceil(tonumber(note:GetStringHeight()) or 14)) + 6
+    end
+    return y
 end
 
-local function Note(page, y, key)
-    local label = Fonts:String(page.content, "OVERLAY", "DisableSmall")
-    label:SetPoint("TOPLEFT", page.content, "TOPLEFT", 8, -y)
-    label:SetWidth(ROW_WIDTH - 4)
-    label:SetJustifyH("LEFT")
-    label:SetText(Text(key))
-    return y + math.max(14, math.ceil(tonumber(label:GetStringHeight()) or 14)) + 8
-end
-
--- Registers a row's node for navigation and refresh.
-local function Register(page, row, node, y, height, refresh, parent)
+-- Registers a row's node for navigation and refresh. The row is dimmed (and the node skipped by the pad) while its parent
+-- box is off, while its own condition (DIM) holds, or - on a tab of the classic interface - while that is switched off.
+local function Register(page, row, node, y, height, refresh, parent, key)
     node.rowTop, node.rowHeight = y, height
     page.nodes[#page.nodes + 1] = node
     page.refresh[#page.refresh + 1] = function()
         refresh()
-        local dimmed = parent and not Addon.db[parent] or false
+        local db = Addon.db
+        local dimmed = (parent and not db[parent]) or (key and DIM[key] and DIM[key](db)) or (page.master and not db.enabled) or false
         row:SetAlpha(dimmed and 0.45 or 1)
         SetEnabled(node, not dimmed)
         node.dimmed = dimmed
@@ -254,49 +313,61 @@ local function Status(page, y, fn, parent)
     return y + STATUS_HEIGHT
 end
 
-local function Check(page, y, info)
-    local key, indent = info.key, info.parent and 22 or 0
+-- The label on the left, the control in its column on the right: the same grid in every row.
+local function RowLabel(row, text, indent)
+    local label = Fonts:String(row, "OVERLAY", "Highlight")
+    label:SetPoint("LEFT", 2, 0)
+    label:SetWidth(LABEL_WIDTH - indent - 6)
+    label:SetJustifyH("LEFT")
+    label:SetText(text)
+    return label
+end
+
+local function NewRow(page, y, indent, height)
     local row = CreateFrame("Frame", nil, page.content)
     row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6 + indent, -y)
+    row:SetSize(ROW_WIDTH - indent, height)
+    row:EnableMouse(true)
+    return row
+end
+
+local function Check(page, y, info)
+    local key, indent = info.key, info.parent and 22 or 0
+    local row = NewRow(page, y, indent, 30)
+    local label = RowLabel(row, Text(key), indent)
+    local height = math.max(30, math.ceil(tonumber(label:GetStringHeight()) or 14) + 12)
+    row:SetHeight(height)
     local box = CreateFrame("CheckButton", nil, row)
     box:SetSize(24, 24)
-    box:SetPoint("TOPLEFT", 0, -2)
+    box:SetPoint("LEFT", row, "LEFT", CONTROL_X - indent, 0)
     box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
     box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
     box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
     box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    local label = Fonts:String(row, "OVERLAY", "Highlight")
-    label:SetPoint("LEFT", box, "RIGHT", 4, 0)
-    local labelWidth = ROW_WIDTH - 34 - indent
-    label:SetWidth(labelWidth)
-    label:SetJustifyH("LEFT")
-    label:SetText(Text(key))
-    local height = math.max(30, math.ceil(tonumber(label:GetStringHeight()) or 14) + 10)
-    row:SetSize(ROW_WIDTH - indent, height)
     -- The label is part of the check box for the mouse.
-    box:SetHitRectInsets(0, -labelWidth, 0, 0)
-    AddTooltip(box, Text(key), Text(info.tip or (key .. "Tip")))
+    box:SetHitRectInsets(-(CONTROL_X - indent), 0, 0, 0)
+    local tip = Text(info.tip or (key .. "Tip"))
+    AddHelp(box, Text(key), tip)
+    AddHelp(row, Text(key), tip)
     box:SetScript("OnClick", function(self)
         Addon.db[key] = self:GetChecked() and true or false
         Changed(key)
         page.Refresh()
     end)
-    Register(page, row, box, y, height, function() box:SetChecked(Addon.db[key] and true or false) end, info.parent)
+    Register(page, row, box, y, height, function() box:SetChecked(Addon.db[key] and true or false) end, info.parent, key)
     return y + height
 end
 
 local function Slider(page, y, info)
     local key, indent = info.key, info.parent and 22 or 0
-    local row = CreateFrame("Frame", nil, page.content)
-    row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6 + indent, -y)
-    row:SetSize(ROW_WIDTH - indent, 48)
-    local label = Fonts:String(row, "OVERLAY", "Highlight")
-    label:SetPoint("TOPLEFT", 0, -2)
-    label:SetText(Text(key))
+    local row = NewRow(page, y, indent, 30)
+    local label = RowLabel(row, Text(key), indent)
+    local height = math.max(30, math.ceil(tonumber(label:GetStringHeight()) or 14) + 12)
+    row:SetHeight(height)
     local bar = CreateFrame("Slider", nil, row)
     bar:SetOrientation("HORIZONTAL")
-    bar:SetSize(260, 16)
-    bar:SetPoint("TOPLEFT", 0, -24)
+    bar:SetSize(CONTROL_WIDTH - 54, 16)
+    bar:SetPoint("LEFT", row, "LEFT", CONTROL_X - indent + 2, 0)
     bar:SetMinMaxValues(info.min, info.max)
     bar:SetValueStep(info.step)
     if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(true) end
@@ -308,7 +379,7 @@ local function Slider(page, y, info)
     track:SetPoint("RIGHT")
     track:SetHeight(6)
     local value = Fonts:String(row, "OVERLAY", "HighlightSmall")
-    value:SetPoint("LEFT", bar, "RIGHT", 10, 0)
+    value:SetPoint("LEFT", bar, "RIGHT", 8, 0)
     local percent = info.max <= 3
     local function Show(v) value:SetText(percent and (math.floor(v * 100 + 0.5) .. "%") or tostring(math.floor(v + 0.5))) end
     bar:SetScript("OnValueChanged", function(_, v)
@@ -318,36 +389,54 @@ local function Slider(page, y, info)
         Addon.db[key] = v
         Changed(key)
     end)
-    AddTooltip(bar, Text(key), Text(info.tip or (key .. "Tip")))
-    AddTooltip(row, Text(key), Text(info.tip or (key .. "Tip")))
-    Register(page, row, bar, y, 48, function()
+    local tip = Text(info.tip or (key .. "Tip"))
+    AddHelp(bar, Text(key), tip)
+    AddHelp(row, Text(key), tip)
+    Register(page, row, bar, y, height, function()
         bar.syncing = true
         bar:SetValue(Addon.db[key])
         Show(Addon.db[key])
         bar.syncing = false
-    end, info.parent)
-    return y + 50
+    end, info.parent, key)
+    return y + height
 end
 
+-- The name of a choice: it names itself ({ value, name }) or has the key of a text ({ value, nil, key }).
+local function ChoiceName(choice)
+    return choice[3] and Text(choice[3]) or choice[2]
+end
+
+local function ChoiceEntries(choices)
+    local entries = {}
+    for i, choice in ipairs(choices) do entries[i] = { choice[1], ChoiceName(choice) } end
+    return entries
+end
+
+-- A drop-down: the button shows the choice, a click opens the list of all of them (right click and D-pad left/right step
+-- through them without opening it).
 local function Choice(page, y, key, parent)
     local choices = Addon.Options.choices[key]
-    local row = CreateFrame("Frame", nil, page.content)
-    row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
-    row:SetSize(ROW_WIDTH, 34)
-    local label = Fonts:String(row, "OVERLAY", "Highlight")
-    label:SetPoint("LEFT", 2, 0)
-    label:SetText(Text(key))
+    local row = NewRow(page, y, 0, 34)
+    RowLabel(row, Text(key), 0)
     local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     Fonts:Button(button)
-    button:SetSize(230, 24)
-    button:SetPoint("LEFT", row, "LEFT", 300, 0)
+    button:SetSize(CONTROL_WIDTH, 24)
+    button:SetPoint("LEFT", row, "LEFT", CONTROL_X, 0)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    -- A choice names itself ({ value, name }) or has the key of a text ({ value, nil, key }).
+    local arrow = Fonts:String(button, "OVERLAY", "Highlight")
+    arrow:SetPoint("RIGHT", -8, 0)
+    arrow:SetText("v")
     local function Name()
         for _, choice in ipairs(choices) do
-            if choice[1] == Addon.db[key] then return choice[3] and Text(choice[3]) or choice[2] end
+            if choice[1] == Addon.db[key] then return ChoiceName(choice) end
         end
         return tostring(Addon.db[key])
+    end
+    local function Pick(value)
+        Addon.db[key] = value
+        button:SetText(Name())
+        Changed(key)
+        page.Refresh()
     end
     -- Step to the next choice (or the previous one: right click, D-pad left).
     function button.StepChoice(direction)
@@ -355,60 +444,32 @@ local function Choice(page, y, key, parent)
         for i, choice in ipairs(choices) do
             if choice[1] == Addon.db[key] then index = i end
         end
-        Addon.db[key] = choices[(index - 1 + direction) % #choices + 1][1]
-        button:SetText(Name())
-        Changed(key)
+        Pick(choices[(index - 1 + direction) % #choices + 1][1])
     end
-    button:SetScript("OnClick", function(_, mouse) button.StepChoice(mouse == "RightButton" and -1 or 1) end)
-    AddTooltip(button, Text(key), Text(key .. "Tip"))
+    button:SetScript("OnClick", function(_, mouse)
+        if mouse == "RightButton" then button.StepChoice(-1) return end
+        OpenList(button, ChoiceEntries(choices), Addon.db[key], Pick)
+    end)
+    local tip = Text(key .. "Tip")
+    AddHelp(button, Text(key), tip)
+    AddHelp(row, Text(key), tip)
     Register(page, row, button, y, 34, function() button:SetText(Name()) end, parent)
     return y + 36
 end
 
--- One of the eight bar buttons: the key the slot has now; a click (or D-pad right) gives it the next key, right click (D-pad left)
--- the previous one. The slot that had that key gets this slot's old key (ButtonBindings.lua).
-local function SlotKey(page, y, slot)
-    local Buttons = Addon.ButtonBindings
-    local row = CreateFrame("Frame", nil, page.content)
-    row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
-    row:SetSize(ROW_WIDTH, 34)
-    local label = Fonts:String(row, "OVERLAY", "Highlight")
-    label:SetPoint("LEFT", 2, 0)
-    label:SetText(string.format(Text("buttonSlot"), Buttons:Name(Buttons.DEFAULT[slot])))
+-- A row with an action: what it does on the left, the button on the right.
+local function Button(page, y, label, buttonText, tip, action, parent)
+    local row = NewRow(page, y, 0, 34)
+    RowLabel(row, label, 0)
     local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     Fonts:Button(button)
-    button:SetSize(230, 24)
-    button:SetPoint("LEFT", row, "LEFT", 300, 0)
-    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    function button.StepChoice(direction)
-        local ok, why = Buttons:Step(slot, direction, function(done, reason, detail)
-            Buttons:Report(slot, done, reason, detail)
-            page.Refresh()
-            Addon:QueueRefresh()
-        end)
-        if not ok then Buttons:Report(slot, ok, why) end
-        -- a swap changes two rows
-        page.Refresh()
-        Addon:QueueRefresh()
-    end
-    button:SetScript("OnClick", function(_, mouse) button.StepChoice(mouse == "RightButton" and -1 or 1) end)
-    AddTooltip(button, Text("buttonsHeader"), Text("buttonsTip"))
-    Register(page, row, button, y, 34, function() button:SetText(Buttons:Name(Buttons:Key(slot))) end)
-    return y + 36
-end
-
-local function Button(page, y, label, tip, action, parent)
-    local row = CreateFrame("Frame", nil, page.content)
-    row:SetPoint("TOPLEFT", page.content, "TOPLEFT", 6, -y)
-    row:SetSize(ROW_WIDTH, 34)
-    local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    Fonts:Button(button)
-    button:SetSize(300, 24)
-    button:SetPoint("LEFT", 2, 0)
-    button:SetText(label)
-    button.baseText = label
+    button:SetSize(CONTROL_WIDTH, 24)
+    button:SetPoint("LEFT", row, "LEFT", CONTROL_X, 0)
+    button:SetText(buttonText)
+    button.baseText = buttonText
     button:SetScript("OnClick", action)
-    AddTooltip(button, label, tip)
+    AddHelp(button, label, tip)
+    AddHelp(row, label, tip)
     Register(page, row, button, y, 34, function() end, parent)
     return y + 36
 end
@@ -418,14 +479,15 @@ end
 -- ---------------------------------------------------------------------------------------------
 
 local function BuildPage(window, tab)
-    local page = CreateFrame("Frame", nil, window)
-    page:SetPoint("TOPLEFT", MARGIN, -(HEADER + TAB_HEIGHT + 4))
-    page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + HINT_HEIGHT)
+    local page = CreateFrame("Frame", nil, window, "BackdropTemplate")
+    page:SetPoint("TOPLEFT", MARGIN, -(HEADER + TAB_HEIGHT + SWITCH_HEIGHT))
+    page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + FOOT_HEIGHT + HELP_HEIGHT)
+    Panel(page, 1)
     page:Hide()
-    page.nodes, page.refresh, page.live = {}, {}, {}
+    page.nodes, page.refresh, page.live, page.master = {}, {}, {}, tab.master and true or false
     local scroll = CreateFrame("ScrollFrame", nil, page)
-    scroll:SetPoint("TOPLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", -SCROLL_WIDTH, 0)
+    scroll:SetPoint("TOPLEFT", PANEL_PAD, -PANEL_PAD)
+    scroll:SetPoint("BOTTOMRIGHT", -PANEL_PAD - SCROLL_WIDTH, PANEL_PAD)
     scroll:EnableMouseWheel(true)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(ROW_WIDTH + 12, 1)
@@ -433,8 +495,8 @@ local function BuildPage(window, tab)
     local bar = CreateFrame("Slider", nil, page)
     bar:SetOrientation("VERTICAL")
     bar:SetWidth(12)
-    bar:SetPoint("TOPRIGHT", 0, 0)
-    bar:SetPoint("BOTTOMRIGHT", 0, 0)
+    bar:SetPoint("TOPRIGHT", -PANEL_PAD, -PANEL_PAD)
+    bar:SetPoint("BOTTOMRIGHT", -PANEL_PAD, PANEL_PAD)
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
     bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Vertical")
@@ -479,15 +541,15 @@ local function BuildPage(window, tab)
         for _, refresh in ipairs(page.refresh) do refresh() end
     end
 
-    local y = 4
+    local y = 0
     for _, item in ipairs(tab.items) do
         local kind = item[1]
-        if kind == "header" then y = Header(page, y, item[2])
-        elseif kind == "note" then y = Note(page, y, item[2])
+        if kind == "header" then y = Header(page, y, item[2], item[3])
         elseif kind == "choice" then y = Choice(page, y, item[2], item[3])
-        elseif kind == "slotkey" then y = SlotKey(page, y, item[2])
         elseif kind == "status" then y = Status(page, y, item[2], item[3])
-        elseif kind == "button" then y = Button(page, y, item[2], item[3], item[4], item[5])
+        elseif kind == "button" then
+            local label = item[7] or Text(item[2])
+            y = Button(page, y, label, Text(item[3]), Text(item[4]), item[5], item[6])
         else
             local info = Control(item[2])
             if info then y = (info.min and Slider or Check)(page, y, info) end
@@ -534,16 +596,20 @@ function Window:Mark(node)
     self.mark:SetPoint("BOTTOMRIGHT", node, "BOTTOMRIGHT", 2, -2)
     self.mark:SetFrameLevel(node:GetFrameLevel() + 5)
     self.mark:Show()
-    self.page.Reveal(node)
+    -- The window's own controls (the switch, the language, the reset) are outside the scrolling page.
+    if type(node.rowTop) == "number" then self.page.Reveal(node) end
     local enter = node:GetScript("OnEnter")
     if enter then enter(node) end
 end
 
+-- What the pad can select, in order: the switch of the whole addon, the rows of the page, then the language and the reset.
 function Window:Nodes()
-    local nodes = {}
+    local nodes = { self.switchBox }
     for _, node in ipairs(self.page and self.page.nodes or {}) do
         if not node.dimmed then nodes[#nodes + 1] = node end
     end
+    nodes[#nodes + 1] = self.languageButton
+    nodes[#nodes + 1] = self.resetButton
     return nodes
 end
 
@@ -556,6 +622,7 @@ function Window:PadButton(key)
     local keyMap = Addon.KeyMap and Addon.KeyMap.frame
     if keyMap and keyMap:IsShown() then Addon.KeyMap:PadButton(key); return true end
     if key == "PAD2" then
+        if Window.list and Window.list:IsShown() then CloseList() return true end
         self:Hide()
         return true
     elseif key == "PADLSHOULDER" or key == "PADRSHOULDER" then
@@ -564,7 +631,6 @@ function Window:PadButton(key)
     end
     local step = ({ PADDUP = -1, PADDDOWN = 1 })[key]
     local nodes = self:Nodes()
-    if #nodes == 0 then return key == "PAD1" or step ~= nil or key == "PADDLEFT" or key == "PADDRIGHT" end
     local index
     for i, node in ipairs(nodes) do
         if node == self.selected then index = i end
@@ -585,7 +651,9 @@ function Window:PadButton(key)
     elseif key == "PAD1" then
         local node = nodes[index]
         if not node then self:Mark(nodes[1]) return true end
-        if node.Click and not (node.GetObjectType and node:GetObjectType() == "Slider") then node:Click("LeftButton") end
+        -- A choice opens a list for the mouse; the pad steps through it instead.
+        if node.StepChoice then node.StepChoice(1)
+        elseif node.Click and not (node.GetObjectType and node:GetObjectType() == "Slider") then node:Click("LeftButton") end
         return true
     end
     return false
@@ -629,11 +697,45 @@ function Window:UpdateHint()
         Key("PADDLEFT"), Key("PADDRIGHT"), Key("PAD1"), Key("PAD2"), Key("PADLSHOULDER"), Key("PADRSHOULDER")) or "")
 end
 
+-- The name of the language in use. The word "Language" is the same in every language on purpose: whoever lands in a
+-- language they cannot read must still find the button.
+local function LanguageName()
+    for _, choice in ipairs(Addon.Options.choices.language) do
+        if choice[1] == Addon.db.language then return ChoiceName(choice) end
+    end
+    return tostring(Addon.db.language)
+end
+
+-- A button as wide as its text needs (a long translation would be cut off), never narrower than `least`.
+local function FitButton(button, least)
+    local label = button.GetFontString and button:GetFontString()
+    local width = label and tonumber(label:GetStringWidth()) or 0
+    button:SetWidth(math.max(least, math.ceil(width) + 28))
+end
+
+-- The texts that are not on the pages: the switch, the help line, the footer, the language button.
+function Window:UpdateTexts()
+    self.switchLabel:SetText(Text("enabled"))
+    self.switchNote:SetText(Text("switchNote"))
+    self.resetButton:SetText(Text("resetSettings"))
+    self.resetButton.baseText = Text("resetSettings")
+    self.languageButton:SetText("Language: " .. LanguageName())
+    FitButton(self.resetButton, 190)
+    FitButton(self.languageButton, 170)
+    local tip = Text("enabledTip")
+    AddHelp(self.switchBox, Text("enabled"), tip)
+    AddHelp(self.switchRow, Text("enabled"), tip)
+    AddHelp(self.resetButton, Text("resetSettings"), Text("resetSettingsTip"))
+    AddHelp(self.languageButton, Text("languageHeader"), Text("languageTip"))
+    ShowHelp("", Text("helpDefault"))
+end
+
 -- A new language: every label, tip and row is made again from the texts of the language now in use. The pages are
 -- built from scratch (their rows have the old texts and sizes), the selection on the pad stays on the same row.
 -- Every page built so far shows the values in the database again (after "Reset all settings").
 function Window:RefreshPages()
     for _, page in pairs(self.pages or {}) do page.Refresh() end
+    if self.switchBox then self.switchBox:SetChecked(Addon.db.enabled and true or false) end
 end
 
 function Window:Relocalize()
@@ -642,20 +744,29 @@ function Window:Relocalize()
     for i, node in ipairs(self.page and self.page.nodes or {}) do
         if node == self.selected then selected = i end
     end
+    CloseList()
     for _, page in pairs(self.pages) do page:Hide() end
-    if self.tip then self.tip:Hide() end
     self.tabs, self.pages = Tabs(), {}
     self:LayoutTabs()
     self:UpdateHint()
+    self:UpdateTexts()
     self:SelectTab(self.index or 1)
     local nodes = self.page and self.page.nodes
     if selected and nodes and nodes[selected] and self.frame:IsShown() then self:Mark(nodes[selected]) end
+end
+
+-- The tab labels are gold, the selected one white (the tabs of UsefulPlatesAndTooltips).
+local function PaintTab(button, selected, hover)
+    local label = button.GetFontString and button:GetFontString()
+    if not label then return end
+    if selected or hover then label:SetTextColor(1, 1, 1) else label:SetTextColor(1, 0.82, 0) end
 end
 
 function Window:SelectTab(index)
     local tab = self.tabs[index]
     if not tab then return end
     self.index = index
+    CloseList()
     if not self.pages[tab.id] then self.pages[tab.id] = BuildPage(self.frame, tab) end
     for id, page in pairs(self.pages) do page:SetShown(id == tab.id) end
     self.page = self.pages[tab.id]
@@ -668,6 +779,8 @@ function Window:SelectTab(index)
         end
         -- The template sets its own fonts when a tab is selected.
         Fonts:Button(button, true)
+        button.selectedTab = i == index
+        PaintTab(button, i == index, false)
     end
     self:Mark(nil)
 end
@@ -689,7 +802,7 @@ function Window:Create()
     if ButtonFrameTemplate_HidePortrait then pcall(ButtonFrameTemplate_HidePortrait, frame) end
     if type(frame.Inset) == "table" and frame.Inset.Hide then frame.Inset:Hide() end
     frame:Hide()
-    frame:SetSize(WIDTH, HEADER + TAB_HEIGHT + BODY_HEIGHT + MARGIN + HINT_HEIGHT)
+    frame:SetSize(WIDTH, HEADER + TAB_HEIGHT + SWITCH_HEIGHT + BODY_HEIGHT + HELP_HEIGHT + FOOT_HEIGHT + MARGIN)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -719,17 +832,101 @@ function Window:Create()
         if not created then button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate") end
         Fonts:Button(button, true)
         button:SetScript("OnClick", function() self:SelectTab(index) end)
+        button:HookScript("OnEnter", function(b) PaintTab(b, b.selectedTab, true) end)
+        button:HookScript("OnLeave", function(b) PaintTab(b, b.selectedTab, false) end)
         self.tabButtons[index] = button
     end
     self:LayoutTabs()
 
-    -- The pad hint under the pages, only while a controller is in use.
+    -- The switch of the whole addon, above the pages (like "Enable" in UsefulPlatesAndTooltips).
+    local row = CreateFrame("Frame", nil, frame)
+    row:SetPoint("TOPLEFT", MARGIN + 4, -(HEADER + TAB_HEIGHT + 4))
+    row:SetPoint("RIGHT", frame, "RIGHT", -MARGIN - 4, 0)
+    row:SetHeight(SWITCH_HEIGHT - 8)
+    row:EnableMouse(true)
+    local box = CreateFrame("CheckButton", nil, row)
+    box:SetSize(26, 26)
+    box:SetPoint("TOPLEFT", 0, -2)
+    box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
+    box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
+    box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
+    box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+    box:SetHitRectInsets(0, -400, 0, 0)
+    box:SetScript("OnClick", function(b)
+        Addon.db.enabled = b:GetChecked() and true or false
+        Changed("enabled")
+        for _, page in pairs(self.pages) do page.Refresh() end
+    end)
+    self.switchLabel = Fonts:String(row, "OVERLAY", "Normal")
+    self.switchLabel:SetPoint("TOPLEFT", box, "TOPRIGHT", 6, -2)
+    self.switchNote = Fonts:String(row, "OVERLAY", "DisableSmall")
+    self.switchNote:SetPoint("TOPLEFT", self.switchLabel, "BOTTOMLEFT", 0, -2)
+    self.switchNote:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    self.switchNote:SetJustifyH("LEFT")
+    self.switchBox, self.switchRow = box, row
+    box:SetChecked(Addon.db.enabled and true or false)
+
+    -- The language, beside the close button (the same place as in UsefulPlatesAndTooltips).
+    local language = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    Fonts:Button(language)
+    language:SetSize(170, 20)
+    if frame.CloseButton then language:SetPoint("TOPRIGHT", frame.CloseButton, "TOPLEFT", -4, -3)
+    else language:SetPoint("TOPRIGHT", -34, -8) end
+    language:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    local function PickLanguage(value)
+        Addon.db.language = value
+        Changed("language")
+        language:SetText("Language: " .. LanguageName())
+        FitButton(language, 170)
+    end
+    function language.StepChoice(direction)
+        local choices, index = Addon.Options.choices.language, 1
+        for i, choice in ipairs(choices) do
+            if choice[1] == Addon.db.language then index = i end
+        end
+        PickLanguage(choices[(index - 1 + direction) % #choices + 1][1])
+    end
+    language:SetScript("OnClick", function(_, mouse)
+        if mouse == "RightButton" then language.StepChoice(-1) return end
+        OpenList(language, ChoiceEntries(Addon.Options.choices.language), Addon.db.language, PickLanguage)
+    end)
+    self.languageButton = language
+
+    -- The help line: what the row under the mouse or the pad does.
+    local help = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    help:SetPoint("BOTTOMLEFT", MARGIN, MARGIN + FOOT_HEIGHT)
+    help:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + FOOT_HEIGHT)
+    help:SetHeight(HELP_HEIGHT - 4)
+    Panel(help, 0.9)
+    help.title = Fonts:String(help, "OVERLAY", "Normal")
+    help.title:SetPoint("TOPLEFT", 10, -7)
+    help.title:SetPoint("RIGHT", -10, 0)
+    help.title:SetJustifyH("LEFT")
+    help.body = Fonts:String(help, "OVERLAY", "HighlightSmall")
+    help.body:SetPoint("TOPLEFT", help.title, "BOTTOMLEFT", 0, -3)
+    help.body:SetPoint("RIGHT", -10, 0)
+    help.body:SetJustifyH("LEFT")
+    help.body:SetJustifyV("TOP")
+    self.help = help
+
+    -- The foot: the reset (it asks twice) and the pad hint under the pages, only while a controller is in use.
+    local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    Fonts:Button(reset)
+    reset:SetSize(190, 22)
+    reset:SetPoint("BOTTOMLEFT", MARGIN + 2, MARGIN + 6)
+    reset:SetScript("OnClick", Confirmed(function()
+        if Addon.Options:ResetAll() then Window:RefreshPages() end
+    end))
+    self.resetButton = reset
     self.hint = Fonts:String(frame, "OVERLAY", "NormalSmall")
-    self.hint:SetPoint("BOTTOMLEFT", 14, 10)
-    self.hint:SetPoint("BOTTOMRIGHT", -14, 10)
+    self.hint:SetPoint("LEFT", reset, "RIGHT", 12, 0)
+    self.hint:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
     self.hint:SetJustifyH("LEFT")
+    self:UpdateTexts()
+
     frame:HookScript("OnShow", function()
         self:UpdateHint()
+        self.switchBox:SetChecked(Addon.db.enabled and true or false)
         if self.page then
             self.page.Refresh()
             self.page.SyncBar()
@@ -738,7 +935,7 @@ function Window:Create()
     end)
     frame:HookScript("OnHide", function()
         self:Mark(nil)
-        if self.tip then self.tip:Hide() end
+        CloseList()
     end)
     -- Lines that follow something outside the window (the word lists being read) are looked at once a second.
     local sinceLive = 0

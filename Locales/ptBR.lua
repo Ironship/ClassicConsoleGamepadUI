@@ -180,6 +180,7 @@ Addon.Locales.Register("ptBR", "Português", {
     scaleHelp = "Use a escala da interface e o modo de edição do jogo: arraste lá os quadros de jogador, alvo e foco e salve o layout.",
     notInCombat = "Fora de combate.",
     framesBack = "Os quadros de jogador, alvo e foco voltaram aos seus lugares clássicos.",
+    foreignTaint = "O addon %s quebrou a interface do controle: o jogo bloqueou uma chamada (SetPreferredGamepadInteractTarget) por causa do código desse addon e o controle pode parar de funcionar. Digite /reload; se continuar acontecendo, atualize ou desative %s.",
     stickCenter = "volte o analógico ao centro",
 
     -- Teclado na tela
@@ -242,4 +243,23 @@ Addon.Locales.Register("ptBR", "Português", {
     legendGrowUp = "Crescer para cima",
     legendNudgeHint = "Arraste a legenda ou mova-a com as setas (Shift: 10 pontos).",
     legendBack = "A legenda do controle voltou ao lugar padrão.",
+
+    -- Settings window by task (0.1.0-alpha.81)
+    tabBars = "Barras",
+    tabControls = "Controles",
+    tabPrompts = "Indicações",
+    tabInterface = "Interface",
+    secLayout = "Disposição das barras",
+    secGryphons = "Grifos",
+    secFrames = "Quadros posicionados por você",
+    secKeys = "Teclas das barras",
+    secAssign = "Atribuir teclas",
+    secGame = "Páginas do jogo",
+    secPrompts = "Indicações dos botões",
+    secWords = "Sugestões de palavras",
+    btnOpen = "Abrir",
+    btnStart = "Iniciar",
+    btnShow = "Mostrar",
+    btnReset = "Redefinir",
+    keyboardShow = "Mostrar o teclado",
 })
