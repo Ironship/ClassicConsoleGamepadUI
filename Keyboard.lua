@@ -14,6 +14,7 @@ Addon.Keyboard = Keyboard
 local Languages = Addon.Languages
 local L = Addon.L
 local Fonts = Addon.Fonts
+local Hangul = Addon.Hangul
 
 local KEY, GAP, PAD = 40, 3, 10
 
@@ -42,7 +43,7 @@ local function T(digit, chars) return { digit = digit, chars = chars, width = 11
 local function Special(name, width) return { name, width, height = 48 } end
 
 -- The least width, in pixels, of the keys of the full keyboard that are not letters. They take what their row has left.
-local MIN_KEY = { back = 80, shift = 84, clear = 72, mode = 72, close = 60, enter = 84 }
+local MIN_KEY = { back = 80, shift = 84, clear = 72, mode = 72, close = 60, enter = 84, script = 72 }
 local SPACE_WIDTH = 7 * (KEY + GAP) - GAP
 -- The accented letters of a language get a row of their own: as wide as the other rows, the keys at most this wide.
 local MAX_ACCENT = 72
@@ -54,7 +55,8 @@ local function FullRows(spec)
     local plan = {
         { letters = { "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }, right = "back" },
         { letters = spec.rows[1], left = "clear", grow = true, optional = "left" },
-        { letters = spec.rows[2], left = "mode", right = "enter", optional = "left" },
+        -- A language without phone layouts (Korean) has no key that leads to them.
+        { letters = spec.rows[2], left = not spec.fullOnly and "mode" or nil, right = "enter", optional = "left" },
         { letters = spec.rows[3], left = "shift", right = "close", optional = "right" },
     }
     local function Least(row)
@@ -65,10 +67,11 @@ local function FullRows(spec)
         return least
     end
     local width = 15 * (KEY + GAP) - GAP
-    local moved = { left = {}, right = {} }
+    -- The Korean keyboard has the 한/영 key (Hangul / Latin letters) beside the space bar.
+    local moved = { left = spec.hangul and { "script" } or {}, right = {} }
     for _, row in ipairs(plan) do
         local side = row.optional
-        if Least(row) > width and side then
+        if Least(row) > width and side and row[side] then
             moved[side][#moved[side] + 1] = row[side]
             row[side] = nil
         end
@@ -167,9 +170,12 @@ end
 function Keyboard:SetLanguage(language)
     if not Known(language) then return end
     Addon.db.keyboardLanguage = language
-    -- Polish needs another font (Fonts.lua).
+    -- Polish and Korean need another font (Fonts.lua).
     Fonts:Update()
-    if self.frame then self:Apply(self.mode) end
+    self.latin, self.compose = false, nil
+    -- The layout that was chosen (a language without phone layouts shows the full keyboard whatever it is).
+    local saved = Addon.db.keyboardMode
+    if self.frame then self:Apply((saved == "t9" or saved == "t9p" or saved == "t9h") and saved or "abc") end
     -- The word list of a WordHunterWoW add-on for the new language, if there is one.
     if Addon.WordSources then Addon.WordSources:Request(language) end
 end
@@ -380,6 +386,7 @@ local SPECIAL_LABELS = {
     clear = function() return L.clear end,
     space = function() return L.space end,
     enter = function() return L.done end,
+    script = function() return "한/영" end,
 }
 
 function Keyboard:Label(key)
@@ -395,8 +402,12 @@ function Keyboard:Label(key)
         return label and label() or key.special
     end
     if key.chars then return key.digit .. "\n" .. (self.shift and Upper(key.hint) or key.hint) end
-    if not self.shift then return key.base end
-    return SHIFTED[key.base] or Upper(key.base)
+    local language = Languages[self:Language()]
+    local base = key.base
+    -- Korean: the same keys with Latin letters while 한/영 is switched to them.
+    if language.hangul and self.latin then base = language.latin[base] or base end
+    if not self.shift then return base end
+    return SHIFTED[base] or (language.hangul and not self.latin and language.shift[base]) or Upper(base)
 end
 
 function Keyboard:Refresh()
@@ -404,6 +415,7 @@ function Keyboard:Refresh()
     for _, key in ipairs(self.keys) do
         key.text:SetText(self:Label(key))
         key.active = (key.special == "shift" and (self.shift or (pred and pred.cap))) or
+            (key.special == "script" and self.latin) or
             (key.cand and select(2, self:Candidates()) == key.cand) or false
         self:Paint(key)
     end
@@ -769,11 +781,46 @@ function Keyboard:Delete()
     local box = EditBox()
     if box then
         local before, after = TextAtCursor(box)
-        before = WithoutLastCharacter(before)
+        -- A Korean syllable still being put together loses one letter at a time (한 -> 하 -> ㅎ), as it grew.
+        local last = Languages[self:Language()].hangul and self:Composing(box) and before:match(Hangul.CHARACTER .. "$")
+        local shorter = last and Hangul.Backspace(last)
+        if shorter then
+            before = before:sub(1, #before - #last) .. shorter
+        else
+            before = WithoutLastCharacter(before)
+        end
         box:SetText(before .. after)
         box:SetCursorPosition(#before)
+        self:Remember(box)
         self:UpdateHints()
     end
+end
+
+-- Korean typing: the jamo of a syllable are put together in the chat line itself. What the keyboard last wrote there is
+-- remembered (the text, the cursor); only while the line is still exactly that does the next jamo join the last character, so
+-- text that came from anywhere else (a suggestion, a paste, the real keyboard) is never rewritten.
+function Keyboard:Remember(box)
+    self.compose = { box = box, line = box:GetText(), cursor = box:GetUTF8CursorPosition() }
+end
+
+function Keyboard:Composing(box)
+    local compose = self.compose
+    return compose ~= nil and compose.box == box and box:GetText() == compose.line
+        and box:GetUTF8CursorPosition() == compose.cursor
+end
+
+function Keyboard:TypeJamo(box, jamo)
+    local before, after = TextAtCursor(box)
+    local last = self:Composing(box) and before:match(Hangul.CHARACTER .. "$")
+    local merged = last and Hangul.Append(last, jamo)
+    if merged then
+        before = before:sub(1, #before - #last) .. merged
+    else
+        before = before .. jamo
+    end
+    box:SetText(before .. after)
+    box:SetCursorPosition(#before)
+    self:Remember(box)
 end
 
 function Keyboard:Press(key)
@@ -802,6 +849,11 @@ function Keyboard:Press(key)
         return
     elseif special == "back" then
         self:Delete()
+        return
+    elseif special == "script" then
+        -- 한/영: Hangul letters or Latin letters on the same keys.
+        self.latin, self.shift = not self.latin, false
+        self:Refresh()
         return
     elseif special == "clear" then
         local had = self:Pending() ~= ""
@@ -848,7 +900,12 @@ function Keyboard:Press(key)
         end
         box:Insert(" ")
     else
-        box:Insert(self:Label(key))
+        local label = self:Label(key)
+        if Languages[self:Language()].hangul and Hangul.IsJamo(label) then
+            self:TypeJamo(box, label)
+        else
+            box:Insert(label)
+        end
     end
     if self.shift and not special then
         self.shift = false
@@ -924,7 +981,7 @@ function Keyboard:Build(mode)
             button:SetScript("OnClick", function() self:Press(button) end)
             button:Hide()
             set.keys[#set.keys + 1] = button
-            if (phone and button.digit == "5") or button.base == "h" then set.home = button end
+            if (phone and button.digit == "5") or button.base == "h" or button.base == "ㅗ" then set.home = button end
             x = x + size + GAP
         end
         total = total + rowHeight + GAP
@@ -968,6 +1025,8 @@ function Keyboard:Build(mode)
 end
 
 function Keyboard:Apply(mode)
+    -- Korean has no phone layouts.
+    if Languages[self:Language()].fullOnly then mode = "abc" end
     -- Switching layouts: a word in progress goes to the chat line if there is one, else it is dropped.
     if self.frame and self:Pending() ~= "" and not (FindEditBox() and self:Flush(false)) then self:Discard() end
     self.mode = mode

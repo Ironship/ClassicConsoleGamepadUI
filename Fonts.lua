@@ -9,9 +9,11 @@ Addon.Fonts = Fonts
 
 local FALLBACK = "Fonts\\ARIALN.TTF"
 
--- The languages whose letters the game's font lacks.
-local WIDE_INTERFACE = { plPL = true }
-local WIDE_KEYBOARD = { PL = true }
+-- The languages whose letters the game's font lacks, and the font file each one gets: "chat" is the chat's font, a path is that
+-- file. Korean takes the game's own Korean font (Fonts\2002.TTF, which every client has: it is the font the game's font
+-- families use for Hangul), so Hangul shows whatever the client's language.
+local WIDE_INTERFACE = { plPL = "chat", koKR = "Fonts\\2002.TTF" }
+local WIDE_KEYBOARD = { PL = "chat", KO = "Fonts\\2002.TTF" }
 
 -- The copies: key -> the game's font object it copies. "ui" follows the language of the interface, "key" the keyboard's.
 local SETS = {
@@ -52,12 +54,17 @@ end
 -- Puts the wide font (or the game's own again) under a set of copies. Arial Narrow looks smaller than Friz Quadrata at the
 -- same size, so it is a little bigger.
 function Fonts:Set(set, wide)
-    local path = wide and self:WidePath() or nil
+    local path, scale = nil, 1
+    if wide == "chat" then
+        path, scale = self:WidePath(), 1.08
+    elseif wide then
+        path = wide
+    end
     for _, entry in ipairs(entries[set]) do
         local original, size, flags = entry.base:GetFont()
         local done = false
         if path and original then
-            local ok, result = pcall(entry.font.SetFont, entry.font, path, math.floor((size or 12) * 1.08 + 0.5), flags or "")
+            local ok, result = pcall(entry.font.SetFont, entry.font, path, math.floor((size or 12) * scale + 0.5), flags or "")
             done = ok and result ~= false
         end
         if not done and original then pcall(entry.font.SetFont, entry.font, original, size, flags or "") end
@@ -65,13 +72,13 @@ function Fonts:Set(set, wide)
 end
 
 function Fonts.InterfaceWide()
-    return WIDE_INTERFACE[Addon.Locales and Addon.Locales.code] == true
+    return WIDE_INTERFACE[Addon.Locales and Addon.Locales.code]
 end
 
 -- Looks at the languages in use and sets the fonts: at the start, and when the interface language or the keyboard's changes.
 function Fonts:Update()
     local interface = self.InterfaceWide()
-    local keyboard = WIDE_KEYBOARD[Addon.db and Addon.db.keyboardLanguage] == true
+    local keyboard = WIDE_KEYBOARD[Addon.db and Addon.db.keyboardLanguage]
     if self.interface ~= interface then
         self.interface = interface
         self:Set("ui", interface)
@@ -90,7 +97,7 @@ function Fonts:Debug()
     end
     Addon:Print(string.format("fonts: interface language %s (wide font: %s), keyboard language %s (wide font: %s)",
         tostring(Addon.Locales and Addon.Locales.code), tostring(self.InterfaceWide()), tostring(Addon.db and Addon.db.keyboardLanguage),
-        tostring(self.keyboard == true)))
+        tostring(self.keyboard)))
     Addon:Print("chat font (used as the wide font): " .. tostring(self:WidePath()))
     if self.object.Highlight then Addon:Print("interface font now: " .. Describe(self.object.Highlight)) end
     if self.object.Key then Addon:Print("key font now: " .. Describe(self.object.Key)) end

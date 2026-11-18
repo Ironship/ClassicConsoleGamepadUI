@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.82"
+Addon.version = "0.1.0-alpha.83"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
@@ -462,7 +462,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
                 or (mode == "tap" and "t9" or mode))
             Addon.Keyboard:Show(false)
         elseif mode and #mode == 2 and Addon.Languages[mode:upper()] then
-            -- /cgp keyboard en | de | pl | fr | es | it | pt: the language the keyboard types in.
+            -- /cgp keyboard en | de | pl | fr | es | it | pt | ko: the language the keyboard types in.
             Addon.Keyboard:SetLanguage(mode:upper())
         else
             Addon.Keyboard:Toggle()
@@ -479,7 +479,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         Addon.Fonts:Debug()
         return
     elseif command == "language" or command == "lang" then
-        -- /cgp language en | de | pl | fr | es | it | pt | auto: the language of the interface.
+        -- /cgp language en | de | pl | fr | es | it | pt | ko | auto: the language of the interface.
         local wanted = input:lower():match("^%s*%S+%s+(%S+)") or ""
         local chosen = wanted == "auto" and "auto" or nil
         for _, code in ipairs(Addon.Locales.order) do
@@ -489,7 +489,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             Addon.db.language = chosen
             Addon.Options:Changed("language")
         else
-            Addon:Print("/cgp language en | de | pl | fr | es | it | pt | auto")
+            Addon:Print("/cgp language en | de | pl | fr | es | it | pt | ko | auto")
         end
         return
     elseif command == "on" or command == "off" then
