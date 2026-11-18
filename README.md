@@ -32,9 +32,9 @@ Version 0.1.0-alpha.81. Alpha: expect bugs as blizzard i still activly changes b
 *   Show or hide the left and right gryphons, in the settings or in Edit Mode.
 *   Move the gamepad legend (the button hints) in Edit Mode, and choose whether it has a frame and how dark it is.
 *   Party portraits (and the pet, assist target and focus) on the targeting bar you open with L1 and the D-pad.
-*   On-screen keyboard for chat, for the controller and the mouse: a normal keyboard or a phone-style T9 keypad, both with word suggestions. English, German, Polish, French, Spanish, Italian and Portuguese.
+*   On-screen keyboard for chat, for the controller and the mouse: a normal keyboard or a phone-style T9 keypad, both with word suggestions. English, German, Polish, French, Spanish, Italian, Portuguese and Korean (a two-set Hangul keyboard that builds the syllables as you type).
 *   Settings window with tabs, also usable with the controller.
-*   Settings, hints and keyboard in English, German, Polish, French, Spanish, Italian or Portuguese. You choose the language, English is the default.
+*   Settings, hints and keyboard in English, German, Polish, French, Spanish, Italian, Portuguese or Korean. You choose the language, English is the default.
 *   Controller button hints in micro menu tooltips.
 *   Easy item deletion: X, X, A, A.
 *   Chat, controller legend and micro menu position options, or hide the micro menu.
@@ -57,7 +57,7 @@ The game has no on-screen keyboard of its own, so the addon has one. Open the ch
 *   T9 has three modes: Tap (press a key again for the next letter), Smart (press each key once and pick the word from the suggestions) and Hybrid (tap the letters and the suggestions finish the word, the default).
 *   A space key and Y end a word with a space, so you can type whole sentences.
 *   The suggestions learn the words you write, so they get better the longer you use the keyboard (a button in the Keyboard tab resets what was learned). They also learn from the chat you read and from quest texts. If English Quest Panel or a WordHunterWoW dictionary is installed, its words are suggested too.
-*   Languages: English, German, Polish, French, Spanish, Italian, Portuguese.
+*   Languages: English, German, Polish, French, Spanish, Italian, Portuguese, Korean.
 *   `/cgp keyboard` shows or hides it. A setting opens it automatically when you start typing in chat, and another one makes it see-through.
 *   If you do not want it, a setting in the Keyboard tab turns the keyboard off completely.
 

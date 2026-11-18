@@ -69,7 +69,7 @@ local function Row(letters)
     return Languages.Characters(letters)
 end
 
-Languages.order = { "EN", "DE", "PL", "FR", "ES", "IT", "PT" }
+Languages.order = { "EN", "DE", "PL", "FR", "ES", "IT", "PT", "KO" }
 
 Languages.EN = {
     name = "English", layout = "QWERTY",
@@ -185,6 +185,33 @@ Languages.PT = {
         .. "druida bruxo humano anão gnomo elfo orc troll tauren morto jogo jogador você então até só",
 }
 
+-- Korean: the standard two-set layout (두벌식), where each key carries one jamo and Shift gives the doubled consonants and the
+-- two vowels with a ㅣ. The jamo are put together into syllables as they are typed (Hangul.lua). `latin` is what the same keys
+-- type with the 한/영 key switched to Latin letters (for commands such as /invite). The phone layouts have no Korean keypad,
+-- so Korean has the full keyboard only (`fullOnly`).
+Languages.KO = {
+    name = "한국어 (Korean)", layout = "두벌식", hangul = true, fullOnly = true,
+    rows = { Row("ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔ[]\\"), Row("ㅁㄴㅇㄹㅎㅗㅓㅏㅣ;'"), Row("ㅋㅌㅊㅍㅠㅜㅡ,./") },
+    phone = {},
+    shift = { ["ㅂ"] = "ㅃ", ["ㅈ"] = "ㅉ", ["ㄷ"] = "ㄸ", ["ㄱ"] = "ㄲ", ["ㅅ"] = "ㅆ", ["ㅐ"] = "ㅒ", ["ㅔ"] = "ㅖ" },
+    latin = { ["ㅂ"] = "q", ["ㅈ"] = "w", ["ㄷ"] = "e", ["ㄱ"] = "r", ["ㅅ"] = "t", ["ㅛ"] = "y", ["ㅕ"] = "u", ["ㅑ"] = "i",
+        ["ㅐ"] = "o", ["ㅔ"] = "p", ["ㅁ"] = "a", ["ㄴ"] = "s", ["ㅇ"] = "d", ["ㄹ"] = "f", ["ㅎ"] = "g", ["ㅗ"] = "h",
+        ["ㅓ"] = "j", ["ㅏ"] = "k", ["ㅣ"] = "l", ["ㅋ"] = "z", ["ㅌ"] = "x", ["ㅊ"] = "c", ["ㅍ"] = "v", ["ㅠ"] = "b",
+        ["ㅜ"] = "n", ["ㅡ"] = "m" },
+    seeds = "안녕 안녕하세요 안녕히 감사합니다 고맙습니다 고마워요 고마워 감사 네 예 응 아니요 아니 좋아요 좋아 괜찮아요 괜찮아 "
+        .. "미안해요 미안합니다 죄송합니다 죄송해요 잠시만요 잠깐만 기다려요 기다려 준비 준비됐어요 준비됐나요 가요 갑시다 "
+        .. "가자 파티 길드 던전 레이드 퀘스트 같이 함께 도와주세요 도움 구해요 구합니다 찾아요 찾습니다 초대 초대해주세요 "
+        .. "가입 힐러 탱커 딜러 사냥 보스 레벨 골드 은화 동화 가방 은행 우편 경매 상인 수리 비행 포탈 소환 탈것 특성 직업 "
+        .. "도적 마법사 사제 성기사 전사 사냥꾼 주술사 드루이드 흑마법사 인간 드워프 노움 나이트엘프 오크 트롤 타우렌 언데드 "
+        .. "오늘 내일 어제 지금 나중에 빨리 천천히 여기 거기 저기 우리 너 나 저 그 이 것 뭐 누구 어디 언제 어떻게 왜 "
+        .. "있어요 없어요 해요 하세요 합니다 입니다 이에요 예요 맞아요 알겠어요 알겠습니다 모르겠어요 수고하셨습니다 "
+        .. "수고했어요 고생했어요 축하해요 축하합니다 대박 ㅋㅋ ㅋㅋㅋ ㅎㅎ ㅠㅠ 화이팅 파이팅 잘했어요 잘가요 또 봐요 다음에 "
+        .. "먼저 갈게요 잠수 자리비움 곧 돌아올게요 최고 정말 진짜 너무 많이 조금 아주 그리고 그런데 하지만 그래서 근데 이거 "
+        .. "그거 저거 사요 팔아요 얼마예요 가격 템 아이템 장비 무기 방어구 물약 음식 물 마나 체력 쉬어요 버프 풀링 어그로 "
+        .. "죽었어요 부활 사망 시작 끝 가능 불가능 필요 원해요 팔아 모집 파티원 공격대 공대 점수 막타 주사위 "
+        .. "입찰 돌아가요 출발 도착 잠수중 접속 종료 렉 버그 점검 서버 대기열",
+}
+
 -- A language code the keyboard knows, else English.
 function Languages.Valid(code)
     for _, known in ipairs(Languages.order) do
@@ -214,6 +241,7 @@ end
 -- True when a (lowercase) word only uses letters this language types: a word with an accent the language has no key for
 -- belongs to another language, and is left out of its suggestions.
 function Languages.Fits(code, word)
+    if Languages[code].hangul then return Addon.Hangul.Fits(word) end
     if not word:find("[\128-\255]") then return true end
     local letters = Languages[code].letters
     for character in word:gmatch("[\194-\244][\128-\191]*") do

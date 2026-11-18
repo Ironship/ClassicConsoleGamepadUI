@@ -29,13 +29,23 @@ local SEEN_STEP, SEEN_CAP = 4, 12
 local LN2 = math.log(2)
 
 -- The keyboard language the game's own language corresponds to.
-local CLIENT = { enUS = "EN", enGB = "EN", deDE = "DE", frFR = "FR", esES = "ES", esMX = "ES", itIT = "IT", ptBR = "PT" }
+local CLIENT = { enUS = "EN", enGB = "EN", deDE = "DE", frFR = "FR", esES = "ES", esMX = "ES", itIT = "IT", ptBR = "PT",
+    koKR = "KO" }
 function Words.ClientLanguage()
     return CLIENT[GetLocale and GetLocale() or "enUS"] or "EN"
 end
 
--- Lowercase, and the digit sequence of the word on a phone keypad; nil when it holds anything but letters.
+-- Lowercase, and the digit sequence of the word on a phone keypad; nil when it holds anything but letters. For Korean (no
+-- phone keypad) the word stays as it is and the second value is its list of jamo (Hangul.lua), which is what a typed prefix
+-- is compared with: a half-finished last syllable (안녕ㅎ) still leads to 안녕하세요.
+local MAX_HANGUL = 36
 function Words.Normalize(word)
+    local current = Words.language and Languages[Words.language]
+    if current and current.hangul then
+        local key = Addon.Hangul.Key(word)
+        if not key or #word > MAX_HANGUL then return end
+        return word, key
+    end
     word = Languages.Lower(word)
     local digits = {}
     for character in word:gmatch(CHARACTER) do
@@ -237,13 +247,22 @@ end
 function Words:Prefix(prefix, limit)
     self:Load()
     limit = limit or 5
-    local word = self.Normalize(prefix)
+    local word, key = self.Normalize(prefix)
     if not word then return {} end
     local found, seen = {}, {}
-    for known in pairs(self.known) do
-        if #known > #word and known:sub(1, #word) == word then
-            seen[known] = true
-            found[#found + 1] = known
+    if Languages[self.language].hangul then
+        for known, knownKey in pairs(self.known) do
+            if #knownKey > #key and knownKey:sub(1, #key) == key then
+                seen[known] = true
+                found[#found + 1] = known
+            end
+        end
+    else
+        for known in pairs(self.known) do
+            if #known > #word and known:sub(1, #word) == word then
+                seen[known] = true
+                found[#found + 1] = known
+            end
         end
     end
     local lexicon = self:Lexicon()
