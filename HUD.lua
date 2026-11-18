@@ -565,13 +565,16 @@ end
 -- brings it, before the screen is drawn), in combat too. Cheap: a handful of child rectangles per frame, and only then.
 function HUD:WatchLegend()
     local watcher = CreateFrame("Frame")
-    watcher:SetScript("OnUpdate", function()
+    local function Watch()
         if self.legendWanted and not self.legendDragging and GrowsUp(self:SavedLegendSpot()) then
             self:RefreshLegend(true)
         end
         -- A new set of hints shows with the game's art: it gets the frame and shade options before it is drawn.
         if self.legendStyled then self:ApplyLegendStyle() end
-    end)
+    end
+    -- Kept for /cgp perf (Perf.lua), which swaps the handler for a timed one.
+    self.legendWatcher, self.legendWatchHandler = watcher, Watch
+    watcher:SetScript("OnUpdate", Watch)
 end
 
 function HUD:Observe()

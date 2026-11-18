@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.82
+
+- New `/cgp perf`, to find out where the addon's time goes. The game's own addon profiler gives one number for the whole addon; this times the refresh the addon makes ten times a second and each step inside it (the HUD, the layout, the bar slots, the input layer, the taint checks), the legend watcher that runs on every frame, and the frame time itself. `/cgp perf on` starts collecting, `/cgp perf` prints the table (calls, average, maximum and total milliseconds, how many calls took over 1 ms and over 5 ms, how much of it in combat) and the frames over 33, 50 and 100 ms with how many of them had 5 ms or more of this addon's time in them, `/cgp perf slow` lists the slowest single calls and frames, `/cgp perf off` stops and `/cgp perf reset` starts again. Nothing is installed until the first use. In a first run in the game (51 s, 18 s of them in combat, 137 fps) there was no frame over 50 ms and the addon took about 6% of one core, mostly the bar slots' redraw (2.2 ms per refresh) and the legend's frame and shade update (0.2 ms per frame), so the addon was not the cause of the stutter that was suspected. Not optimised yet.
+
 ## 0.1.0-alpha.81
 
 - The settings window is rebuilt to look and work like the settings of UsefulPlatesAndTooltips, and its tabs now follow what you want to do instead of where an option happened to land. **Bars** (layout, gryphons and the frames the layout places), **Controls** (the keys of the bar slots and the shortcuts to the game's own pages), **Prompts** (button glyphs and the gamepad legend), **Interface** (micro menu, chat, item deletion) and **Keyboard** (the on-screen keyboard and its word suggestions) replace General, Hints, Chat, Keyboard and Tools.
