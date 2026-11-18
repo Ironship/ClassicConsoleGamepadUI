@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-alpha.84
+
+- **"Share the keyboard's action bars" is off by default.** A fresh installation starts with the controller's own action bars, as the game does it; turn the setting on in the settings window to put the keyboard bars on the controller buttons. Settings that were saved are kept, so nobody who already uses it loses it.
+
 ## 0.1.0-alpha.83
 
 - Korean (한국어), both as an interface language and as a typing language of the on-screen keyboard.

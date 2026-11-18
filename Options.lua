@@ -10,7 +10,7 @@ local controls = {
     { key = "compact", default = true },
     { key = "groupBoth", default = false },
     { key = "crossFirst", default = false },
-    { key = "padKeyboard", default = true },
+    { key = "padKeyboard", default = false },
     { key = "attackStart", default = false },
     { key = "moveUnitFrames", default = false },
     -- The stock frames the classic layout places (Layout.lua PLACED, PlaceTotemBar). Off: Edit Mode places them.
@@ -139,7 +139,7 @@ function Options:InitializeDefaults()
     local db = Addon.db
     -- Every earlier version set hybridDefault, so a saved variables file without "padKeyboard" that has it is an installation
     -- from before that setting: it stays off there (the controller's own bar layout stays what it was) until the player
-    -- turns it on. A new installation gets the default.
+    -- turns it on. Off is the default for a new installation too; a value that was saved is kept.
     local existing = db.hybridDefault ~= nil
     db.keyboardLanguage = Addon.Languages.Valid(db.keyboardLanguage)
     -- English, unless the player chose another language (or the game's).
