@@ -201,7 +201,7 @@ local function Tabs()
             { "control", "wheelCameraOnly" }, { "choice", "wheelBlock", "wheels" },
             { "wheelkey", 1 }, { "wheelkey", 2 }, { "wheelkey", 3 }, { "wheelkey", 4 }, { "wheelkey", 5 },
             { "control", "wheelDynamic" },
-            { "choice", "wheelDynFood", "wheelDynamic" }, { "choice", "wheelDynUse", "wheelDynamic" }, { "choice", "wheelDynProf", "wheelDynamic" },
+            { "choice", "wheelDynFood", "wheelDynamic" }, { "choice", "wheelDynUse", "wheelDynamic" }, { "choice", "wheelDynProf", "wheelDynamic" }, { "choice", "wheelDynPet", "wheelDynamic" },
             { "button", "wheelsEdit", "btnOpen", "wheelsEditTip", function() Addon.Wheels:Toggle() end, "wheels" },
             { "button", "wheelsClear", "btnReset", "wheelsClearTip", Confirmed(function() Addon.Wheels:ClearAll() end), "wheels" },
             { "header", "secAssign", "secAssignNote" },

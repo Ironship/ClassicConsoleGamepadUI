@@ -16,8 +16,8 @@ local CAPACITY = 12
 local WHEELS = 5
 local MAX_WRITES = 24     -- changes to the bars in one run, the rest follows in the next
 local DELAY = 1           -- seconds the bags are left to settle after a change
-local CATEGORIES = { "food", "use", "prof" }
-local SETTING = { food = "wheelDynFood", use = "wheelDynUse", prof = "wheelDynProf" }
+local CATEGORIES = { "food", "use", "prof", "pet" }
+local SETTING = { food = "wheelDynFood", use = "wheelDynUse", prof = "wheelDynProf", pet = "wheelDynPet" }
 
 -- Item class and subclass numbers of the game (Consumable 0 with the subclasses below; Quest 12; Miscellaneous 15).
 local CONSUMABLE, QUEST, MISC = 0, 12, 15
@@ -176,6 +176,96 @@ function Dynamic:Wanted(category)
     return WantedItems(category)
 end
 
+-- One slot of the pet action bar (1..NUM_PET_ACTION_SLOTS) as a live entry, or nil when no pet bar is active or the slot is empty.
+function Dynamic.PetActionEntry(index)
+    if type(index) ~= "number" or index < 1 then return nil end
+    if type(PetHasActionBar) ~= "function" or not PetHasActionBar() then return nil end
+    if type(GetPetActionInfo) ~= "function" then return nil end
+    local ok, name, texture, isToken, isActive, _, _, spellID = pcall(GetPetActionInfo, index)
+    if not ok or not name then return nil end
+    local displayName = (isToken and type(_G[name]) == "string" and _G[name]) or name
+    local icon = (isToken and _G[texture]) or texture
+    local usable = true
+    if type(GetPetActionSlotUsable) == "function" then
+        local uok, u = pcall(GetPetActionSlotUsable, index)
+        if uok then usable = u ~= false end
+    end
+    return {
+        kind = "pet",
+        index = index,
+        name = displayName,
+        rawName = name,
+        icon = icon,
+        isActive = isActive == true,
+        usable = usable,
+        spellID = type(spellID) == "number" and spellID or nil,
+    }
+end
+
+-- Live list of pet commands and active pet spells (up to 12): non-empty pet bar slots first, then any extra active spells from
+-- the pet spellbook that are not already on the pet bar.
+function Dynamic.PetEntries()
+    local entries = {}
+    if type(PetHasActionBar) ~= "function" or not PetHasActionBar() then return entries end
+    local seenSpellID, seenName = {}, {}
+    local slots = (type(NUM_PET_ACTION_SLOTS) == "number" and NUM_PET_ACTION_SLOTS) or 10
+    for i = 1, slots do
+        local entry = Dynamic.PetActionEntry(i)
+        if entry then
+            entries[#entries + 1] = entry
+            if entry.spellID then seenSpellID[entry.spellID] = true end
+            if entry.name then seenName[entry.name] = true end
+            if entry.rawName then seenName[entry.rawName] = true end
+        end
+    end
+    if #entries >= CAPACITY then return entries end
+    local petCount
+    if C_SpellBook and type(C_SpellBook.HasPetSpells) == "function" then
+        local ok, n = pcall(C_SpellBook.HasPetSpells)
+        if ok and type(n) == "number" then petCount = n end
+    elseif type(HasPetSpells) == "function" then
+        local ok, n = pcall(HasPetSpells)
+        if ok and type(n) == "number" then petCount = n end
+    end
+    local book = C_SpellBook
+    if petCount and petCount > 0 and type(book) == "table" and type(book.GetSpellBookItemInfo) == "function" then
+        local petBank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Pet) or 1
+        local extraOrder, extraByName = {}, {}
+        for i = 1, petCount do
+            local ok, item = pcall(book.GetSpellBookItemInfo, i, petBank)
+            if ok and type(item) == "table" and type(item.spellID) == "number"
+                and not (Enum and Enum.SpellBookItemType and item.itemType == Enum.SpellBookItemType.Flyout) then
+                local passive = item.isPassive
+                if passive == nil and C_Spell and type(C_Spell.IsSpellPassive) == "function" then
+                    local pok, p = pcall(C_Spell.IsSpellPassive, item.spellID)
+                    if pok then passive = p end
+                end
+                if not passive then
+                    local spellName = item.name
+                    if (not spellName or spellName == "") and C_Spell and C_Spell.GetSpellInfo then
+                        local iok, info = pcall(C_Spell.GetSpellInfo, item.spellID)
+                        if iok and type(info) == "table" then spellName = info.name end
+                    end
+                    if spellName and spellName ~= "" and not seenSpellID[item.spellID] and not seenName[spellName] then
+                        if not extraByName[spellName] then extraOrder[#extraOrder + 1] = spellName end
+                        local icon = item.iconID
+                        if not icon and C_Spell and C_Spell.GetSpellTexture then
+                            local tok, tex = pcall(C_Spell.GetSpellTexture, item.spellID)
+                            if tok then icon = tex end
+                        end
+                        extraByName[spellName] = { kind = "spell", id = item.spellID, name = spellName, icon = icon, usable = true }
+                    end
+                end
+            end
+        end
+        for _, spellName in ipairs(extraOrder) do
+            if #entries >= CAPACITY then break end
+            entries[#entries + 1] = extraByName[spellName]
+        end
+    end
+    return entries
+end
+
 -- ---------------------------------------------------------------------------------------------
 -- Writing to the bars
 -- ---------------------------------------------------------------------------------------------
@@ -250,8 +340,20 @@ function Dynamic:Run(report)
     local _, ready = BagItems()
     for wheel = 1, WHEELS do
         local category = self:CategoryOf(wheel)
+        if category == "pet" then
+            if Addon.Wheels and Addon.Wheels.SyncPet then Addon.Wheels:SyncPet() end
+            if report then
+                local entries = Dynamic.PetEntries()
+                local names = {}
+                for slot = 1, math.min(#entries, CAPACITY) do
+                    local e = entries[slot]
+                    names[#names + 1] = slot .. "=" .. (e.kind == "pet" and ("pet:" .. e.index) or ("spell:" .. tostring(e.id)))
+                end
+                lines[#lines + 1] = string.format("wheel %d (bar %d): pet, %d entries: %s", wheel, wheel + 3, #entries,
+                    #names > 0 and table.concat(names, " ") or "nothing")
+            end
         -- Bags that are not there yet (just after logging in) would make an empty wheel: wait for them.
-        if category and (category == "prof" or ready) then
+        elseif category and (category == "prof" or ready) then
             local wanted = self:Wanted(category)
             if wanted then
                 local changed, plan = self:Fill(wheel, wanted, budget)
@@ -308,10 +410,11 @@ function Dynamic:Observe()
     local frame = CreateFrame("Frame")
     self.frame = frame
     for _, event in ipairs({ "BAG_UPDATE_DELAYED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED", "PLAYER_REGEN_ENABLED",
-        "CURSOR_CHANGED", "ITEM_DATA_LOAD_RESULT", "PLAYER_ENTERING_WORLD" }) do
+        "CURSOR_CHANGED", "ITEM_DATA_LOAD_RESULT", "PLAYER_ENTERING_WORLD", "PET_BAR_UPDATE", "UNIT_PET", "PET_UI_UPDATE" }) do
         pcall(frame.RegisterEvent, frame, event)
     end
-    frame:SetScript("OnEvent", function(_, event)
+    frame:SetScript("OnEvent", function(_, event, unit)
+        if event == "UNIT_PET" and unit ~= "player" then return end
         -- The cursor is only interesting when a run was held back by it.
         if event == "CURSOR_CHANGED" and not (self.dirty and GetCursorInfo() == nil) then return end
         self:Request(event == "PLAYER_ENTERING_WORLD" and 3 or nil)

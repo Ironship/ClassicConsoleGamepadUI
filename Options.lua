@@ -28,6 +28,7 @@ local controls = {
     { key = "wheelDynFood", default = 3, parent = "wheelDynamic", choice = true },
     { key = "wheelDynUse", default = 4, parent = "wheelDynamic", choice = true },
     { key = "wheelDynProf", default = 5, parent = "wheelDynamic", choice = true },
+    { key = "wheelDynPet", default = 0, parent = "wheelDynamic", choice = true },
     { key = "wheelKeep", default = 800, min = 200, max = 3000, step = 100, parent = "wheels" },
     { key = "wheelsDock", default = true, parent = "wheels" },
     { key = "wheelsDockAlways", default = false, parent = "wheelsDock" },
@@ -116,9 +117,10 @@ Options.choices = {
     wheelDynFood = { { 0, nil, "dynOff" }, { 1, nil, "dynWheel1" }, { 2, nil, "dynWheel2" }, { 3, nil, "dynWheel3" },
         { 4, nil, "dynWheel4" }, { 5, nil, "dynWheel5" } },
 }
--- The three kinds of dynamic wheel offer the same wheels.
+-- The kinds of dynamic wheel offer the same wheels.
 Options.choices.wheelDynUse = Options.choices.wheelDynFood
 Options.choices.wheelDynProf = Options.choices.wheelDynFood
+Options.choices.wheelDynPet = Options.choices.wheelDynFood
 
 -- A setting was changed in the settings window (its value is already in the database).
 function Options:Changed(key)

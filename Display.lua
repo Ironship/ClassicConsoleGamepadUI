@@ -137,6 +137,11 @@ local function CreateSlot(parent, template)
     slot.Count = labels:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     if template.Count then slot.Count:SetFont(template.Count:GetFont()) end
     slot.Count:SetPoint("BOTTOMRIGHT", -5, 5)
+    slot.FlyoutArrow = labels:CreateTexture(nil, "OVERLAY", nil, 2)
+    slot.FlyoutArrow:SetSize(15, 6)
+    slot.FlyoutArrow:SetPoint("TOP", slot, "TOP", 0, 5)
+    if slot.FlyoutArrow.SetAtlas then slot.FlyoutArrow:SetAtlas("UI-HUD-ActionBar-Flyout", false) end
+    slot.FlyoutArrow:Hide()
     slot.Checked = StockTexture(labels, template:GetCheckedTexture(), template)
     slot.Pushed = StockTexture(labels, template:GetPushedTexture(), template)
     slot.Glow = StockTexture(labels, template.SpellHighlightTexture or template:GetHighlightTexture(), template, "OVERLAY")
@@ -659,6 +664,67 @@ end
 -- Remembers what the controller storage holds when the action editor opens, after making the storage a copy of the keyboard
 -- bars (the editor shows, picks up and clears what is in it, so it has to hold what the bars hold). Both ways: what the
 -- keyboard bars have goes to the editor now, what the editor changed goes back to them when it closes (SyncEditor).
+local function PickupFlyout(flyoutID)
+    if not flyoutID or not C_SpellBook or not C_SpellBook.GetNumSpellBookSkillLines or not Enum or not Enum.SpellBookSpellBank then
+        return
+    end
+    local bank = Enum.SpellBookSpellBank.Player
+    local flyoutType = Enum.SpellBookItemType and Enum.SpellBookItemType.Flyout
+    if not flyoutType then return end
+    local lines = C_SpellBook.GetNumSpellBookSkillLines() or 0
+    for line = 1, lines do
+        local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+        if info and info.itemIndexOffset and info.numSpellBookItems then
+            for i = 1, info.numSpellBookItems do
+                local idx = info.itemIndexOffset + i
+                local item = C_SpellBook.GetSpellBookItemInfo(idx, bank)
+                if item and item.itemType == flyoutType and item.actionID == flyoutID then
+                    C_SpellBook.PickupSpellBookItem(idx, bank)
+                    return
+                end
+            end
+        end
+    end
+end
+
+-- Resolves known spells inside a Blizzard SpellFlyout (highest known rank per spell name), plus single/active spell IDs.
+function Addon.FlyoutSpells(flyoutID)
+    if not flyoutID or not GetFlyoutInfo or not GetFlyoutSlotInfo then return {}, nil, nil, nil end
+    local ok, name, _, numSlots, isKnown = pcall(GetFlyoutInfo, flyoutID)
+    if not ok or not isKnown or not numSlots or numSlots <= 0 then return {}, nil, nil, ok and name or nil end
+    local spells, byName = {}, {}
+    local active
+    for i = 1, numSlots do
+        local sok, spellID, overrideSpellID, slotKnown, spellName = pcall(GetFlyoutSlotInfo, flyoutID, i)
+        if sok and slotKnown and spellID then
+            local petSkip = false
+            if GetCallPetSpellInfo then
+                local pok, petIndex, petName = pcall(GetCallPetSpellInfo, spellID)
+                if pok and petIndex and (not petName or petName == "") then petSkip = true end
+            end
+            if not petSkip then
+                local castID = overrideSpellID or spellID
+                local key = spellName or castID
+                local idx = byName[key]
+                local entry = { id = castID, base = spellID, name = spellName }
+                if idx then
+                    spells[idx] = entry
+                else
+                    idx = #spells + 1
+                    byName[key] = idx
+                    spells[idx] = entry
+                end
+                if not active and C_Spell and C_Spell.IsActiveSpell then
+                    local aok, isAct = pcall(C_Spell.IsActiveSpell, castID)
+                    if aok and isAct then active = castID end
+                end
+            end
+        end
+    end
+    local single = #spells == 1 and spells[1].id or nil
+    return spells, single, active, name
+end
+
 -- Puts a copy of the action in `slot` on the cursor, for the kinds of action that can be picked up again.
 local function PickupCopy(slot)
     local kind, id = GetActionInfo(slot)
@@ -670,6 +736,8 @@ local function PickupCopy(slot)
         C_Item.PickupItem(id)
     elseif kind == "macro" then
         PickupMacro(id)
+    elseif kind == "flyout" then
+        PickupFlyout(id)
     end
     return GetCursorInfo() ~= nil
 end
@@ -1072,6 +1140,7 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
         slot.Checked:Hide()
         slot.Pushed:Hide()
         slot.Glow:Hide()
+        if slot.FlyoutArrow then slot.FlyoutArrow:Hide() end
         slot.Cooldown:Clear()
         if slot.Overlay then slot.Overlay:Hide() end
         for _, glyph in ipairs(slot.Modifiers) do glyph:Hide() end
@@ -1113,6 +1182,18 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
     slot.Pushed:SetShown((slot.inputButton and slot.inputButton:GetAttribute("cgppressed") == true) or self.pressed[source] == true
         or (source.GetButtonState and source:GetButtonState() == "PUSHED") or false)
     slot.Glow:SetShown((active and Addon.db.highlightActive) or slot.bindingHighlight == true)
+    if slot.FlyoutArrow then
+        local isFlyout = (source.Arrow and RegionShown(source.Arrow)) or false
+        if not isFlyout and action and Readable(action) then
+            local ok, kind = pcall(GetActionInfo, action)
+            isFlyout = ok and kind == "flyout"
+        end
+        slot.FlyoutArrow:SetShown(isFlyout)
+        if isFlyout and SetClampedTextureRotation then
+            local open = (source.IsPopupOpen and source:IsPopupOpen()) or false
+            SetClampedTextureRotation(slot.FlyoutArrow, open and 180 or 0)
+        end
+    end
     -- Contextual bars can add a second icon (e.g. a mark over a target portrait).
     if source.IconOverlay and source.IconOverlay:IsShown() then
         if not slot.Overlay then slot.Overlay = Texture(slot.Labels, "ARTWORK"); slot.Overlay:SetAllPoints(slot.Icon) end

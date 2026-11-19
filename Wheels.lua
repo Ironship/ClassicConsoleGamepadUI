@@ -87,10 +87,10 @@ function Wheels:Get(wheel, slot)
     if Filled(action) then return action end
 end
 
--- The name and the icon of what an action slot holds.
+-- The name, icon and flyout flag of what an action slot holds.
 local function Describe(action)
     if type(action) ~= "number" then return end
-    local name
+    local name, icon, isFlyout
     pcall(function()
         local kind, id = GetActionInfo(action)
         if kind == "spell" then
@@ -98,11 +98,31 @@ local function Describe(action)
             name = type(info) == "table" and info.name or (GetSpellInfo and (GetSpellInfo(id)))
         elseif kind == "item" then
             name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+        elseif kind == "flyout" then
+            isFlyout = true
+            local spells, single, active, flyName
+            if Addon.FlyoutSpells then spells, single, active, flyName = Addon.FlyoutSpells(id) end
+            if single then
+                local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(single)
+                name = type(info) == "table" and info.name or (spells and spells[1] and spells[1].name) or flyName
+            else
+                name = flyName
+            end
+            local showID = single or active
+            if showID and C_Spell and C_Spell.GetSpellTexture then
+                icon = C_Spell.GetSpellTexture(showID)
+            end
+            if not icon and C_Flyout and C_Flyout.GetFlyoutTexture then
+                icon = C_Flyout.GetFlyoutTexture(id)
+            end
         end
         name = name or GetActionText(action) or (kind and tostring(kind))
     end)
-    local ok, icon = pcall(GetActionTexture, action)
-    return name or tostring(action), ok and icon or 134400
+    if not icon then
+        local ok, tex = pcall(GetActionTexture, action)
+        icon = ok and tex or 134400
+    end
+    return name or tostring(action), icon or 134400, isFlyout == true
 end
 
 -- DoesItDiePlus (UsefulPlatesAndTooltips) draws the damage of spells and the healing of consumables on action buttons. Its public
@@ -125,10 +145,152 @@ function Wheels:SetNumbers(frames, on)
     end
 end
 
--- Something changed on the bars (a drop here, a drag on a bar, the spellbook): the slots on the screen are drawn again.
+-- Something changed on the bars (a drop here, a drag on a bar, the spellbook, the pet bar): the slots on the screen are drawn
+-- again, and cached flyout / pet attributes on the secure layer are refreshed outside combat.
 local watcher = CreateFrame("Frame")
-watcher:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
-watcher:SetScript("OnEvent", function() Wheels.stale = true end)
+for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "SPELLS_CHANGED", "SPELL_FLYOUT_UPDATE", "PLAYER_REGEN_ENABLED",
+    "PET_BAR_UPDATE", "UNIT_PET", "PET_UI_UPDATE", "PET_BAR_UPDATE_USABLE" }) do
+    pcall(watcher.RegisterEvent, watcher, event)
+end
+watcher:SetScript("OnEvent", function(_, event, unit)
+    if event == "UNIT_PET" and unit ~= "player" then return end
+    Wheels.stale = true
+    if event == "ACTIONBAR_SLOT_CHANGED" or event == "SPELLS_CHANGED" or event == "SPELL_FLYOUT_UPDATE" or event == "PLAYER_REGEN_ENABLED" then
+        Wheels.flyoutsDirty = true
+    end
+    if event == "PET_BAR_UPDATE" or event == "UNIT_PET" or event == "PET_UI_UPDATE" or event == "SPELLS_CHANGED" or event == "PLAYER_REGEN_ENABLED" then
+        Wheels.petDirty = true
+    end
+    if not InCombatLockdown() then
+        if Wheels.flyoutsDirty then Wheels:SyncFlyouts() end
+        if Wheels.petDirty then Wheels:SyncPet() end
+    end
+end)
+
+function Wheels:IsPetWheel(wheel)
+    return wheel ~= nil and Addon.Dynamic ~= nil and Addon.Dynamic:CategoryOf(wheel) == "pet"
+end
+
+-- Live entry for one slot of a pet dynamic wheel. Reads the secure layer's exact petact/petspell mapping when present so HUD and
+-- combat execution always stay in lockstep, even if a pet is summoned or dismissed mid-combat.
+function Wheels:PetSlot(wheel, slot)
+    if not self:IsPetWheel(wheel) then return nil end
+    local dynamic = Addon.Dynamic
+    if not dynamic then return nil end
+    local layer = self.layer
+    if layer and layer:GetAttribute("petmode" .. wheel) then
+        local petAct = layer:GetAttribute("petact" .. wheel .. "_" .. slot)
+        if petAct then return dynamic.PetActionEntry and dynamic.PetActionEntry(petAct) or nil end
+        local petSpell = layer:GetAttribute("petspell" .. wheel .. "_" .. slot)
+        if petSpell then
+            if type(PetHasActionBar) == "function" and not PetHasActionBar() then return nil end
+            local spellID = layer:GetAttribute("petspellid" .. wheel .. "_" .. slot)
+            local icon
+            if spellID and C_Spell and C_Spell.GetSpellTexture then
+                local ok, tex = pcall(C_Spell.GetSpellTexture, spellID)
+                if ok then icon = tex end
+            end
+            return { kind = "spell", id = spellID, name = petSpell, icon = icon, usable = true }
+        end
+        return nil
+    end
+    local entries = dynamic.PetEntries and dynamic.PetEntries()
+    return entries and entries[slot] or nil
+end
+
+-- Populates petmode / petact / petspell attributes on the secure wheel layer so pet commands and extra pet spells execute in
+-- combat with zero taint via SecureActionButtonTemplate's native "pet" (CastPetAction) and "spell" (CastSpellByName) types.
+function Wheels:SyncPet()
+    local layer = self.layer
+    if not layer or InCombatLockdown() then
+        self.petDirty = true
+        return
+    end
+    local dynamic = Addon.Dynamic
+    local petEntries
+    local petSlots = (type(NUM_PET_ACTION_SLOTS) == "number" and NUM_PET_ACTION_SLOTS) or 10
+    for wheel = 1, COUNT do
+        local isPet = self:IsPetWheel(wheel)
+        local wasPet = layer:GetAttribute("petmode" .. wheel) == true
+        if isPet then
+            if not wasPet then layer:SetAttribute("petmode" .. wheel, true) end
+            if petEntries == nil then
+                petEntries = dynamic and dynamic.PetEntries and dynamic.PetEntries() or {}
+            end
+            local hasEntries = #petEntries > 0
+            for slot = 1, SLOTS do
+                local key = wheel .. "_" .. slot
+                local act, spell, spellID
+                if hasEntries then
+                    local entry = petEntries[slot]
+                    if entry and entry.kind == "pet" then
+                        act = entry.index
+                    elseif entry and entry.kind == "spell" then
+                        spell, spellID = entry.name, entry.id
+                    end
+                elseif slot <= petSlots then
+                    -- Pre-seed 1..10 when no pet is out so summoning a pet mid-combat still works immediately.
+                    act = slot
+                end
+                if layer:GetAttribute("petact" .. key) ~= act then layer:SetAttribute("petact" .. key, act) end
+                if layer:GetAttribute("petspell" .. key) ~= spell then layer:SetAttribute("petspell" .. key, spell) end
+                if layer:GetAttribute("petspellid" .. key) ~= spellID then layer:SetAttribute("petspellid" .. key, spellID) end
+            end
+        elseif wasPet then
+            layer:SetAttribute("petmode" .. wheel, nil)
+            for slot = 1, SLOTS do
+                local key = wheel .. "_" .. slot
+                if layer:GetAttribute("petact" .. key) ~= nil then layer:SetAttribute("petact" .. key, nil) end
+                if layer:GetAttribute("petspell" .. key) ~= nil then layer:SetAttribute("petspell" .. key, nil) end
+                if layer:GetAttribute("petspellid" .. key) ~= nil then layer:SetAttribute("petspellid" .. key, nil) end
+            end
+        end
+    end
+    self.petDirty = nil
+end
+
+-- Populates flyspell / flycount / fly* attributes on the secure wheel layer so flyouts work in and out of combat without taint.
+function Wheels:SyncFlyouts()
+    local layer = self.layer
+    if not layer or InCombatLockdown() or not Addon.FlyoutSpells then return end
+    for wheel = 1, COUNT do
+        for slot = 1, SLOTS do
+            local key = wheel .. "_" .. slot
+            local action = Wheels.ActionOf(wheel, slot)
+            local single, spells
+            local ok, kind, id = pcall(GetActionInfo, action)
+            if ok and kind == "flyout" and id then
+                spells, single = Addon.FlyoutSpells(id)
+            end
+            local prevCount = layer:GetAttribute("flycount" .. key) or 0
+            if single then
+                if layer:GetAttribute("flyspell" .. key) ~= single then layer:SetAttribute("flyspell" .. key, single) end
+                if prevCount > 0 then
+                    layer:SetAttribute("flycount" .. key, nil)
+                    for k = 1, prevCount do layer:SetAttribute("fly" .. key .. "_" .. k, nil) end
+                end
+            elseif spells and #spells >= 2 then
+                local count = math.min(#spells, SLOTS)
+                if layer:GetAttribute("flyspell" .. key) ~= nil then layer:SetAttribute("flyspell" .. key, nil) end
+                if prevCount ~= count then layer:SetAttribute("flycount" .. key, count) end
+                for k = 1, count do
+                    local spellID = spells[k].id
+                    if layer:GetAttribute("fly" .. key .. "_" .. k) ~= spellID then
+                        layer:SetAttribute("fly" .. key .. "_" .. k, spellID)
+                    end
+                end
+                for k = count + 1, prevCount do layer:SetAttribute("fly" .. key .. "_" .. k, nil) end
+            else
+                if layer:GetAttribute("flyspell" .. key) ~= nil then layer:SetAttribute("flyspell" .. key, nil) end
+                if prevCount > 0 then
+                    layer:SetAttribute("flycount" .. key, nil)
+                    for k = 1, prevCount do layer:SetAttribute("fly" .. key .. "_" .. k, nil) end
+                end
+            end
+        end
+    end
+    self.flyoutsDirty = nil
+end
 
 -- /cgp wheels trace: says in the chat what the wheel sees of the mouse while it is filled.
 function Wheels:Trace(format, ...)
@@ -139,11 +301,13 @@ end
 -- goes onto the cursor.
 function Wheels:Place(wheel, slot)
     if InCombatLockdown() then Addon:Print(Text("wheelCombat")); return end
+    if self:IsPetWheel(wheel) then return end
     self.lastPlace = GetTime()
     local action = Wheels.ActionOf(wheel, slot)
     self:Trace("place on wheel %s slot %s (action %s), the cursor holds %s", tostring(wheel), tostring(slot), tostring(action), tostring((GetCursorInfo())))
     if not GetCursorInfo() then return end
     PlaceAction(action)
+    self:SyncFlyouts()
     self:Redraw()
     Addon:QueueRefresh(true)
 end
@@ -151,10 +315,12 @@ end
 -- Takes what a slot holds off: onto the cursor (a drag out), or away (a right click).
 function Wheels:Remove(wheel, slot, toCursor)
     if InCombatLockdown() then Addon:Print(Text("wheelCombat")); return end
+    if self:IsPetWheel(wheel) then return end
     local action = Wheels.ActionOf(wheel, slot)
     if not Filled(action) then return end
     PickupAction(action)
     if not toCursor then ClearCursor() end
+    self:SyncFlyouts()
     self:Redraw()
     Addon:QueueRefresh(true)
 end
@@ -169,6 +335,7 @@ function Wheels:ClearAll()
             if Filled(action) then PickupAction(action); ClearCursor() end
         end
     end
+    self:SyncFlyouts()
     self:Redraw()
     Addon:QueueRefresh(true)
 end
@@ -271,36 +438,37 @@ local FACE_CLICK = [[
     end
     local toggle = layer:GetAttribute("toggle")
     local openwheel = layer:GetAttribute("openwheel")
+    local activeFlyout = layer:GetAttribute("flyout")
     if down then
-        if not (toggle and openwheel) then
+        if not activeFlyout and not (toggle and openwheel) then
             control:SetAttribute("facedown", wheel)
             self:SetAttribute("pickslot", nil)
+            layer:SetAttribute("flyout", nil)
+            layer:SetAttribute("flyoutid", nil)
             layer:SetAttribute("page", wheel)
             if toggle then layer:SetAttribute("openwheel", wheel) end
             layer:RunAttribute("openbind", wheel)
             self:SetAttribute("cgppressed", true)
             return false
         end
-    elseif toggle then
-        -- Let go in the toggle mode: the wheel stays open (or the press that used the slot closed it already).
+    elseif toggle or activeFlyout then
+        -- Let go in toggle mode or while a flyout sub-wheel is open: the wheel stays open.
         control:SetAttribute("facedown", nil)
         if control:GetAttribute("closeafter") then
             control:SetAttribute("closeafter", nil)
             for i = 1, control:GetAttribute("faces") do control:ClearBinding(control:GetAttribute("face" .. i)) end
         end
         return false
+    elseif not control:GetAttribute("facedown") then
+        -- A stray release after a down-press already closed a flyout or cancelled.
+        return false
     end
-    -- Using the slot: on the button going up (held), or on the second press (toggle).
+    -- Using the slot: on the button going up (held), or on the second press (toggle / flyout sub-wheel).
     local openface = (openwheel and layer:GetFrameRef("face" .. openwheel)) or self
     -- The slot the drawn wheel showed as chosen (set from outside combat while the stick moves).
     local pick = openface:GetAttribute("pickslot")
     control:SetAttribute("facedown", nil)
     local page = layer:GetAttribute("page") or wheel
-    layer:SetAttribute("openwheel", nil)
-    layer:SetAttribute("page", nil)
-    layer:RunAttribute("closebind")
-    openface:SetAttribute("cgppressed", nil)
-    self:SetAttribute("cgppressed", nil)
     local x, y, best = 0, 0, 0
     local state = GetGamePadState()
     if state and state.sticks then
@@ -324,14 +492,81 @@ local FACE_CLICK = [[
         control:SetAttribute("closeafter", nil)
         for i = 1, control:GetAttribute("faces") do control:ClearBinding(control:GetAttribute("face" .. i)) end
     end
-    control:SetAttribute("diag", format("%s %.2f %.2f %.2f slot=%s wheel=%s page=%s pick=%s", state and "state" or "nostate", best, x, y, tostring(slot), tostring(wheel), tostring(page), tostring(pick)))
-    if not slot then return false end
-    -- The slot is a button of an action bar: the click is that action's, whatever it is. An empty slot does nothing, and a
-    -- flyout (opened by its button, not by an action click) is left alone.
+    control:SetAttribute("diag", format("%s %.2f %.2f %.2f slot=%s wheel=%s page=%s pick=%s fly=%s", state and "state" or "nostate", best, x, y, tostring(slot), tostring(wheel), tostring(page), tostring(pick), tostring(activeFlyout)))
+    if activeFlyout then
+        local spell = slot and layer:GetAttribute("fly" .. activeFlyout .. "_" .. slot)
+        layer:SetAttribute("flyout", nil)
+        layer:SetAttribute("flyoutid", nil)
+        layer:SetAttribute("openwheel", nil)
+        layer:SetAttribute("page", nil)
+        layer:RunAttribute("closebind")
+        openface:SetAttribute("cgppressed", nil)
+        self:SetAttribute("cgppressed", nil)
+        if not spell then return false end
+        self:SetAttribute("type", "spell")
+        self:SetAttribute("spell", spell)
+        self:SetAttribute("useOnKeyDown", down and true or false)
+        return "LeftButton"
+    end
+    if layer:GetAttribute("petmode" .. page) then
+        local petAct = slot and layer:GetAttribute("petact" .. page .. "_" .. slot)
+        local petSpell = slot and not petAct and layer:GetAttribute("petspell" .. page .. "_" .. slot)
+        layer:SetAttribute("openwheel", nil)
+        layer:SetAttribute("page", nil)
+        layer:RunAttribute("closebind")
+        openface:SetAttribute("cgppressed", nil)
+        self:SetAttribute("cgppressed", nil)
+        if petAct then
+            self:SetAttribute("type", "pet")
+            self:SetAttribute("action", petAct)
+            self:SetAttribute("useOnKeyDown", down and true or false)
+            return "LeftButton"
+        elseif petSpell then
+            self:SetAttribute("type", "spell")
+            self:SetAttribute("spell", petSpell)
+            self:SetAttribute("useOnKeyDown", down and true or false)
+            return "LeftButton"
+        end
+        return false
+    end
     local base = layer:GetAttribute("base" .. page)
-    if not base then return false end
-    local action = base + slot
-    local kind = GetActionInfo(action)
+    local action = slot and base and (base + slot)
+    local kind, id
+    if action then kind, id = GetActionInfo(action) end
+    if kind == "flyout" then
+        local key = page .. "_" .. slot
+        local single = layer:GetAttribute("flyspell" .. key)
+        if single then
+            layer:SetAttribute("openwheel", nil)
+            layer:SetAttribute("page", nil)
+            layer:RunAttribute("closebind")
+            openface:SetAttribute("cgppressed", nil)
+            self:SetAttribute("cgppressed", nil)
+            self:SetAttribute("type", "spell")
+            self:SetAttribute("spell", single)
+            self:SetAttribute("useOnKeyDown", down and true or false)
+            return "LeftButton"
+        end
+        local count = layer:GetAttribute("flycount" .. key)
+        if count and count > 0 then
+            -- Multi-spell flyout: open the flyout's known spells in this same wheel (works in combat with zero taint).
+            local owner = openwheel or wheel
+            local ownerFace = layer:GetFrameRef("face" .. owner) or openface
+            layer:SetAttribute("flyout", key)
+            layer:SetAttribute("flyoutid", id)
+            layer:SetAttribute("openwheel", owner)
+            layer:SetAttribute("page", page)
+            ownerFace:SetAttribute("pickslot", nil)
+            layer:RunAttribute("openbind", owner)
+            ownerFace:SetAttribute("cgppressed", true)
+            return false
+        end
+    end
+    layer:SetAttribute("openwheel", nil)
+    layer:SetAttribute("page", nil)
+    layer:RunAttribute("closebind")
+    openface:SetAttribute("cgppressed", nil)
+    self:SetAttribute("cgppressed", nil)
     if not kind or kind == "flyout" then return false end
     self:SetAttribute("type", "action")
     self:SetAttribute("action", action)
@@ -339,13 +574,18 @@ local FACE_CLICK = [[
     return "LeftButton"
 ]]
 
--- While a wheel is open (run on the layer, with the wheel as the argument): LB and RB page, and in the toggle mode A uses the
--- slot (a click on the open wheel's button) and B cancels.
+-- While a wheel is open (run on the layer, with the wheel as the argument): LB and RB page (except inside a flyout sub-wheel),
+-- and in toggle mode or a flyout sub-wheel A uses the slot (a click on the open wheel's button) and B cancels.
 local OPEN_BIND = [[
     local wheel = ...
-    self:SetBindingClick(true, "PADLSHOULDER", self:GetAttribute("pageprev"), "LeftButton")
-    self:SetBindingClick(true, "PADRSHOULDER", self:GetAttribute("pagenext"), "LeftButton")
-    if self:GetAttribute("toggle") then
+    if self:GetAttribute("flyout") then
+        self:ClearBinding("PADLSHOULDER")
+        self:ClearBinding("PADRSHOULDER")
+    else
+        self:SetBindingClick(true, "PADLSHOULDER", self:GetAttribute("pageprev"), "LeftButton")
+        self:SetBindingClick(true, "PADRSHOULDER", self:GetAttribute("pagenext"), "LeftButton")
+    end
+    if self:GetAttribute("toggle") or self:GetAttribute("flyout") then
         self:SetBindingClick(true, "PAD1", self:GetAttribute("facename" .. wheel), "LeftButton")
         self:SetBindingClick(true, "PAD2", self:GetAttribute("cancelname"), "LeftButton")
     end
@@ -358,6 +598,8 @@ local CLOSE_BIND = [[
 ]]
 -- Closes an open wheel without using anything (B in the toggle mode, the layer going away, the insecure side giving up on it).
 local CLOSE_WHEEL = [[
+    self:SetAttribute("flyout", nil)
+    self:SetAttribute("flyoutid", nil)
     self:SetAttribute("openwheel", nil)
     self:SetAttribute("page", nil)
     self:RunAttribute("closebind")
@@ -374,6 +616,7 @@ local CLOSE_WHEEL = [[
 local PAGE_CLICK = [[
     if not down then return end
     local layer = self:GetFrameRef("layer")
+    if layer:GetAttribute("flyout") then return end
     local page = layer:GetAttribute("page")
     if not page then return end
     page = page + self:GetAttribute("dir")
@@ -420,9 +663,10 @@ function Wheels:Create()
     layer:SetAttribute("closebind", CLOSE_BIND)
     layer:SetAttribute("closewheel", CLOSE_WHEEL)
     layer:SetAttribute("pages", COUNT)
-    -- The page the secure code works out is drawn by the insecure side when it changes.
+    -- The page and flyout sub-wheel the secure code works out are drawn by the insecure side when they change.
     layer:HookScript("OnAttributeChanged", function(_, name, value)
-        if name == "page" then self:SetPage(value) end
+        if name == "page" then self:SetPage(value)
+        elseif name == "flyoutid" then self:SetFlyout(value) end
     end)
     local function Handler(name, snippet, dir)
         local button = CreateFrame("Button", name, layer, "SecureHandlerClickTemplate")
@@ -489,6 +733,8 @@ function Wheels:Create()
         modifier:SetAttribute("button" .. n, face:GetName())
         self.faces[wheel] = face
     end
+    self:SyncFlyouts()
+    self:SyncPet()
 end
 
 -- True when the game took R3 or L3 back (checked at most once a second).
@@ -766,7 +1012,7 @@ function Wheels:Refresh(gamepad)
             if Addon.db.wheels == true then
                 Addon.db.wheelNumbers = true
                 Addon.db.wheelsDockFocus = true
-                if (Addon.db.wheelDynFood or 0) > 0 or (Addon.db.wheelDynUse or 0) > 0 or (Addon.db.wheelDynProf or 0) > 0 then
+                if (Addon.db.wheelDynFood or 0) > 0 or (Addon.db.wheelDynUse or 0) > 0 or (Addon.db.wheelDynProf or 0) > 0 or (Addon.db.wheelDynPet or 0) > 0 then
                     Addon.db.wheelDynamic = true
                     if Addon.Dynamic and Addon.Dynamic.Request then Addon.Dynamic:Request(0.2) end
                 end
@@ -814,6 +1060,8 @@ function Wheels:Refresh(gamepad)
         layer:SetAttribute("toggle", toggle)
     end
     if not layer:GetAttribute("enabled") then layer:SetAttribute("enabled", true) end
+    if self.flyoutsDirty then self:SyncFlyouts() end
+    if self.petDirty then self:SyncPet() end
     if not layer:IsShown() then
         layer:Show()
     elseif combosChanged or self:BindingLost() then
@@ -977,6 +1225,11 @@ local function CreateSlotFrame(parent, slot, size, radius)
     mask:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     mask:SetAllPoints(frame.Icon)
     frame.Icon:AddMaskTexture(mask)
+    frame.FlyoutArrow = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    frame.FlyoutArrow:SetSize(size >= 40 and 15 or 10, size >= 40 and 6 or 4)
+    frame.FlyoutArrow:SetPoint("TOP", frame, "TOP", 0, size >= 40 and 4 or 3)
+    if frame.FlyoutArrow.SetAtlas then frame.FlyoutArrow:SetAtlas("UI-HUD-ActionBar-Flyout", false) end
+    frame.FlyoutArrow:Hide()
     if size >= 40 then
         frame.Number = Addon.Fonts:String(frame, "OVERLAY", "HighlightSmall")
         frame.Number:SetPoint("BOTTOMRIGHT", 4, -2)
@@ -1005,7 +1258,14 @@ function Wheels:WireSlot(frame)
         if GetCursorInfo() then self:Place(wheel, slot)
         elseif button == "RightButton" then self:Remove(wheel, slot, false) end
     end)
-    frame:SetScript("OnEnter", function(f) self:Tooltip(f, self:Get(WheelOf(frame), slot)) end)
+    frame:SetScript("OnEnter", function(f)
+        local wheel = WheelOf(frame)
+        if self:IsPetWheel(wheel) then
+            self:Tooltip(f, self:PetSlot(wheel, slot), true)
+        else
+            self:Tooltip(f, self:Get(wheel, slot))
+        end
+    end)
     frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
     -- The game's pad navigation (SmartNavigation) walks over the buttons of a window with the D-pad and clicks the one it is on
     -- with A: this function is its click (true: handled). With something on the cursor it goes onto the slot, without it the
@@ -1125,11 +1385,11 @@ end
 -- Colours of a slot by what it is doing: the gold ring of the round look, and the wedge of the look of the game's wheels.
 local RING = {
     filled = { 0.48, 0.39, 0.25, 1 }, empty = { 0.48, 0.39, 0.25, 0.55 }, selected = { 1, 0.81, 0.44, 1 },
-    dim = { 0.69, 0.54, 0.27, 1 }, drop = { 0.5, 1, 0.55, 1 },
+    active = { 1, 0.85, 0.25, 1 }, dim = { 0.69, 0.54, 0.27, 1 }, drop = { 0.5, 1, 0.55, 1 },
 }
 local WEDGE = {
     filled = { 0.04, 0.035, 0.05, 0.82 }, empty = { 0.04, 0.035, 0.05, 0.62 }, selected = { 0.47, 0.48, 0.5, 0.7 },
-    dim = { 0.36, 0.37, 0.39, 0.62 }, drop = { 0.18, 0.5, 0.24, 0.85 },
+    active = { 0.28, 0.23, 0.08, 0.82 }, dim = { 0.36, 0.37, 0.39, 0.62 }, drop = { 0.18, 0.5, 0.24, 0.85 },
 }
 
 -- Setting "wheelWedges" (on by default): segments like the game's own wheels. Off: round slots.
@@ -1141,12 +1401,18 @@ end
 -- filled / empty.
 function Wheels:Paint(frame)
     local mode
+    local wheel = WheelOf(frame)
     if frame.dropHint then
         mode = "drop"
     elseif frame.hudIndex and frame.hudIndex == self.selected then
         mode = self.dimmed and "dim" or "selected"
+    elseif frame.hudIndex and self.flyoutSpells then
+        mode = self.flyoutSpells[frame.slot] and "filled" or "empty"
+    elseif self:IsPetWheel(wheel) then
+        local entry = self:PetSlot(wheel, frame.slot)
+        mode = entry and (entry.isActive and "active" or "filled") or "empty"
     else
-        mode = self:Get(WheelOf(frame), frame.slot) and "filled" or "empty"
+        mode = self:Get(wheel, frame.slot) and "filled" or "empty"
     end
     local ring = RING[mode]
     frame.Ring:SetVertexColor(ring[1], ring[2], ring[3], ring[4])
@@ -1157,9 +1423,36 @@ function Wheels:Paint(frame)
 end
 
 local function ShowEntry(frame, entry)
-    local _, icon = Describe(entry)
+    local _, icon, isFlyout = Describe(entry)
     frame.Icon:SetTexture(entry and icon or nil)
+    frame.Icon:SetVertexColor(1, 1, 1, 1)
     frame.Disc:SetVertexColor(0.08, 0.065, 0.05, entry and 1 or 0.55)
+    if frame.FlyoutArrow then frame.FlyoutArrow:SetShown(entry ~= nil and isFlyout == true) end
+    Wheels:Paint(frame)
+end
+
+local function ShowFlyoutSpell(frame, spell)
+    local tex
+    if spell and spell.id and C_Spell and C_Spell.GetSpellTexture then
+        local ok, icon = pcall(C_Spell.GetSpellTexture, spell.id)
+        tex = ok and icon or nil
+    end
+    frame.Icon:SetTexture(spell and (tex or 134400) or nil)
+    frame.Icon:SetVertexColor(1, 1, 1, 1)
+    frame.Disc:SetVertexColor(0.08, 0.065, 0.05, spell and 1 or 0.55)
+    if frame.FlyoutArrow then frame.FlyoutArrow:Hide() end
+    Wheels:Paint(frame)
+end
+
+local function ShowPetEntry(frame, entry)
+    frame.Icon:SetTexture(entry and (entry.icon or 134400) or nil)
+    if entry and entry.usable == false then
+        frame.Icon:SetVertexColor(0.45, 0.45, 0.45, 1)
+    else
+        frame.Icon:SetVertexColor(1, 1, 1, 1)
+    end
+    frame.Disc:SetVertexColor(0.08, 0.065, 0.05, entry and 1 or 0.55)
+    if frame.FlyoutArrow then frame.FlyoutArrow:Hide() end
     Wheels:Paint(frame)
 end
 
@@ -1222,6 +1515,13 @@ end
 function Wheels:DrawHeader()
     local hud = self.hud
     if not hud or not hud.Top or not self.open then return end
+    if self.flyoutSpells then
+        hud.Top.Title:SetText(self.flyoutName or "Flyout")
+        for _, dot in ipairs(hud.Top.Dots) do dot:Hide() end
+        hud.Top.LB:SetText("")
+        hud.Top.RB:SetText("")
+        return
+    end
     local modifier, key = WheelKeys(self.open)
     local ok, glyphs = pcall(function() return Addon.MenuHints:KeyText(modifier .. "-" .. key) end)
     local keys = ok and type(glyphs) == "string" and glyphs ~= "" and glyphs or Wheels.Label(self.open)
@@ -1231,6 +1531,7 @@ function Wheels:DrawHeader()
     if category then title = title .. "  ·  " .. Text("dynName" .. category) end
     hud.Top.Title:SetText(title)
     for page, dot in ipairs(hud.Top.Dots) do
+        dot:Show()
         if page == self.open then dot:SetVertexColor(1, 0.81, 0.23, 1) else dot:SetVertexColor(0.55, 0.56, 0.58, 1) end
     end
     local function Glyph(key, fallback)
@@ -1245,20 +1546,30 @@ function Wheels:DrawCenter()
     local hud, db = self.hud, Addon.db
     if not hud then return end
     self:DrawHeader()
+    local name
+    if self.flyoutSpells then
+        local spell = self.selected and self.flyoutSpells[self.selected]
+        if spell then
+            local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spell.id)
+            name = (type(info) == "table" and info.name) or spell.name or tostring(spell.id)
+        end
+    elseif self.open and self:IsPetWheel(self.open) then
+        local entry = self.selected and self:PetSlot(self.open, self.selected)
+        name = entry and entry.name
+    else
+        local entry = self.selected and self.open and self:Get(self.open, self.selected)
+        name = entry and Describe(entry)
+    end
     if self:Wedges() and not self.previewing then
         -- The panel below: the name of the chosen slot and what the buttons do.
-        local entry = self.selected and self.open and self:Get(self.open, self.selected)
-        local name = entry and Describe(entry)
         hud.Name:SetText(db.wheelNames and (name or (self.selected and Text("wheelEmpty")) or "") or "")
         if db.wheelHints then
-            hud.Hint:SetText(Text(db.wheelToggle and "wheelHintToggle" or "wheelHintHold"))
+            hud.Hint:SetText(Text((db.wheelToggle or self.flyoutSpells) and "wheelHintToggle" or "wheelHintHold"))
         else
             hud.Hint:SetText("")
         end
         return
     end
-    local entry = self.selected and self.open and self:Get(self.open, self.selected)
-    local name = entry and Describe(entry)
     if self.previewing then
         -- While the wheel is filled the middle says what to do.
         hud.Name:SetText(Text("wheelEditHub"))
@@ -1266,9 +1577,13 @@ function Wheels:DrawCenter()
         hud.Name:SetText(db.wheelNames and (name or (self.selected and Text("wheelEmpty")) or "") or "")
     end
     if (db.wheelHints or self.previewing) and self.open then
-        local modifier, key = WheelKeys(self.open)
-        local ok, glyphs = pcall(function() return Addon.MenuHints:KeyText(modifier .. "-" .. key) end)
-        hud.Hint:SetText(ok and glyphs or Wheels.Label(self.open))
+        if self.flyoutSpells then
+            hud.Hint:SetText(Text("wheelHintToggle"))
+        else
+            local modifier, key = WheelKeys(self.open)
+            local ok, glyphs = pcall(function() return Addon.MenuHints:KeyText(modifier .. "-" .. key) end)
+            hud.Hint:SetText(ok and glyphs or Wheels.Label(self.open))
+        end
     else
         hud.Hint:SetText("")
     end
@@ -1387,6 +1702,7 @@ function Wheels:SetOpen(wheel)
     if wheel == nil and self.previewing then wheel = 1 end
     if not wheel then
         self.open, self.opened, self.selected, self.latch, self.dimmed = nil, nil, nil, nil, nil
+        self.flyoutID, self.flyoutSpells, self.flyoutName = nil, nil, nil
         self.holding = nil
         self:SetSticks(false)
         if self.hud and self.hud.Timer then self.hud.Timer:Hide() end
@@ -1401,6 +1717,27 @@ function Wheels:SetOpen(wheel)
     self:Redraw()
     self.hud:SetScript("OnUpdate", Update)
     self.hud:Show()
+end
+
+-- Enters or leaves a flyout sub-wheel (driven by the secure layer's "flyoutid" attribute).
+function Wheels:SetFlyout(flyoutID)
+    if type(flyoutID) == "number" and flyoutID > 0 then
+        local spells, flyName
+        if Addon.FlyoutSpells then
+            local _, _
+            spells, _, _, flyName = Addon.FlyoutSpells(flyoutID)
+        end
+        self.flyoutID = flyoutID
+        self.flyoutSpells = spells or {}
+        self.flyoutName = flyName
+        self.selected, self.latch, self.dimmed = nil, nil, nil
+        self.holdingAt = GetTime()
+        if self.hud and self.hud.Timer then self.hud.Timer:Hide() end
+        if self.open then self:Redraw() end
+    else
+        self.flyoutID, self.flyoutSpells, self.flyoutName = nil, nil, nil
+        if self.open then self:Redraw() end
+    end
 end
 
 -- LB / RB (or the pad) changed the shown wheel: the secure side already uses it, this draws it.
@@ -1425,10 +1762,24 @@ end
 function Wheels:Redraw()
     local hud = self.hud
     if hud and self.open then
-        for slot, frame in ipairs(hud.slots) do
-            frame.action = Wheels.ActionOf(self.open, slot)
-            ShowEntry(frame, self:Get(self.open, slot))
-            frame.Number:SetText(tostring(slot))
+        if self.flyoutSpells then
+            for slot, frame in ipairs(hud.slots) do
+                frame.action = nil
+                ShowFlyoutSpell(frame, self.flyoutSpells[slot])
+                frame.Number:SetText(tostring(slot))
+            end
+        elseif self:IsPetWheel(self.open) then
+            for slot, frame in ipairs(hud.slots) do
+                frame.action = nil
+                ShowPetEntry(frame, self:PetSlot(self.open, slot))
+                frame.Number:SetText(tostring(slot))
+            end
+        else
+            for slot, frame in ipairs(hud.slots) do
+                frame.action = Wheels.ActionOf(self.open, slot)
+                ShowEntry(frame, self:Get(self.open, slot))
+                frame.Number:SetText(tostring(slot))
+            end
         end
         RefreshSlotNumbers(hud.slots)
         self:DrawCenter()
@@ -1654,7 +2005,13 @@ function Wheels:RedrawDock()
     end
     for _, frame in ipairs(dock.slots) do
         frame.dropHint = false
-        ShowEntry(frame, self:Get(frame.wheel, frame.slot))
+        if self:IsPetWheel(frame.wheel) then
+            frame.action = nil
+            ShowPetEntry(frame, self:PetSlot(frame.wheel, frame.slot))
+        else
+            frame.action = Wheels.ActionOf(frame.wheel, frame.slot)
+            ShowEntry(frame, self:Get(frame.wheel, frame.slot))
+        end
     end
     if dock:IsShown() then RefreshSlotNumbers(dock.slots) end
 end
@@ -1691,6 +2048,8 @@ local function DragWindows()
     local around = {}
     for index, frame in ipairs(sources) do around[index] = frame end
     if #sources > 0 and Shown(CharacterFrame) then around[#around + 1] = CharacterFrame end
+    -- Keep the small wheels dock clear of an open SpellBook flyout (e.g. Hunter Aspect list).
+    if #sources > 0 and Shown(SpellFlyout) and not SpellFlyout.isActionBar then around[#around + 1] = SpellFlyout end
     return sources, around
 end
 
@@ -1879,6 +2238,8 @@ function Wheels:Changed(key)
         end
     end
     if key:sub(1, 8) == "wheelDyn" and Addon.Dynamic then
+        self.petDirty = true
+        if not InCombatLockdown() then self:SyncPet() end
         Addon.Dynamic:Request(0.2)
         self:RedrawDock()
         self:Redraw()
@@ -1890,9 +2251,21 @@ function Wheels:Changed(key)
     if key == "wheelsDock" and self.dock and not Addon.db.wheelsDock then self.dock:Hide() end
 end
 
-function Wheels:Tooltip(frame, action)
+function Wheels:Tooltip(frame, action, isPet)
     GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
-    if action then
+    if isPet then
+        if type(action) == "table" then
+            if action.kind == "pet" and action.index then
+                if not pcall(GameTooltip.SetPetAction, GameTooltip, action.index) then GameTooltip:SetText(action.name or "") end
+            elseif action.kind == "spell" and action.id then
+                if not pcall(GameTooltip.SetSpellByID, GameTooltip, action.id) then GameTooltip:SetText(action.name or "") end
+            else
+                GameTooltip:SetText(action.name or "")
+            end
+        else
+            GameTooltip:SetText(Text("wheelEmpty"))
+        end
+    elseif action then
         if not pcall(GameTooltip.SetAction, GameTooltip, action) then GameTooltip:SetText((Describe(action))) end
     else
         GameTooltip:SetText(Text("wheelDropHere"))

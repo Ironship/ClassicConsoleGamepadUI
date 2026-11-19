@@ -56,6 +56,11 @@ def main():
     except subprocess.CalledProcessError as error:
         raise SystemExit(f"Lua syntax validation failed (exit {error.returncode}); no package created") from None
     files = [f"{NAME}.toc", *runtime, "README.md", "CHANGELOG.md", "LICENSE"]
+    textures = ROOT / "Textures"
+    if textures.is_dir():
+        for asset in sorted(textures.rglob("*")):
+            if asset.is_file():
+                files.append(asset.relative_to(ROOT).as_posix())
     payload = {name: (ROOT / name).read_bytes() for name in files}
     # Forever loads the _Camelot TOC; the plain TOC keeps other loaders working.
     payload[f"{NAME}_Camelot.toc"] = payload[f"{NAME}.toc"]

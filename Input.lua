@@ -53,6 +53,12 @@ end
 local PRE_CLICK = [[
     self:SetAttribute("type", nil)
     if not down then self:SetAttribute("cgppressed", nil) end
+    if self:GetAttribute("cgpplaced") then
+        self:SetAttribute("cgpplaced", nil)
+        owners[self] = nil
+        self:SetAttribute("cgppressed", nil)
+        return false
+    end
     local keyboard = button == "Keybind"
     if (button ~= "LeftButton" and not keyboard) or not control:GetAttribute("enabled") then return false end
     local source, kind, place, act
@@ -99,7 +105,7 @@ local PRE_CLICK = [[
                 local action = source:GetID()
                 if not action or action <= 0 then return false end
                 local actionType = GetActionInfo(action)
-                if actionType == "flyout" then kind = "delegate" end
+                if actionType == "flyout" then kind = "flyout" end
             end
         end
         if kind == "kbd" then
@@ -119,7 +125,19 @@ local PRE_CLICK = [[
                 else page = GetActionBarPage() end
             end
             act = source:GetID() + (page - 1) * 12
-            if GetActionInfo(act) == "flyout" then kind = "delegate" else kind = "action" end
+            local kbdType, kbdId = GetActionInfo(act)
+            if kbdType == "flyout" then
+                local single = control:GetAttribute("kbdflyspell" .. place)
+                if single then
+                    kind, act = "spell", single
+                elseif not PlayerInCombat() then
+                    kind, act = "kbdflyout", place .. ":" .. tostring(kbdId or 0)
+                else
+                    kind = "delegate"
+                end
+            else
+                kind = "action"
+            end
         end
         local owner = newtable()
         owner[1], owner[2], owner[3] = source, kind, act
@@ -130,12 +148,27 @@ local PRE_CLICK = [[
         if not owner then return false end
         source, kind, act = owner[1], owner[2], owner[3]
     end
-    if kind == "delegate" then
+    if kind == "kbdflyout" then
+        if down and not keyboard then return false end
+        if down or not keyboard then control:SetAttribute("kbdflyout", act) end
+        return false
+    elseif kind == "flyout" then
+        if down and not keyboard then return false end
+        if not down and keyboard then return false end
+        self:SetAttribute("type", "macro")
+        self:SetAttribute("useOnKeyDown", down)
+        self:SetAttribute("macrotext", "/click " .. source:GetName() .. " LeftButton 1")
+    elseif kind == "delegate" then
         self:SetAttribute("type", "macro")
         self:SetAttribute("useOnKeyDown", down)
         self:SetAttribute("macrotext", "/click " .. source:GetName() .. " LeftButton " .. (down and "1" or "0"))
     elseif down and not keyboard then
         return false
+    elseif kind == "spell" then
+        if keyboard then self:SetAttribute("useOnKeyDown", nil)
+        else self:SetAttribute("useOnKeyDown", false) end
+        self:SetAttribute("type", "spell")
+        self:SetAttribute("spell", act)
     else
         local action = act or source:GetID()
         if not action or action <= 0 then return false end
@@ -187,6 +220,40 @@ local SUPPRESS_MOUSE = [[
         end
     end
     self:SetAttribute("mousecomplete", true)
+]]
+
+-- Runs inside the secure header so anchoring the native flyout radial and its attached
+-- button above the classic slot does not taint either protected frame.
+local PLACE_FLYOUT = [[
+    local fly = self:GetFrameRef("flyout")
+    local btn = self:GetFrameRef("flybutton")
+    local x, y = self:GetAttribute("flyx"), self:GetAttribute("flyy")
+    if fly and x and y then
+        fly:ClearAllPoints()
+        fly:SetPoint("CENTER", "$parent", "BOTTOMLEFT", x, y)
+    end
+    if btn and fly then
+        btn:ClearAllPoints()
+        btn:SetPoint("CENTER", fly, "CENTER", 0, 0)
+    end
+]]
+
+local RESTORE_FLYOUT_BUTTON = [[
+    local btn = self:GetFrameRef("flybutton")
+    if not btn then return end
+    btn:ClearAllPoints()
+    for i = 1, self:GetAttribute("flyptcount") or 0 do
+        local rel = self:GetAttribute("flypt" .. i .. "parent") and "$parent" or self:GetFrameRef("flypt" .. i .. "r")
+        if rel then
+            btn:SetPoint(
+                self:GetAttribute("flypt" .. i .. "a"),
+                rel,
+                self:GetAttribute("flypt" .. i .. "b"),
+                self:GetAttribute("flypt" .. i .. "x") or 0,
+                self:GetAttribute("flypt" .. i .. "y") or 0
+            )
+        end
+    end
 ]]
 
 local RESUME = [[
@@ -407,7 +474,120 @@ function Input:SetKeyboardPages()
         end
     end
     self.pagesSet = complete
+    self:SyncKeyboardFlyouts()
     return complete
+end
+
+-- Resolves single-spell flyouts on keyboard-backed slots so PRE_CLICK casts them directly in and out of combat.
+function Input:SyncKeyboardFlyouts()
+    local header = self.header
+    if not header or InCombatLockdown() or not Addon.FlyoutSpells then return end
+    for i = 1, 36 do
+        local slot = Addon.Display.slots[i]
+        local template = slot and slot.template
+        local action = template and template.action
+        local single
+        if type(action) == "number" and action > 0 and (not issecretvalue or not issecretvalue(action)) then
+            local ok, kind, id = pcall(GetActionInfo, action)
+            if ok and kind == "flyout" and id then
+                local _, s = Addon.FlyoutSpells(id)
+                single = s
+            end
+        end
+        if header:GetAttribute("kbdflyspell" .. i) ~= single then
+            header:SetAttribute("kbdflyspell" .. i, single)
+        end
+    end
+end
+
+function Input:HideKbdFlyout()
+    if self.kbdFlyout and not InCombatLockdown() and self.kbdFlyout:IsShown() then
+        self.kbdFlyout:Hide()
+    end
+    self.kbdFlyoutKey = nil
+end
+
+-- Addon-owned secure flyout bar for multi-spell flyouts on keyboard-backed slots (hidden Blizzard bars cannot show SpellFlyout).
+function Input:ToggleKbdFlyout(spec)
+    if InCombatLockdown() or type(spec) ~= "string" then return end
+    if self.header then self.header:SetAttribute("kbdflyout", nil) end
+    local placeStr, idStr = spec:match("^(%d+):(%d+)$")
+    local place, flyoutID = tonumber(placeStr), tonumber(idStr)
+    if not place or not flyoutID or flyoutID <= 0 then self:HideKbdFlyout(); return end
+    if self.kbdFlyout and self.kbdFlyout:IsShown() and self.kbdFlyoutKey == spec then
+        self:HideKbdFlyout()
+        return
+    end
+    local spells = Addon.FlyoutSpells and Addon.FlyoutSpells(flyoutID) or {}
+    if #spells == 0 then self:HideKbdFlyout(); return end
+    local anchor = self.buttons[place] or (Addon.Display.slots[place])
+    if not anchor then return end
+    if not self.kbdFlyout then
+        local popup = CreateFrame("Frame", "ClassicConsoleGamepadUIFlyout", UIParent, "BackdropTemplate")
+        popup:SetFrameStrata("DIALOG")
+        popup:SetFrameLevel(20)
+        popup:EnableMouse(true)
+        popup:SetClampedToScreen(true)
+        popup:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        popup:SetBackdropColor(0.06, 0.06, 0.08, 0.92)
+        popup:SetBackdropBorderColor(0.55, 0.45, 0.25, 0.95)
+        popup.buttons = {}
+        for i = 1, 12 do
+            local btn = CreateFrame("Button", "ClassicConsoleGamepadUIFlyoutButton" .. i, popup, "SecureActionButtonTemplate")
+            btn:SetSize(36, 36)
+            btn:RegisterForClicks("AnyUp")
+            btn:SetAttribute("type", "spell")
+            btn.Icon = btn:CreateTexture(nil, "ARTWORK")
+            btn.Icon:SetAllPoints()
+            btn.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 1, 1, 0.25)
+            btn:SetScript("PostClick", function() Input:HideKbdFlyout() end)
+            btn:SetScript("OnEnter", function(s)
+                if s.spellID then
+                    GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+                    GameTooltip:SetSpellByID(s.spellID)
+                end
+            end)
+            btn:SetScript("OnLeave", function(s)
+                if GameTooltip:GetOwner() == s then GameTooltip:Hide() end
+            end)
+            popup.buttons[i] = btn
+        end
+        popup:RegisterEvent("PLAYER_REGEN_DISABLED")
+        popup:SetScript("OnEvent", function() Input:HideKbdFlyout() end)
+        self.kbdFlyout = popup
+    end
+    local popup = self.kbdFlyout
+    local count = math.min(#spells, #popup.buttons)
+    local size, gap, pad = 36, 4, 6
+    popup:SetSize(size + pad * 2, count * size + (count - 1) * gap + pad * 2)
+    popup:ClearAllPoints()
+    popup:SetPoint("BOTTOM", anchor, "TOP", 0, 6)
+    for i, btn in ipairs(popup.buttons) do
+        local entry = i <= count and spells[i] or nil
+        if entry then
+            btn.spellID = entry.id
+            btn:SetAttribute("spell", entry.id)
+            local tex = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(entry.id)
+            btn.Icon:SetTexture(tex)
+            btn:ClearAllPoints()
+            btn:SetPoint("BOTTOM", popup, "BOTTOM", 0, pad + (i - 1) * (size + gap))
+            btn:Show()
+        else
+            btn.spellID = nil
+            btn:SetAttribute("spell", nil)
+            btn:Hide()
+        end
+    end
+    self.kbdFlyoutKey = spec
+    popup:Show()
 end
 
 function Input:Create(native, unit, bars)
@@ -424,6 +604,9 @@ function Input:Create(native, unit, bars)
     header:SetAttribute("_onhide", "self:ClearBindings()")
     header:SetAttribute("activelevel", self.activeBarFrameLevel)
     header:SetAttribute("pickbar", PICK_BAR)
+    header:HookScript("OnAttributeChanged", function(_, name, value)
+        if name == "kbdflyout" and value then self:ToggleKbdFlyout(value) end
+    end)
     pcall(SecureHandlerWrapScript, native, "OnHide", header, [[control:SetAttribute("enabled", false); control:Hide()]])
     for i, key in ipairs({ "topBar", "leftBar", "rightBar", "bottomBar", "possessBar", "stanceBar",
         "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }) do
@@ -484,6 +667,11 @@ function Input:Create(native, unit, bars)
             button:SetAttribute("checkmouseovercast", true)
             button:RegisterForClicks("AnyDown", "AnyUp")
             button:RegisterForDrag("LeftButton")
+            button:SetScript("PreClick", function(self, btn, down)
+                if InCombatLockdown() or btn ~= "LeftButton" or not GetCursorInfo() then return end
+                if not down then Addon.Display:ReceiveSlot(slot) end
+                self:SetAttribute("cgpplaced", true)
+            end)
             SecureHandlerWrapScript(button, "OnClick", header, PRE_CLICK)
             button:HookScript("PostClick", TraceClick)
             button:SetScript("OnDragStart", function() Addon.Display:PickupSlot(slot) end)
@@ -518,9 +706,150 @@ function Input:Create(native, unit, bars)
     self:ObserveBlockers(bars, unit)
 end
 
+function Input:HookFlyoutPosition(frame)
+    self.hookedFlyouts = self.hookedFlyouts or {}
+    if self.hookedFlyouts[frame] or type(frame.AttachToButton) ~= "function" then return end
+    local detachName = type(frame.DetatchFromButton) == "function" and "DetatchFromButton"
+        or (type(frame.DetachFromButton) == "function" and "DetachFromButton")
+    if not detachName then return end
+    self.hookedFlyouts[frame] = true
+    self.attachedFlyoutButton = self.attachedFlyoutButton or {}
+    self.savedFlyoutPoints = self.savedFlyoutPoints or {}
+    self.pendingFlyoutRestore = self.pendingFlyoutRestore or {}
+    hooksecurefunc(frame, "AttachToButton", function(flyout, button)
+        self:PlaceFlyout(flyout, button)
+    end)
+    hooksecurefunc(frame, detachName, function(flyout)
+        local button = self.attachedFlyoutButton[flyout]
+        self.attachedFlyoutButton[flyout] = nil
+        if button then self:RestoreFlyoutButton(button) end
+    end)
+end
+
+function Input:PlaceFlyout(flyout, button)
+    if not flyout or not button or self.disabled or not self.header or InCombatLockdown() then return end
+    if Addon.nativeView then return end
+    if (GamepadActionBarEditFrame and GamepadActionBarEditFrame:IsShown())
+        or (EditModeManagerFrame and EditModeManagerFrame:IsShown()) then return end
+    local root = Addon.Display and Addon.Display.root
+    if not root or not root:IsShown() then return end
+    local slot = Addon.Display.slotBySource and Addon.Display.slotBySource[button]
+    if not slot or not slot:IsShown() then return end
+
+    local sx, sy = slot:GetCenter()
+    if not sx or not sy then return end
+    local st = slot:GetTop() or sy
+    local sScale = (slot.GetEffectiveScale and slot:GetEffectiveScale()) or 1
+    local fScale = (flyout.GetEffectiveScale and flyout:GetEffectiveScale()) or 1
+    local uScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if fScale <= 0 then fScale = 1 end
+    local fw = (flyout.GetWidth and flyout:GetWidth()) or 200
+    local fh = (flyout.GetHeight and flyout:GetHeight()) or 200
+    if fw <= 0 then fw = 200 end
+    if fh <= 0 then fh = 200 end
+
+    local cx = sx * sScale / fScale
+    local cy = (st * sScale / fScale) + fh * 0.5 + 10
+    local sw = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 1280) * uScale / fScale
+    local sh = ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 720) * uScale / fScale
+    local pad = 12
+    local minX, maxX = fw * 0.5 + pad, sw - fw * 0.5 - pad
+    local minY, maxY = fh * 0.5 + pad, sh - fh * 0.5 - pad
+    if maxX >= minX then cx = math.max(minX, math.min(maxX, cx)) end
+    if maxY >= minY then cy = math.max(minY, math.min(maxY, cy)) end
+
+    local prev = self.attachedFlyoutButton[flyout]
+    if prev and prev ~= button then self:RestoreFlyoutButton(prev) end
+
+    if not self.savedFlyoutPoints[button] then
+        local pts = {}
+        local n = (button.GetNumPoints and button:GetNumPoints()) or 0
+        local origParent = flyout.prevButtonParent
+        local fallback = false
+        for i = 1, n do
+            local a, rel, b, x, y = button:GetPoint(i)
+            if not a then return end
+            local useParent = (rel == nil) or (origParent ~= nil and rel == origParent)
+            if not useParent then
+                local okProt, _, explicit = pcall(function()
+                    if rel.IsProtected then return rel:IsProtected() end
+                end)
+                if not okProt or not explicit then
+                    fallback = true
+                    break
+                end
+            end
+            pts[#pts + 1] = { a, useParent and nil or rel, b or a, x or 0, y or 0, useParent }
+        end
+        if fallback then
+            local bx, by, px, py
+            if button.GetCenter then bx, by = button:GetCenter() end
+            if origParent and origParent.GetCenter then px, py = origParent:GetCenter() end
+            if not (bx and by and px and py) then return end
+            local bScale = (button.GetEffectiveScale and button:GetEffectiveScale()) or 1
+            local pScale = (origParent.GetEffectiveScale and origParent:GetEffectiveScale()) or 1
+            if bScale <= 0 then bScale = 1 end
+            pts = { { "CENTER", nil, "CENTER", bx - (px * pScale / bScale), by - (py * pScale / bScale), true } }
+        end
+        if #pts == 0 then return end
+        self.savedFlyoutPoints[button] = pts
+    end
+
+    local header = self.header
+    local ok = pcall(function()
+        header:SetFrameRef("flyout", flyout)
+        header:SetFrameRef("flybutton", button)
+        header:SetAttribute("flyx", cx)
+        header:SetAttribute("flyy", cy)
+        header:Execute(PLACE_FLYOUT)
+    end)
+    if ok then
+        self.attachedFlyoutButton[flyout] = button
+        self.pendingFlyoutRestore[button] = nil
+    else
+        self.savedFlyoutPoints[button] = nil
+    end
+end
+
+function Input:RestoreFlyoutButton(button)
+    local pts = self.savedFlyoutPoints and self.savedFlyoutPoints[button]
+    if not pts then return end
+    if InCombatLockdown() or not self.header then
+        self.pendingFlyoutRestore[button] = true
+        return
+    end
+    local header = self.header
+    pcall(function()
+        header:SetFrameRef("flybutton", button)
+        header:SetAttribute("flyptcount", #pts)
+        for i, p in ipairs(pts) do
+            header:SetAttribute("flypt" .. i .. "a", p[1])
+            header:SetAttribute("flypt" .. i .. "parent", p[6] or false)
+            if not p[6] then header:SetFrameRef("flypt" .. i .. "r", p[2]) end
+            header:SetAttribute("flypt" .. i .. "b", p[3])
+            header:SetAttribute("flypt" .. i .. "x", p[4])
+            header:SetAttribute("flypt" .. i .. "y", p[5])
+        end
+        header:Execute(RESTORE_FLYOUT_BUTTON)
+    end)
+    self.savedFlyoutPoints[button] = nil
+    self.pendingFlyoutRestore[button] = nil
+end
+
+function Input:RestorePendingFlyoutButtons()
+    if InCombatLockdown() or not self.pendingFlyoutRestore then return end
+    local pending = {}
+    for button in pairs(self.pendingFlyoutRestore) do pending[#pending + 1] = button end
+    for _, button in ipairs(pending) do self:RestoreFlyoutButton(button) end
+end
+
 function Input:ObserveBlockers(bars, unit)
     local function Add(frame)
-        if not frame or self.blockers[frame] then return end
+        -- Never hide our hitboxes when Blizzard's SpellFlyout opens (e.g. from the SpellBook),
+        -- otherwise spells inside an open SpellBook flyout cannot be dragged onto the action bar.
+        if not frame or frame == SpellFlyout then return end
+        self:HookFlyoutPosition(frame)
+        if self.blockers[frame] then return end
         local ok, protected = pcall(function() return frame:IsProtected() end)
         if not ok or not protected then return end
         local ok = pcall(SecureHandlerWrapScript, frame, "OnShow", self.header, "control:Hide()")
@@ -534,7 +863,7 @@ function Input:ObserveBlockers(bars, unit)
     end
     Add(GamepadActionBarEditFrame)
     Add(EditModeManagerFrame)
-    for _, frame in pairs({ SpellFlyout, GamepadSpellFlyout, GamepadPetActionFlyout, GamepadPetSpellFlyout }) do Add(frame) end
+    for _, frame in pairs({ GamepadSpellFlyout, GamepadPetActionFlyout, GamepadPetSpellFlyout }) do Add(frame) end
     for _, bar in ipairs(bars) do
         for _, source in ipairs(bar.actionButtons) do Add(source.popup) end
     end
@@ -639,13 +968,16 @@ end
 function Input:Refresh(wanted, native, unit, bars)
     if self.disabled then self:RestoreAfterError(); return false end
     if InCombatLockdown() then return self:IsEnabled() end
+    self:RestorePendingFlyoutButtons()
     if not self.header then
         if not wanted then return false end
         self:Create(native, unit, bars)
     end
     local header = self.header
-    if not self.pagesSet then self:SetKeyboardPages() end
+    if not self.pagesSet then self:SetKeyboardPages()
+    else self:SyncKeyboardFlyouts() end
     if not wanted then
+        self:HideKbdFlyout()
         if header:IsShown() then Addon:Trace("Input off") end
         self:SyncNativeMouse(true)
         header:SetAttribute("enabled", false)
