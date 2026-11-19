@@ -26,6 +26,8 @@ Layout.lua
 ButtonBindings.lua
 Display.lua
 Input.lua
+Wheels.lua
+Dynamic.lua
 HUD.lua
 MenuHints.lua
 EditMode.lua

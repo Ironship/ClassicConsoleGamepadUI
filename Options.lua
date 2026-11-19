@@ -12,6 +12,31 @@ local controls = {
     { key = "crossFirst", default = false },
     { key = "padKeyboard", default = false },
     { key = "attackStart", default = false },
+    -- Wheels on R3 (Wheels.lua): R3 + X, Y, B or A opens a wheel of eight slots. Size and place are in interface points from
+    -- the middle of the screen.
+    { key = "wheels", default = false, section = "wheels" },
+    { key = "wheelScale", default = 1, min = 0.5, max = 1.5, step = 0.05, parent = "wheels" },
+    { key = "wheelSlotScale", default = 1, min = 0.6, max = 1.6, step = 0.05, parent = "wheels" },
+    { key = "wheelX", default = 0, min = -900, max = 900, step = 2, parent = "wheels", tip = "wheelPositionTip" },
+    { key = "wheelY", default = 0, min = -600, max = 600, step = 2, parent = "wheels", tip = "wheelPositionTip" },
+    { key = "wheelAlpha", default = 1, min = 0.3, max = 1, step = 0.05, parent = "wheels" },
+    { key = "wheelNames", default = true, parent = "wheels" },
+    { key = "wheelHints", default = true, parent = "wheels" },
+    { key = "wheelNumbers", default = true, parent = "wheels" },
+    -- Dynamic wheels (Dynamic.lua): wheels that fill themselves. Which wheel each kind goes to: 0 none, 1 to 5 the wheel.
+    { key = "wheelDynamic", default = false, parent = "wheels" },
+    { key = "wheelDynFood", default = 3, parent = "wheelDynamic", choice = true },
+    { key = "wheelDynUse", default = 4, parent = "wheelDynamic", choice = true },
+    { key = "wheelDynProf", default = 5, parent = "wheelDynamic", choice = true },
+    { key = "wheelKeep", default = 800, min = 200, max = 3000, step = 100, parent = "wheels" },
+    { key = "wheelsDock", default = true, parent = "wheels" },
+    { key = "wheelsDockAlways", default = false, parent = "wheelsDock" },
+    { key = "wheelsDockFocus", default = true, parent = "wheelsDock" },
+    { key = "wheelCombos", default = false, parent = "wheels" },
+    { key = "wheelToggle", default = false, parent = "wheels" },
+    { key = "wheelWedges", default = true, parent = "wheels" },
+    { key = "wheelCameraOnly", default = true, parent = "wheels" },
+    { key = "wheelBlock", default = "hard", parent = "wheels", choice = true },
     { key = "moveUnitFrames", default = false },
     -- The stock frames the classic layout places (Layout.lua PLACED, PlaceTotemBar). Off: Edit Mode places them.
     { key = "placeBags", default = true },
@@ -86,7 +111,14 @@ Options.choices = {
     keyboardLanguage = KeyboardLanguageChoices(),
     keyboardMode = { { "abc", nil, "layoutFull" }, { "t9", nil, "layoutTap" }, { "t9p", nil, "layoutSmart" },
         { "t9h", nil, "layoutHybrid" } },
+    wheelBlock = { { "off", nil, "blockOff" }, { "listener", nil, "blockListener" }, { "hard", nil, "blockHard" },
+        { "both", nil, "blockBoth" } },
+    wheelDynFood = { { 0, nil, "dynOff" }, { 1, nil, "dynWheel1" }, { 2, nil, "dynWheel2" }, { 3, nil, "dynWheel3" },
+        { 4, nil, "dynWheel4" }, { 5, nil, "dynWheel5" } },
 }
+-- The three kinds of dynamic wheel offer the same wheels.
+Options.choices.wheelDynUse = Options.choices.wheelDynFood
+Options.choices.wheelDynProf = Options.choices.wheelDynFood
 
 -- A setting was changed in the settings window (its value is already in the database).
 function Options:Changed(key)
@@ -108,6 +140,9 @@ function Options:Changed(key)
         Addon.Keyboard:ApplyTransparency()
     elseif key == "wordHunter" then
         Addon.WordSources:Changed()
+    elseif key == "wheels" or key:sub(1, 5) == "wheel" then
+        Addon.Wheels:Changed(key)
+        Addon:QueueRefresh(true)
     elseif key == "legendGrowUp" then
         Addon.HUD:SetLegendGrowUp()
     elseif key == "legendFrame" or key == "legendShade" then

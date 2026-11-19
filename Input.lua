@@ -238,6 +238,9 @@ local function PadFree()
     return not ok or core == true
 end
 
+-- Wheels.lua leaves the pad alone in the same cases.
+Input.PadFree = PadFree
+
 function Input:PadWanted()
     return Addon.db.padKeyboard == true and self.padButtons ~= nil and PadFree()
 end

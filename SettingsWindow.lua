@@ -192,6 +192,18 @@ local function Tabs()
             { "header", "secKeys", "secKeysNote" },
             { "control", "padKeyboard" }, { "control", "attackStart" },
             { "button", "keymapOpen", "btnOpen", "keymapOpenTip", function() Addon.KeyMap:Open() end },
+            { "header", "secWheels", "secWheelsNote" },
+            { "control", "wheels" }, { "control", "wheelScale" }, { "control", "wheelSlotScale" },
+            { "control", "wheelX" }, { "control", "wheelY" }, { "control", "wheelAlpha" },
+            { "control", "wheelWedges" }, { "control", "wheelToggle" },
+            { "control", "wheelNames" }, { "control", "wheelHints" }, { "control", "wheelNumbers" }, { "control", "wheelKeep" }, { "control", "wheelsDock" }, { "control", "wheelsDockAlways" }, { "control", "wheelsDockFocus" },
+            { "control", "wheelCombos" },
+            { "control", "wheelCameraOnly" }, { "choice", "wheelBlock", "wheels" },
+            { "wheelkey", 1 }, { "wheelkey", 2 }, { "wheelkey", 3 }, { "wheelkey", 4 }, { "wheelkey", 5 },
+            { "control", "wheelDynamic" },
+            { "choice", "wheelDynFood", "wheelDynamic" }, { "choice", "wheelDynUse", "wheelDynamic" }, { "choice", "wheelDynProf", "wheelDynamic" },
+            { "button", "wheelsEdit", "btnOpen", "wheelsEditTip", function() Addon.Wheels:Toggle() end, "wheels" },
+            { "button", "wheelsClear", "btnReset", "wheelsClearTip", Confirmed(function() Addon.Wheels:ClearAll() end), "wheels" },
             { "header", "secAssign", "secAssignNote" },
             { "button", "bind", "btnStart", "bindTip", function() options:BindFromBars() end },
             { "header", "secGame", "secGameNote" },
@@ -474,6 +486,32 @@ local function Button(page, y, label, buttonText, tip, action, parent)
     return y + 36
 end
 
+-- A row for the key of a wheel: the button shows the key (a click waits for the next key to press, a right click takes it off).
+local function WheelKey(page, y, wheel)
+    local label = string.format(Text("wheelKeyLabel"), wheel, Addon.Wheels.Label(wheel))
+    local row = NewRow(page, y, 0, 34)
+    RowLabel(row, label, 0)
+    local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    Fonts:Button(button)
+    button:SetSize(CONTROL_WIDTH, 24)
+    button:SetPoint("LEFT", row, "LEFT", CONTROL_X, 0)
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    local function Show() button:SetText(Addon.Wheels:KeyText(wheel)) end
+    button:SetScript("OnClick", function(_, mouse)
+        if mouse == "RightButton" then
+            if Addon.Wheels:KeyOf(wheel) then Addon.Wheels:SetKey(wheel, nil) end
+            Show()
+        else
+            Addon.Wheels:CaptureKey(wheel, Show)
+        end
+    end)
+    local tip = Text("wheelKeyTip")
+    AddHelp(button, label, tip)
+    AddHelp(row, label, tip)
+    Register(page, row, button, y, 34, Show, "wheels")
+    return y + 36
+end
+
 -- ---------------------------------------------------------------------------------------------
 -- Pages: a scrolling column per tab, built the first time the tab is shown
 -- ---------------------------------------------------------------------------------------------
@@ -547,6 +585,7 @@ local function BuildPage(window, tab)
         if kind == "header" then y = Header(page, y, item[2], item[3])
         elseif kind == "choice" then y = Choice(page, y, item[2], item[3])
         elseif kind == "status" then y = Status(page, y, item[2], item[3])
+        elseif kind == "wheelkey" then y = WheelKey(page, y, item[2])
         elseif kind == "button" then
             local label = item[7] or Text(item[2])
             y = Button(page, y, label, Text(item[3]), Text(item[4]), item[5], item[6])
@@ -936,6 +975,7 @@ function Window:Create()
     frame:HookScript("OnHide", function()
         self:Mark(nil)
         CloseList()
+
     end)
     -- Lines that follow something outside the window (the word lists being read) are looked at once a second.
     local sinceLive = 0

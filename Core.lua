@@ -288,11 +288,15 @@ function Addon:Refresh()
     if not moverOk then self:Note("Mover:Refresh", moverError) end
     self.ItemDelete:Refresh()
     self:CheckNativeTaint("ItemDelete:Refresh")
+    -- The wheels on R3 (Wheels.lua); a failure there must not touch the bars.
+    local wheelsOk, wheelsError = pcall(self.Wheels.Refresh, self.Wheels, gamepad)
+    if not wheelsOk then self:Note("Wheels:Refresh", wheelsError) end
     if not gamepad and not changed then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
     self:Note(not ok and "Display:Refresh" or "refresh", not ok and visible or nil)
     -- Keep observing while Edit Mode or the action editor temporarily expose the native HUD.
     local watchDelete = gamepad and self.db.easyDelete and self.ItemDelete.dialog
-    driver:SetScript("OnUpdate", (wanted or watchDelete) and Poll or nil)
+    local watchWheels = gamepad and self.db.wheels == true
+    driver:SetScript("OnUpdate", (wanted or watchDelete or watchWheels) and Poll or nil)
 end
 
 -- The action buttons report usable, range, count, state and cooldown changes nearly every frame in a fight, and each report
@@ -364,6 +368,8 @@ local function Initialize()
         Addon:CheckNativeTaint("Options:Register")
     end)
     Try("ItemDelete", function() Addon.ItemDelete:Observe() end)
+    Try("Dynamic wheels", function() Addon.Dynamic:Observe() end)
+    Try("Focus log", function() Addon.Wheels:WatchFocus() end)
     Try("Words", function() Addon.Words:Observe() end)
     Try("WordSources", function() Addon.WordSources:Observe() end)
     Try("Keyboard", function() Addon.Keyboard:Observe() end)
@@ -466,6 +472,31 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             Addon.Keyboard:SetLanguage(mode:upper())
         else
             Addon.Keyboard:Toggle()
+        end
+        return
+    elseif command == "wheels" or command == "wheel" then
+        -- /cgp wheels: the editor of the wheels on R3; /cgp wheels diag: what the secure code made of the last release.
+        local mode = input:lower():match("^%s*%S+%s+(%S+)")
+        if mode == "diag" then
+            Addon.Wheels:Diagnose()
+        elseif mode == "sticks" then
+            Addon.Wheels:ProbeSticks()
+        elseif mode == "reset" then
+            Addon.Wheels:Reset()
+        elseif mode == "unfocus" then
+            Addon.Wheels:Unfocus()
+        elseif mode == "focus" then
+            Addon.Wheels:PrintFocus()
+        elseif mode == "safe" then
+            Addon.Wheels:Safe()
+        elseif mode == "dyn" or mode == "dynamic" then
+            Addon.Dynamic:Report()
+        elseif mode == "trace" then
+            -- What the wheel sees of the mouse while it is filled, printed in the chat (for a drop that does nothing).
+            Addon.traceWheels = not Addon.traceWheels
+            Addon:Print("wheels trace " .. (Addon.traceWheels and "on: open Fill the wheels, drag something onto a slot, read the lines" or "off"))
+        else
+            Addon.Wheels:Toggle()
         end
         return
     elseif command == "edit" then
@@ -581,7 +612,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | keys | language | bindings | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | perf | debug")
+        Addon:Print("/cgp settings | keyboard | keys | language | bindings | wheels | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | perf | debug")
         return
     end
     Addon:QueueRefresh(true)
