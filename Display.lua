@@ -45,11 +45,15 @@ local function CopyTexture(target, source)
     target:Show()
 end
 
+-- The pictures a prompt can show instead of its normal one, the strongest first. A constant: CopyGlyph runs for every slot
+-- on every refresh, and the list used to be made again at each call.
+local GLYPH_STATES = { "PressedTexture", "ActiveTexture", "HoverTexture", "DisabledTexture" }
+
 local function CopyGlyph(target, prompt)
     if not prompt then target:Hide(); return end
     local source = prompt.NormalTexture
-    for _, key in ipairs({ "PressedTexture", "ActiveTexture", "HoverTexture", "DisabledTexture" }) do
-        local candidate = prompt[key]
+    for i = 1, #GLYPH_STATES do
+        local candidate = prompt[GLYPH_STATES[i]]
         if candidate and candidate:IsShown() then source = candidate; break end
     end
     CopyTexture(target, source)
@@ -1105,14 +1109,28 @@ local function CopyForeignText(mirror, region, slot)
     mirror:Show()
 end
 
+-- The regions of the button being looked at, in one table that is reused. Asking for them used to make a closure and a
+-- table for every slot on every refresh.
+local regionList, regionCount = {}, 0
+
+local function RegionsOf(source) return source:GetRegions() end
+
+local function PackRegions(ok, ...)
+    local count = ok and select("#", ...) or 0
+    for i = 1, count do regionList[i] = (select(i, ...)) end
+    for i = count + 1, regionCount do regionList[i] = nil end
+    regionCount = count
+    return count
+end
+
 function Display:MirrorForeignText(slot, source)
     local mirrors = slot.Foreign
     if not mirrors then mirrors = {}; slot.Foreign = mirrors end
     local used = 0
     if source then
-        local ok, regions = pcall(function() return { source:GetRegions() } end)
-        for _, region in ipairs(ok and regions or {}) do
-            if IsForeignText(region, source) then
+        for i = 1, PackRegions(pcall(RegionsOf, source)) do
+            local region = regionList[i]
+            if region and IsForeignText(region, source) then
                 used = used + 1
                 local mirror = mirrors[used]
                 if not mirror then
