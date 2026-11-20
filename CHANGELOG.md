@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.86
 
 - **The name and the hint under the wheel are no longer behind the panel.** They were regions of the wheel's frame and the panel is a child frame, which is drawn over them; they now sit on a frame of their own above it.
 - **Pet wheel: the tooltip never stays empty, and `/cgp wheels pet` says what the pet wheel sees.** Hovering a pet command (Attack, Follow, Stay, the stances) put nothing on the tooltip when the game's own tooltip of the pet action answered without text; the name of the command is shown then. `/cgp wheels pet` lists the pet bar, the entries, what the secure layer was told and the last release; the last release of a pet wheel button now says which pet action it chose. Tried against a stand-in for the game only.
