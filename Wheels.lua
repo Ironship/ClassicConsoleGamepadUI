@@ -511,6 +511,7 @@ local FACE_CLICK = [[
     if layer:GetAttribute("petmode" .. page) then
         local petAct = slot and layer:GetAttribute("petact" .. page .. "_" .. slot)
         local petSpell = slot and not petAct and layer:GetAttribute("petspell" .. page .. "_" .. slot)
+        control:SetAttribute("diag", format("%s pet: slot=%s act=%s spell=%s", tostring(control:GetAttribute("diag")), tostring(slot), tostring(petAct), tostring(petSpell)))
         layer:SetAttribute("openwheel", nil)
         layer:SetAttribute("page", nil)
         layer:RunAttribute("closebind")
@@ -1295,10 +1296,16 @@ function Wheels:CreateHUD()
     hubRim:SetPoint("CENTER")
     local hub = Circle(hud, 136, 0.04, 0.032, 0.025, 0.9, "BACKGROUND", 3)
     hub:SetPoint("CENTER")
-    hud.Name = Addon.Fonts:String(hud, "OVERLAY", "Normal")
-    hud.Name:SetPoint("CENTER", 0, 12)
+    -- The name and the hint sit on a frame of their own, above the bands: a child frame (the bands, the slots) is drawn over the
+    -- parent's own regions whatever their draw layer, which put the name and the hint of the slot behind the panel below the wheel.
+    local text = CreateFrame("Frame", nil, hud)
+    text:SetAllPoints(hud)
+    text:SetFrameLevel(hud:GetFrameLevel() + 5)
+    hud.Text = text
+    hud.Name = Addon.Fonts:String(text, "OVERLAY", "Normal")
+    hud.Name:SetPoint("CENTER", hud, "CENTER", 0, 12)
     hud.Name:SetWidth(124)
-    hud.Hint = Addon.Fonts:String(hud, "OVERLAY", "HighlightSmall")
+    hud.Hint = Addon.Fonts:String(text, "OVERLAY", "HighlightSmall")
     hud.Hint:SetPoint("TOP", hud.Name, "BOTTOM", 0, -6)
     hud.Hint:SetWidth(124)
     -- The look of the game's wheels: a wedge for each slot (shown by Wheels:ApplyStyle).
@@ -2251,17 +2258,29 @@ function Wheels:Changed(key)
     if key == "wheelsDock" and self.dock and not Addon.db.wheelsDock then self.dock:Hide() end
 end
 
+-- The tooltip of an entry of the pet wheel: the game's own tooltip of the pet action or spell, and when that put no text on the
+-- tooltip (a pet command such as Attack or Follow, or a call the game answered with nothing: the hover then seemed to do nothing)
+-- the name of the entry.
+local function PetTooltip(entry)
+    local ok, result
+    if entry.kind == "pet" and entry.index then
+        ok, result = pcall(GameTooltip.SetPetAction, GameTooltip, entry.index)
+    elseif entry.kind == "spell" and entry.id then
+        ok, result = pcall(GameTooltip.SetSpellByID, GameTooltip, entry.id)
+    end
+    local lines = ok and GameTooltip.NumLines and GameTooltip:NumLines() or nil -- (no NumLines to ask: the call is trusted)
+    local has = ok and (lines == nil or lines > 0)
+    if not has then
+        if GameTooltip.ClearLines then GameTooltip:ClearLines() end
+        GameTooltip:SetText(entry.name or tostring(entry.rawName or ""), 1, 1, 1)
+    end
+end
+
 function Wheels:Tooltip(frame, action, isPet)
     GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
     if isPet then
         if type(action) == "table" then
-            if action.kind == "pet" and action.index then
-                if not pcall(GameTooltip.SetPetAction, GameTooltip, action.index) then GameTooltip:SetText(action.name or "") end
-            elseif action.kind == "spell" and action.id then
-                if not pcall(GameTooltip.SetSpellByID, GameTooltip, action.id) then GameTooltip:SetText(action.name or "") end
-            else
-                GameTooltip:SetText(action.name or "")
-            end
+            PetTooltip(action)
         else
             GameTooltip:SetText(Text("wheelEmpty"))
         end
@@ -2271,6 +2290,48 @@ function Wheels:Tooltip(frame, action, isPet)
         GameTooltip:SetText(Text("wheelDropHere"))
     end
     GameTooltip:Show()
+end
+
+-- /cgp wheels pet: what the pet wheel sees (the pet bar, the entries, what the secure layer was told, the last release).
+function Wheels:PetDiagnose()
+    local say = function(...) Addon:Print(string.format(...)) end
+    local db = Addon.db
+    local dynamic = Addon.Dynamic
+    say("pet wheel: dynamic wheels=%s, pet goes to wheel %s, wheel kinds: %s", tostring(db.wheelDynamic == true), tostring(db.wheelDynPet),
+        (function()
+            local kinds = {}
+            for wheel = 1, COUNT do kinds[#kinds + 1] = wheel .. "=" .. tostring(dynamic and dynamic:CategoryOf(wheel) or "-") end
+            return table.concat(kinds, " ")
+        end)())
+    say("pet wheel: PetHasActionBar=%s, UnitExists(pet)=%s, pet slots=%s", tostring(type(PetHasActionBar) == "function" and PetHasActionBar()),
+        tostring(UnitExists and UnitExists("pet")), tostring(NUM_PET_ACTION_SLOTS))
+    for index = 1, (type(NUM_PET_ACTION_SLOTS) == "number" and NUM_PET_ACTION_SLOTS or 10) do
+        local ok, name, texture, isToken, isActive, _, _, spellID = pcall(GetPetActionInfo, index)
+        if ok and name then
+            say("  pet bar %d: %s token=%s active=%s spell=%s", index, tostring(name), tostring(isToken), tostring(isActive), tostring(spellID))
+        end
+    end
+    local entries = dynamic and dynamic.PetEntries and dynamic.PetEntries() or {}
+    say("pet wheel: %d entries", #entries)
+    for slot, entry in ipairs(entries) do
+        say("  entry %d: %s %s", slot, tostring(entry.kind), tostring(entry.name))
+    end
+    local layer = self.layer
+    if not layer then say("pet wheel: the secure layer does not exist yet"); return end
+    for wheel = 1, COUNT do
+        if layer:GetAttribute("petmode" .. wheel) then
+            local told = {}
+            for slot = 1, SLOTS do
+                local act, spell = layer:GetAttribute("petact" .. wheel .. "_" .. slot), layer:GetAttribute("petspell" .. wheel .. "_" .. slot)
+                if act or spell then told[#told + 1] = slot .. "=" .. (act and ("pet:" .. act) or ("spell:" .. tostring(spell))) end
+            end
+            say("pet wheel: the secure layer knows wheel %d as the pet wheel: %s", wheel, #told > 0 and table.concat(told, " ") or "nothing in it")
+            local face = self.faces and self.faces[wheel]
+            local mod = self.mods and (wheel <= 4 and self.mods[1] or self.mods[2])
+            say("pet wheel: last release of its button: %s", tostring(mod and mod:GetAttribute("diag") or "none yet"))
+        end
+    end
+    say("pet wheel: pet attributes are only written outside combat; the last release says 'pet: slot=.. act=..' when the pet branch ran")
 end
 
 -- /cgp wheels diag: what the secure code made of the last release, and whether the layer is bound.

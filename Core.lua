@@ -483,6 +483,8 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             Addon.Wheels:ProbeSticks()
         elseif mode == "reset" then
             Addon.Wheels:Reset()
+        elseif mode == "pet" then
+            Addon.Wheels:PetDiagnose()
         elseif mode == "unfocus" then
             Addon.Wheels:Unfocus()
         elseif mode == "focus" then

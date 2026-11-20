@@ -195,6 +195,7 @@ function Dynamic.PetActionEntry(index)
         index = index,
         name = displayName,
         rawName = name,
+        isToken = isToken == true,
         icon = icon,
         isActive = isActive == true,
         usable = usable,

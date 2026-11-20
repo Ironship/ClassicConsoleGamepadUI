@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **The name and the hint under the wheel are no longer behind the panel.** They were regions of the wheel's frame and the panel is a child frame, which is drawn over them; they now sit on a frame of their own above it.
+- **Pet wheel: the tooltip never stays empty, and `/cgp wheels pet` says what the pet wheel sees.** Hovering a pet command (Attack, Follow, Stay, the stances) put nothing on the tooltip when the game's own tooltip of the pet action answered without text; the name of the command is shown then. `/cgp wheels pet` lists the pet bar, the entries, what the secure layer was told and the last release; the last release of a pet wheel button now says which pet action it chose. Tried against a stand-in for the game only.
+
 ## 0.1.0-alpha.85
 
 - **Spell Flyout support on Action Bars and Wheels.** Action bar slots and wheel slots now render flyout indicator arrows and handle spell flyouts cleanly: single-known flyouts cast directly, multi-spell flyouts on action bars open Blizzard's `GamepadSpellFlyout` positioned directly above the classic slot (with a secure `$parent` anchor-restore fallback to avoid Restricted frame errors), and multi-spell flyouts on wheels open an in-wheel flyout sub-wheel (combat-safe, zero taint). Mouse clicks on flyout action bar slots defer opening until mouse-up so flyout icons can be dragged off bars with the mouse normally, while gamepad keybinds still open on key-down.
