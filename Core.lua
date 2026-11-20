@@ -500,6 +500,9 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             Addon.Wheels:Reset()
         elseif mode == "pet" then
             Addon.Wheels:PetDiagnose()
+        elseif mode == "cd" or mode == "cooldown" or mode == "cooldowns" then
+            -- What the game says about the cooldowns and the usability of the things on the wheels, and what the wheel shows of it.
+            Addon.Wheels:CooldownDiagnose()
         elseif mode == "unfocus" then
             Addon.Wheels:Unfocus()
         elseif mode == "focus" then

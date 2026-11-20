@@ -152,7 +152,19 @@ for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "SPELLS_CHANGED", "SPELL_FLYO
     "PET_BAR_UPDATE", "UNIT_PET", "PET_UI_UPDATE", "PET_BAR_UPDATE_USABLE" }) do
     pcall(watcher.RegisterEvent, watcher, event)
 end
+-- What a slot can do right now changes without the bars changing: a cooldown starts or ends, the mana runs out, a form is taken.
+-- These events only say "read the slots again" (Wheels:Freshen does it on the next frame, and only while a wheel is on the screen).
+local STATE_EVENT = {}
+for _, event in ipairs({ "ACTIONBAR_UPDATE_COOLDOWN", "ACTIONBAR_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "SPELL_UPDATE_COOLDOWN",
+    "SPELL_UPDATE_USABLE", "BAG_UPDATE_COOLDOWN", "PET_BAR_UPDATE_COOLDOWN", "UPDATE_SHAPESHIFT_FORM" }) do
+    STATE_EVENT[event] = true
+    pcall(watcher.RegisterEvent, watcher, event)
+end
 watcher:SetScript("OnEvent", function(_, event, unit)
+    if STATE_EVENT[event] then
+        Wheels.stateDirty = true
+        return
+    end
     if event == "UNIT_PET" and unit ~= "player" then return end
     Wheels.stale = true
     if event == "ACTIONBAR_SLOT_CHANGED" or event == "SPELLS_CHANGED" or event == "SPELL_FLYOUT_UPDATE" or event == "PLAYER_REGEN_ENABLED" then
@@ -1226,14 +1238,33 @@ local function CreateSlotFrame(parent, slot, size, radius)
     mask:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     mask:SetAllPoints(frame.Icon)
     frame.Icon:AddMaskTexture(mask)
-    frame.FlyoutArrow = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    -- The sweep and the countdown of a cooldown (Wheels:UpdateState) are a frame above the icon, like the stock buttons' Cooldown. The
+    -- arrow of a flyout and the number of the slot sit on a frame above that, so the sweep does not darken them.
+    local cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+    cooldown:SetAllPoints(frame.Icon)
+    cooldown:SetDrawEdge(false)
+    -- The countdown is for the slots big enough to read it; the small wheels beside the bags only sweep and go grey.
+    cooldown:SetHideCountdownNumbers(size < 40)
+    -- Nothing here may stop the wheel from being made: what the classic bars already use is called plainly, the rest is guarded.
+    pcall(cooldown.EnableMouse, cooldown, false)
+    pcall(cooldown.SetDrawBling, cooldown, false)
+    -- The icon is a circle: so is the sweep (a mask the game has, the one the icon is cut with). If the game takes it differently the
+    -- sweep is square, which a dark slot hardly shows.
+    pcall(cooldown.SetSwipeTexture, cooldown, MASK, 0, 0, 0, 0.64)
+    -- A cooldown that ends is read again on the next frame, so the icon is not left grey.
+    pcall(cooldown.SetScript, cooldown, "OnCooldownDone", function() Wheels.stateDirty = true end)
+    frame.Cooldown = cooldown
+    local labels = CreateFrame("Frame", nil, frame)
+    labels:SetAllPoints(frame)
+    labels:SetFrameLevel(cooldown:GetFrameLevel() + 2)
+    frame.FlyoutArrow = labels:CreateTexture(nil, "OVERLAY", nil, 2)
     frame.FlyoutArrow:SetSize(size >= 40 and 15 or 10, size >= 40 and 6 or 4)
     frame.FlyoutArrow:SetPoint("TOP", frame, "TOP", 0, size >= 40 and 4 or 3)
     if frame.FlyoutArrow.SetAtlas then frame.FlyoutArrow:SetAtlas("UI-HUD-ActionBar-Flyout", false) end
     frame.FlyoutArrow:Hide()
     if size >= 40 then
-        frame.Number = Addon.Fonts:String(frame, "OVERLAY", "HighlightSmall")
-        frame.Number:SetPoint("BOTTOMRIGHT", 4, -2)
+        frame.Number = Addon.Fonts:String(labels, "OVERLAY", "HighlightSmall")
+        frame.Number:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 4, -2)
     end
     frame.slot = slot
     return frame
@@ -1429,10 +1460,169 @@ function Wheels:Paint(frame)
     end
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Cooldown and usability of a slot
+-- ---------------------------------------------------------------------------------------------
+
+-- A stock button shows what its content can do right now: a Cooldown frame sweeps and counts down while it recharges, and the icon is
+-- dim when it cannot be used. The slots of the wheels showed neither (a Hearthstone on its hour of cooldown looked ready). A slot
+-- holds one of three things, each with its own questions to the game:
+--   an action slot, frame.cdAction (the bars 4 to 8 the wheels are): C_ActionBar.GetActionCooldown, IsUsableAction
+--   a spell, frame.cdSpell (a flyout wheel's spells, an extra pet spell): C_Spell.GetSpellCooldown, IsSpellUsable
+--   a pet command, frame.cdPet (the pet bar's index): GetPetActionCooldown
+-- Wheels:UpdateState reads them for one slot; the slots are read again when an event says that something changed (Wheels:Freshen).
+
+-- In a fight the times of a cooldown can be secret (when cooldowns are restricted): they cannot be compared, and a Cooldown frame
+-- does not take them from an addon.
+local function Readable(value)
+    return not issecretvalue or not issecretvalue(value)
+end
+
+-- A cooldown of this many seconds or less is the global cooldown: the slot sweeps for it but its icon does not go grey.
+local GCD_SECONDS = 2
+
+-- The game's own description of a running cooldown, for when the times are secret: a Cooldown frame takes that one.
+local function DurationObject(kind, id)
+    if kind == "action" then
+        if C_ActionBar and C_ActionBar.GetActionCooldownDuration then
+            local ok, object = pcall(C_ActionBar.GetActionCooldownDuration, id)
+            return ok and object or nil
+        end
+    elseif C_Spell and C_Spell.GetSpellCooldownDuration then
+        local ok, object = pcall(C_Spell.GetSpellCooldownDuration, id)
+        return ok and object or nil
+    end
+end
+
+-- Gives the Cooldown frame what a cooldown table (C_ActionBar.GetActionCooldown, C_Spell.GetSpellCooldown) says, the way the stock
+-- ActionButton_ApplyCooldown does. `isActive` and `isOnGCD` are never secret; the times can be, and then the frame gets the game's
+-- duration object instead. Returns whether the cooldown is longer than the global one (the icon goes grey for that).
+local function ApplyInfo(cooldown, info, kind, id)
+    -- (a plain truth test of isActive, as the stock code does it)
+    if type(info) ~= "table" or not info.isActive then
+        cooldown:Clear()
+        return false
+    end
+    local start, duration, rate = info.startTime, info.duration, info.modRate
+    if Readable(start) and Readable(duration) and Readable(rate) and type(start) == "number" and type(duration) == "number" then
+        cooldown:SetCooldown(start, duration, type(rate) == "number" and rate > 0 and rate or 1)
+        return duration > GCD_SECONDS
+    end
+    local object = DurationObject(kind, id)
+    if object then
+        cooldown:SetCooldownFromDurationObject(object)
+        return not info.isOnGCD
+    end
+    cooldown:Clear()
+    return false
+end
+
+-- Whether the game calls a thing usable and, when it is not, whether only the resource (mana, rage, energy) is missing.
+local function UsableOf(ok, isUsable, lacking)
+    if ok and isUsable ~= nil and Readable(isUsable) and Readable(lacking) then return isUsable == true, lacking == true end
+    return true, false
+end
+
+local function ActionState(frame, action)
+    local ok, info = pcall(C_ActionBar.GetActionCooldown, action)
+    local long = false
+    if ok then long = ApplyInfo(frame.Cooldown, info, "action", action) else frame.Cooldown:Clear() end
+    local usable, lacking = UsableOf(pcall(C_ActionBar.IsUsableAction, action))
+    return long, usable, lacking
+end
+
+local function SpellState(frame, spellID)
+    local long = false
+    if type(spellID) == "number" and C_Spell and C_Spell.GetSpellCooldown then
+        local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+        if ok then long = ApplyInfo(frame.Cooldown, info, "spell", spellID) else frame.Cooldown:Clear() end
+    else
+        frame.Cooldown:Clear()
+    end
+    -- An entry that says so (the pet wheel's spells belong to the pet, which the player's usability check knows nothing about) is
+    -- trusted; otherwise the game is asked.
+    if frame.cdUsable ~= nil then return long, frame.cdUsable, false end
+    if type(spellID) ~= "number" or not (C_Spell and C_Spell.IsSpellUsable) then return long, true, false end
+    local usable, lacking = UsableOf(pcall(C_Spell.IsSpellUsable, spellID))
+    return long, usable, lacking
+end
+
+-- The pet bar answers with a start, a duration and an enable flag (CooldownFrame_Set in the stock code reads them the same way).
+local function PetState(frame, index)
+    local cooldown = frame.Cooldown
+    local ok, start, duration, enable = pcall(GetPetActionCooldown, index)
+    if ok and Readable(start) and Readable(duration) and type(start) == "number" and type(duration) == "number"
+        and enable and enable ~= 0 and start > 0 and duration > 0 then
+        cooldown:SetCooldown(start, duration)
+        return duration > GCD_SECONDS, frame.cdUsable ~= false, false
+    end
+    cooldown:Clear()
+    return false, frame.cdUsable ~= false, false
+end
+
+-- What the icon looks like: grey while it recharges, dim when it cannot be used (bluish when only the resource is missing), as on the
+-- stock bars.
+local function PaintIcon(frame, long, usable, lacking)
+    local icon = frame.Icon
+    if long then
+        icon:SetDesaturated(true)
+        icon:SetVertexColor(0.6, 0.6, 0.6, 1)
+        return
+    end
+    icon:SetDesaturated(false)
+    if usable then
+        icon:SetVertexColor(1, 1, 1, 1)
+    elseif lacking then
+        icon:SetVertexColor(0.5, 0.5, 1, 1)
+    else
+        icon:SetVertexColor(0.4, 0.4, 0.4, 1)
+    end
+end
+
+local function ReadState(frame)
+    local long, usable, lacking = false, true, false
+    if frame.cdAction then
+        long, usable, lacking = ActionState(frame, frame.cdAction)
+    elseif frame.cdSpell then
+        long, usable, lacking = SpellState(frame, frame.cdSpell)
+    elseif frame.cdPet then
+        long, usable, lacking = PetState(frame, frame.cdPet)
+    else
+        frame.Cooldown:Clear()
+    end
+    frame.cdLong = long
+    PaintIcon(frame, long, usable, lacking)
+end
+
+-- Reads the cooldown and the usability of what a slot shows and draws them. Never throws: it runs from the wheel's own redraw and from
+-- an update script.
+function Wheels:UpdateState(frame)
+    if not frame.Cooldown then return end
+    local ok, err = pcall(ReadState, frame)
+    if not ok then
+        -- The slot frames are shared by the wheels: do not leave the look of what an earlier wheel had in this place.
+        self.stateError = tostring(err)
+        pcall(frame.Cooldown.Clear, frame.Cooldown)
+        pcall(PaintIcon, frame, false, true, false)
+    end
+end
+
+-- Reads every slot that is on the screen again: the big wheel and the small wheels.
+function Wheels:RefreshStates()
+    local hud, dock = self.hud, self.dock
+    if hud and self.open and hud:IsShown() then
+        for _, frame in ipairs(hud.slots) do self:UpdateState(frame) end
+    end
+    if dock and dock:IsShown() then
+        for _, frame in ipairs(dock.slots) do self:UpdateState(frame) end
+    end
+end
+
 local function ShowEntry(frame, entry)
     local _, icon, isFlyout = Describe(entry)
     frame.Icon:SetTexture(entry and icon or nil)
-    frame.Icon:SetVertexColor(1, 1, 1, 1)
+    frame.cdAction, frame.cdSpell, frame.cdPet, frame.cdUsable = type(entry) == "number" and entry or nil, nil, nil, nil
+    Wheels:UpdateState(frame)
     frame.Disc:SetVertexColor(0.08, 0.065, 0.05, entry and 1 or 0.55)
     if frame.FlyoutArrow then frame.FlyoutArrow:SetShown(entry ~= nil and isFlyout == true) end
     Wheels:Paint(frame)
@@ -1445,7 +1635,8 @@ local function ShowFlyoutSpell(frame, spell)
         tex = ok and icon or nil
     end
     frame.Icon:SetTexture(spell and (tex or 134400) or nil)
-    frame.Icon:SetVertexColor(1, 1, 1, 1)
+    frame.cdAction, frame.cdSpell, frame.cdPet, frame.cdUsable = nil, spell and spell.id or nil, nil, nil
+    Wheels:UpdateState(frame)
     frame.Disc:SetVertexColor(0.08, 0.065, 0.05, spell and 1 or 0.55)
     if frame.FlyoutArrow then frame.FlyoutArrow:Hide() end
     Wheels:Paint(frame)
@@ -1453,11 +1644,12 @@ end
 
 local function ShowPetEntry(frame, entry)
     frame.Icon:SetTexture(entry and (entry.icon or 134400) or nil)
-    if entry and entry.usable == false then
-        frame.Icon:SetVertexColor(0.45, 0.45, 0.45, 1)
-    else
-        frame.Icon:SetVertexColor(1, 1, 1, 1)
-    end
+    frame.cdAction = nil
+    frame.cdPet = entry and entry.kind == "pet" and entry.index or nil
+    frame.cdSpell = entry and entry.kind == "spell" and entry.id or nil
+    -- The entry knows whether the pet can do it now (the pet wheel's own list is read again when the pet bar changes).
+    if entry then frame.cdUsable = entry.usable ~= false else frame.cdUsable = nil end
+    Wheels:UpdateState(frame)
     frame.Disc:SetVertexColor(0.08, 0.065, 0.05, entry and 1 or 0.55)
     if frame.FlyoutArrow then frame.FlyoutArrow:Hide() end
     Wheels:Paint(frame)
@@ -1640,8 +1832,12 @@ end
 -- Draws the slots again when the bars changed (checked while a wheel is on the screen).
 function Wheels:Freshen()
     if self.stale then
-        self.stale = nil
+        -- The redraw reads the cooldowns and the usability too.
+        self.stale, self.stateDirty = nil, nil
         self:Redraw()
+    elseif self.stateDirty then
+        self.stateDirty = nil
+        self:RefreshStates()
     end
 end
 
@@ -1792,6 +1988,8 @@ function Wheels:Redraw()
         self:DrawCenter()
     end
     self:RedrawDock()
+    -- Everything on the screen was read just now: a cooldown event that came before it has nothing left to do.
+    self.stateDirty = nil
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -2247,6 +2445,8 @@ function Wheels:Changed(key)
     if key:sub(1, 8) == "wheelDyn" and Addon.Dynamic then
         self.petDirty = true
         if not InCombatLockdown() then self:SyncPet() end
+        -- (a change of these settings also starts the guard against writes that do not settle over: Dynamic.lua)
+        Addon.Dynamic:Reset()
         Addon.Dynamic:Request(0.2)
         self:RedrawDock()
         self:Redraw()
@@ -2384,5 +2584,64 @@ function Wheels:Diagnose()
         for slot = 1, SLOTS do if self:Get(wheel, slot) then filled = filled + 1 end end
         say("%s = action bar %d (action slots %d-%d): %d of %d slots filled, own key: %s", Wheels.Label(wheel), wheel + 3,
             Wheels.ActionOf(wheel, 1), Wheels.ActionOf(wheel, SLOTS), filled, SLOTS, tostring(self:KeyText(wheel)))
+    end
+end
+
+-- /cgp wheels cd: what the game says about the cooldown and the usability of what is on the five wheels (every slot that has a running
+-- cooldown, cannot be used, or holds an item; the rest are counted), and what the slots on the screen made of it.
+function Wheels:CooldownDiagnose()
+    local say = function(...) Addon:Print(string.format(...)) end
+    local function Show(value)
+        if value == nil then return "nil" end
+        if not Readable(value) then return "secret" end
+        return tostring(value)
+    end
+    local bar, spell = C_ActionBar, C_Spell
+    local secrets = C_Secrets
+    local function Ask(name, ...)
+        if type(secrets) ~= "table" or type(secrets[name]) ~= "function" then return "unknown" end
+        local ok, answer = pcall(secrets[name], ...)
+        return ok and Show(answer) or "error"
+    end
+    say("wheels cd: GetActionCooldown=%s GetActionCooldownDuration=%s IsUsableAction=%s | C_Spell.GetSpellCooldown=%s GetSpellCooldownDuration=%s IsSpellUsable=%s | issecretvalue=%s | secret restrictions in this client: %s, cooldowns hidden now: %s | last error: %s",
+        tostring(bar and bar.GetActionCooldown ~= nil), tostring(bar and bar.GetActionCooldownDuration ~= nil), tostring(bar and bar.IsUsableAction ~= nil),
+        tostring(spell and spell.GetSpellCooldown ~= nil), tostring(spell and spell.GetSpellCooldownDuration ~= nil), tostring(spell and spell.IsSpellUsable ~= nil),
+        tostring(issecretvalue ~= nil), Ask("HasSecretRestrictions"), Ask("ShouldCooldownsBeSecret"), tostring(self.stateError or "none"))
+    local filled, quiet = 0, 0
+    for wheel = 1, COUNT do
+        for slot = 1, SLOTS do
+            local action = self:Get(wheel, slot)
+            if action then
+                filled = filled + 1
+                local okInfo, info = pcall(bar.GetActionCooldown, action)
+                local usable, lacking = UsableOf(pcall(bar.IsUsableAction, action))
+                local okKind, kind, id = pcall(GetActionInfo, action)
+                local active = okInfo and type(info) == "table" and info.isActive and true or false
+                if active or not usable or (okKind and kind == "item") then
+                    if okInfo and type(info) == "table" then
+                        say("  wheel %d slot %d (action %d, %s %s): active=%s onGCD=%s start=%s duration=%s rate=%s secret=%s | usable=%s noMana=%s", wheel, slot, action,
+                            Show(okKind and kind or nil), Show(okKind and id or nil), Show(info.isActive), Show(info.isOnGCD), Show(info.startTime),
+                            Show(info.duration), Show(info.modRate), Ask("ShouldActionCooldownBeSecret", action), tostring(usable), tostring(lacking))
+                    else
+                        say("  wheel %d slot %d (action %d, %s %s): GetActionCooldown gave %s | usable=%s noMana=%s", wheel, slot, action,
+                            Show(okKind and kind or nil), Show(okKind and id or nil), Show(info), tostring(usable), tostring(lacking))
+                    end
+                else
+                    quiet = quiet + 1
+                end
+            end
+        end
+    end
+    say("wheels cd: %d slots filled, %d without a cooldown and usable (not listed)", filled, quiet)
+    local hud = self.hud
+    if hud and hud:IsShown() and self.open then
+        local running, grey = 0, 0
+        for _, frame in ipairs(hud.slots) do
+            if frame.Cooldown and frame.Cooldown:IsShown() then running = running + 1 end
+            if frame.cdLong then grey = grey + 1 end
+        end
+        say("wheels cd: the wheel on the screen (wheel %s): %d slots with a cooldown frame showing, %d grey", tostring(self.open), running, grey)
+    else
+        say("wheels cd: no wheel is on the screen; type /cgp wheels first (a wheel stays up while the wheels are filled), then this again, to see what its slots show")
     end
 end

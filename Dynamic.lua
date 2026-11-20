@@ -12,10 +12,25 @@ local _, Addon = ...
 local Dynamic = {}
 Addon.Dynamic = Dynamic
 
+-- What the guard against writes that do not settle keeps (see SAME_WRITES): the times of the writes of each "<action>:<key>", until when
+-- a thing is left alone, the times of all writes, the last few writes (for /cgp wheels dyn) and the totals.
+Dynamic.history, Dynamic.refused, Dynamic.writeLog, Dynamic.recent = {}, {}, {}, {}
+Dynamic.stats = { runs = 0, writes = 0, refused = 0, pauses = 0 }
+
 local CAPACITY = 12
 local WHEELS = 5
 local MAX_WRITES = 24     -- changes to the bars in one run, the rest follows in the next
 local DELAY = 1           -- seconds the bags are left to settle after a change
+-- Every write picks a thing up and puts it down again, and the game plays its item and ability sounds for each; a write that never
+-- settles (another addon or the game puts the old thing back, the game keeps another spell id than the one that was put there) would
+-- be heard as bags being sorted over and over. So the same thing is not put on the same button more than SAME_WRITES times within
+-- WINDOW seconds (it is left alone for REFUSE_FOR seconds), and more than BURST_WRITES writes within WINDOW seconds pause them all
+-- for PAUSE_FOR seconds. Changing a dynamic wheel setting clears all of it.
+local SAME_WRITES = 3
+local WINDOW = 60
+local REFUSE_FOR = 120
+local BURST_WRITES = 96
+local PAUSE_FOR = 120
 local CATEGORIES = { "food", "use", "prof", "pet" }
 local SETTING = { food = "wheelDynFood", use = "wheelDynUse", prof = "wheelDynProf", pet = "wheelDynPet" }
 
@@ -302,8 +317,76 @@ local function Clear(action)
     ClearCursor()
 end
 
+-- Drops the times older than `cut` from a list of times (oldest first); returns how many are left.
+local function Prune(list, cut)
+    local n, kept = #list, 0
+    for i = 1, n do
+        if list[i] >= cut then
+            kept = kept + 1
+            list[kept] = list[i]
+        end
+    end
+    for i = kept + 1, n do list[i] = nil end
+    return kept
+end
+
+-- Whether a write ("<action>:<key>", key nil for emptying the button) may be made now: not while all writes are paused, and not a thing
+-- that was put on this button so often lately that it plainly does not stay there.
+function Dynamic:MayWrite(mark, action, key, now)
+    if self.pausedUntil and now < self.pausedUntil then return false end
+    if (self.refused[mark] or 0) > now then return false end
+    local times = self.history[mark]
+    if times then
+        local count = Prune(times, now - WINDOW)
+        if count == 0 then
+            self.history[mark] = nil
+        elseif count >= SAME_WRITES then
+            self.refused[mark] = now + REFUSE_FOR
+            self.stats.refused = self.stats.refused + 1
+            -- One line is enough when many buttons do it at once (the totals are in /cgp wheels dyn).
+            if now - (self.noteAt or -WINDOW) >= 30 then
+                self.noteAt = now
+                Addon:Print(string.format("dynamic wheels: %s was put on action slot %d %d times within a minute and keeps going away, so it is left alone there for %d seconds (does another addon use that bar? /cgp wheels dyn says what was written)",
+                    tostring(key or "an empty button"), action, count, REFUSE_FOR))
+            end
+            return false
+        end
+    end
+    if Prune(self.writeLog, now - WINDOW) >= BURST_WRITES then
+        self.pausedUntil = now + PAUSE_FOR
+        self.stats.pauses = self.stats.pauses + 1
+        Addon:Print(string.format("dynamic wheels: %d writes to the bars within a minute, so they are left alone for %d seconds (/cgp wheels dyn says what was written)",
+            BURST_WRITES, PAUSE_FOR))
+        return false
+    end
+    return true
+end
+
+function Dynamic:Wrote(mark, action, key, now)
+    local times = self.history[mark]
+    if not times then
+        times = {}
+        self.history[mark] = times
+    end
+    times[#times + 1] = now
+    self.writeLog[#self.writeLog + 1] = now
+    self.stats.writes = self.stats.writes + 1
+    local recent = self.recent
+    recent[#recent + 1] = { at = now, action = action, key = key }
+    if #recent > 8 then table.remove(recent, 1) end
+end
+
+-- A change of a dynamic wheel setting starts the guard over.
+function Dynamic:Reset()
+    wipe(self.history)
+    wipe(self.refused)
+    wipe(self.writeLog)
+    self.pausedUntil = nil
+end
+
 -- Brings the bar of one wheel to what it should hold. Returns how many buttons were changed and the plan.
 function Dynamic:Fill(wheel, wanted, budget)
+    local now = GetTime()
     local current = {}
     for slot = 1, CAPACITY do current[slot] = KeyOf(Addon.Wheels.ActionOf(wheel, slot)) end
     local plan = Dynamic.Plan(current, wanted, CAPACITY)
@@ -311,12 +394,16 @@ function Dynamic:Fill(wheel, wanted, budget)
     for slot = 1, CAPACITY do
         if changed >= budget then break end
         local action = Addon.Wheels.ActionOf(wheel, slot)
-        if plan[slot] ~= current[slot] then
-            if plan[slot] then
-                if Put(action, plan[slot]) then changed = changed + 1 end
-            else
-                Clear(action)
-                changed = changed + 1
+        local want = plan[slot]
+        if want ~= current[slot] then
+            local mark = action .. ":" .. tostring(want)
+            if self:MayWrite(mark, action, want, now) then
+                local wrote = true
+                if want then wrote = Put(action, want) else Clear(action) end
+                if wrote then
+                    self:Wrote(mark, action, want, now)
+                    changed = changed + 1
+                end
             end
         end
     end
@@ -332,11 +419,21 @@ end
 function Dynamic:Run(report)
     self.scheduled = nil
     if not Enabled() then return end
+    local now = GetTime()
+    if self.pausedUntil then
+        if now < self.pausedUntil then
+            -- Paused (the writes did not settle): the run that was asked for waits until the pause is over.
+            if C_Timer and C_Timer.After then self:Request(self.pausedUntil - now + 0.1) else self.dirty = true end
+            return
+        end
+        self.pausedUntil = nil
+    end
     if InCombatLockdown() or GetCursorInfo() ~= nil then
         self.dirty = true
         return
     end
     self.dirty = false
+    self.stats.runs = self.stats.runs + 1
     local budget, lines, more = MAX_WRITES, {}, false
     local _, ready = BagItems()
     for wheel = 1, WHEELS do
@@ -384,6 +481,9 @@ function Dynamic:Request(delay)
     if self.scheduled then return end
     self.scheduled = true
     local wait = delay or DELAY
+    -- While the writes are paused the next run is not before the pause is over.
+    local now = GetTime()
+    if self.pausedUntil and self.pausedUntil > now then wait = math.max(wait, self.pausedUntil - now + 0.1) end
     if C_Timer and C_Timer.After then
         C_Timer.After(wait, function() self:Run() end)
     else
@@ -391,10 +491,27 @@ function Dynamic:Request(delay)
     end
 end
 
--- /cgp wheels dyn: runs it now and says what each dynamic wheel holds.
+-- How much the dynamic wheels have written to the bars (every write makes the game's item sounds), and the last few writes: if the bags
+-- seem to be sorted over and over, this says whether it is these wheels.
+function Dynamic:PrintStats()
+    local now = GetTime()
+    local lately = Prune(self.writeLog, now - WINDOW)
+    Addon:Print(string.format("dynamic wheels: %d runs and %d writes since the addon loaded, %d writes in the last minute, %d things left alone, %d pauses",
+        self.stats.runs, self.stats.writes, lately, self.stats.refused, self.stats.pauses))
+    for _, write in ipairs(self.recent) do
+        Addon:Print(string.format("  %.0f s ago: action slot %d <- %s", now - write.at, write.action, tostring(write.key or "(emptied)")))
+    end
+end
+
+-- /cgp wheels dyn: says how much was written, runs it now and says what each dynamic wheel holds.
 function Dynamic:Report()
     if not Enabled() then
         Addon:Print("dynamic wheels: off (turn on the wheels and \"Dynamic wheels\" on the Controls tab)")
+        return
+    end
+    self:PrintStats()
+    if self.pausedUntil and GetTime() < self.pausedUntil then
+        Addon:Print(string.format("dynamic wheels: paused for %d more seconds (changing a dynamic wheel setting ends the pause)", self.pausedUntil - GetTime()))
         return
     end
     if InCombatLockdown() or GetCursorInfo() ~= nil then
