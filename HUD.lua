@@ -516,6 +516,16 @@ local function LegendStyleDefault()
     return Addon.db.legendFrame ~= false and (Addon.db.legendShade or 1) >= 1
 end
 
+-- Whether a shown child of the legend has not been scanned yet. The children come in as one list: asking the legend for them
+-- again for every child (select(i, legend:GetChildren())) made this walk quadratic, and it runs on every frame.
+local function UnscannedChild(scanned, ...)
+    for i = 1, select("#", ...) do
+        local child = select(i, ...)
+        if child:IsShown() and not scanned[child] then return true end
+    end
+    return false
+end
+
 -- Puts the frame and shade options on the legend's art. A set of hints showing for the first time is scanned first.
 function HUD:ApplyLegendStyle()
     local styled = self.legendStyleWanted and not LegendStyleDefault()
@@ -533,10 +543,7 @@ function HUD:ApplyLegendStyle()
     local fresh = not self.legendArt
     if not fresh then
         -- Every frame while styled: no table made here.
-        for i = 1, legend:GetNumChildren() do
-            local child = select(i, legend:GetChildren())
-            if child:IsShown() and not self.legendScanned[child] then fresh = true; break end
-        end
+        fresh = UnscannedChild(self.legendScanned, legend:GetChildren())
     end
     if fresh then
         local ok, err = pcall(self.ScanLegendArt, self)

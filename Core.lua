@@ -104,27 +104,42 @@ function Addon:ScanTaint(maxDepth)
     return ours, others
 end
 
-function Addon:CheckNativeTaint(stage)
-    if firstTaintCaptured or not self.diagnostics or not issecurevariable then return end
-    local fields = {}
-    local function Check(label, object, keys)
-        if type(object) ~= "table" then return end
-        for _, key in ipairs(keys) do
-            local secure, owner = issecurevariable(object, key)
-            if not secure and owner == name then fields[#fields + 1] = label .. "." .. key end
+-- The game's gamepad fields that must never be this addon's. They are looked at after every stage of a refresh until the
+-- first one is caught, which in a clean session means every refresh, so the key lists are made once and a clean look
+-- allocates nothing (it used to make a closure and seven tables each time, five times per refresh).
+local TAINT_CHAT = { "SELECTED_CHAT_FRAME", "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX" }
+local TAINT_FOCUS = { "focusedFrame", "isUIFocused" }
+local TAINT_NAVIGATION = { "activeInfo", "currentDirections", "selectButtonSequence" }
+local TAINT_BINDINGS = { "currentCoreBindingActive", "bindingSetStack", "coreBindingListenerFunctions" }
+local TAINT_ACTIVE = { "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADFORWARD", "PADBACK" }
+local TAINT_UNIT = { "activeBar" }
+
+-- Adds "label.key" for every key of the object that this addon owns to fields, which is made on the first hit, and
+-- returns it.
+local function CheckFields(fields, label, object, keys)
+    if type(object) ~= "table" then return fields end
+    for i = 1, #keys do
+        local key = keys[i]
+        local secure, owner = issecurevariable(object, key)
+        if not secure and owner == name then
+            fields = fields or {}
+            fields[#fields + 1] = label .. "." .. key
         end
     end
-    Check("_G", _G, { "SELECTED_CHAT_FRAME", "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX" })
-    Check("FrameControlsManager", GamepadMode and GamepadMode.FrameControlsManager,
-        { "focusedFrame", "isUIFocused" })
-    Check("SmartNavigation", SmartNavigation, { "activeInfo", "currentDirections", "selectButtonSequence" })
+    return fields
+end
+
+function Addon:CheckNativeTaint(stage)
+    if firstTaintCaptured or not self.diagnostics or not issecurevariable then return end
     local bindings = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
-    Check("InputBindingManager", bindings, { "currentCoreBindingActive", "bindingSetStack", "coreBindingListenerFunctions" })
-    Check("InputBindingManager.activeBindings", bindings and bindings.activeBindings,
-        { "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADFORWARD", "PADBACK" })
     local unit = GamepadMainActionBarFrame and GamepadMainActionBarFrame.PageUnit
-    Check("PageUnit", unit, { "activeBar" })
-    if #fields == 0 then return end
+    local fields = CheckFields(nil, "_G", _G, TAINT_CHAT)
+    fields = CheckFields(fields, "FrameControlsManager", GamepadMode and GamepadMode.FrameControlsManager, TAINT_FOCUS)
+    fields = CheckFields(fields, "SmartNavigation", SmartNavigation, TAINT_NAVIGATION)
+    fields = CheckFields(fields, "InputBindingManager", bindings, TAINT_BINDINGS)
+    fields = CheckFields(fields, "InputBindingManager.activeBindings", bindings and bindings.activeBindings, TAINT_ACTIVE)
+    fields = CheckFields(fields, "PageUnit", unit, TAINT_UNIT)
+    if not fields then return end
     firstTaintCaptured = true
     local deep = self:ScanTaint(2)
     self.diagnostics.firstTaint = { version = self.version, time = date("%Y-%m-%d %H:%M:%S"),
