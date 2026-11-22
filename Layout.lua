@@ -174,13 +174,14 @@ function Layout:Prepare()
     -- A default status bar may have been moved out of the classic bars' way by Display. Start each rebuild from its
     -- Edit Mode position so that changing the classic layout can also remove that temporary adjustment.
     if self.active and Addon.db.placeStatusBars == false then
-        for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
+        for _, frame in pairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
             local snapshot = self.originals[frame]
             if frame.IsInDefaultPosition and frame:IsInDefaultPosition() and Apply(frame, snapshot) then
                 ResizeStatus(frame, snapshot.width, STATUS_BAR_NUM_SEGMENTS_GAMEPAD)
             end
         end
     end
+    Addon.Display.defaultStatusMoved = nil
     Addon:Trace("Layout:Prepare")
     local compact, cutWidth = Addon.db.compact, 0
     if compact then
@@ -221,7 +222,10 @@ function Layout:Prepare()
     self:BlockKeyRing(true)
 
     -- The same bottom-stack order and offsets as Camelot/EditModeUtil.lua.
-    local y = MainActionBar:GetHeight() + BOTTOM_ACTION_BARS_SPACER_Y
+    local uiScale = UIParent:GetEffectiveScale()
+    local mainScale = MainActionBar:GetEffectiveScale() / uiScale
+    if not mainScale or mainScale <= 0 then mainScale = 1 end
+    local y = (MainActionBar:GetHeight() + BOTTOM_ACTION_BARS_SPACER_Y) * mainScale
     for _, entry in ipairs({
         { "SecondaryStatusTrackingBarContainer", SecondaryStatusTrackingBarContainer },
         { "MainStatusTrackingBarContainer", MainStatusTrackingBarContainer },
@@ -230,21 +234,30 @@ function Layout:Prepare()
         if frame then
             -- Status bars enabled by placeStatusBars must follow the classic action bar, not a saved keyboard-layout
             -- position. A stored MKB anchor can leave the exp/reputation bar offset and narrower after layout changes.
-            Anchor(frame, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", 0, y)
-            ResizeStatus(frame, STATUS_BAR_CONTAINER_WIDTH, STATUS_BAR_NUM_SEGMENTS)
+            local frameScale = frame:GetEffectiveScale() / uiScale
+            if not frameScale or frameScale <= 0 then frameScale = 1 end
+            Anchor(frame, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", 0, y / frameScale)
+            ResizeStatus(frame, STATUS_BAR_CONTAINER_WIDTH * mainScale / frameScale, STATUS_BAR_NUM_SEGMENTS)
             -- A kept status bar is elsewhere: the bars above close the gap it would leave.
             if frame:IsShown() and not kept[frame] then
-                local gap = frame == SecondaryStatusTrackingBarContainer and MainStatusTrackingBarContainer:IsShown()
+                local gap = frame == SecondaryStatusTrackingBarContainer
+                    and MainStatusTrackingBarContainer and MainStatusTrackingBarContainer:IsShown()
                     and PRIMARY_AND_SECONDARY_STATUS_TRACKING_BAR_SPACER_Y or BOTTOM_ACTION_BARS_SPACER_Y
-                y = y + frame:GetHeight() + gap
+                y = y + frame:GetHeight() * frameScale + gap * mainScale
             end
         end
     end
     if not Apply(MultiBarBottomRight, Addon.db.keyboardBars.MultiBarBottomRight) then
-        Anchor(MultiBarBottomRight, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", ACTION_BAR_3_BOTTOM_BAR_OFFSET_X, y)
+        local barScale = MultiBarBottomRight:GetEffectiveScale() / uiScale
+        if not barScale or barScale <= 0 then barScale = 1 end
+        Anchor(MultiBarBottomRight, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT",
+            ACTION_BAR_3_BOTTOM_BAR_OFFSET_X * mainScale / barScale, y / barScale)
     end
     if not Apply(MultiBarBottomLeft, Addon.db.keyboardBars.MultiBarBottomLeft) then
-        Anchor(MultiBarBottomLeft, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", ACTION_BAR_2_BOTTOM_BAR_OFFSET_X, y)
+        local barScale = MultiBarBottomLeft:GetEffectiveScale() / uiScale
+        if not barScale or barScale <= 0 then barScale = 1 end
+        Anchor(MultiBarBottomLeft, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT",
+            ACTION_BAR_2_BOTTOM_BAR_OFFSET_X * mainScale / barScale, y / barScale)
     end
     local caps = MainActionBar.EndCaps
     if caps then
@@ -278,8 +291,9 @@ function Layout:Prepare()
         }) do
             local frame = entry[1]
             if frame then
-                local cut = cutWidth * UIParent:GetEffectiveScale() / frame:GetEffectiveScale()
-                ResizeStatus(frame, STATUS_BAR_CONTAINER_WIDTH - cut, STATUS_BAR_NUM_SEGMENTS)
+                local frameScale = frame:GetEffectiveScale() / uiScale
+                if not frameScale or frameScale <= 0 then frameScale = 1 end
+                ResizeStatus(frame, (STATUS_BAR_CONTAINER_WIDTH * mainScale - cutWidth) / frameScale, STATUS_BAR_NUM_SEGMENTS)
             end
         end
     end
@@ -307,9 +321,23 @@ end
 function Layout:Restore(changedMode)
     if self.active then Addon:Trace("Layout:Restore") end
     if changedMode then
-        -- The client has already switched layouts; discard snapshots of the old mode.
+        -- The client has already switched layouts; discard old-mode snapshots, but undo scales and
+        -- visual/input overrides that Blizzard's layout transition does not reset.
+        Addon.Display:ResetStockScales()
+        if MicroMenuContainer then
+            MicroMenuContainer:SetAlpha(1)
+            if Addon.Display.menuUnclamped and not InCombatLockdown() then
+                MicroMenuContainer:SetClampedToScreen(true)
+                Addon.Display.menuUnclamped = nil
+            end
+        end
+        if not InCombatLockdown() then
+            Addon.Display:AnchorFramerate(false)
+            self:BlockKeyRing(false)
+        end
         self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
-        Addon.Display.stockScales = nil
+        Addon.Display.defaultStatusMoved = nil
+        return
     end
     if InCombatLockdown() then return end
     if not self.active then return end
@@ -331,6 +359,7 @@ function Layout:Restore(changedMode)
     self:BlockKeyRing(false)
     self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
     Addon.Display.stockScales = nil
+    Addon.Display.defaultStatusMoved = nil
 end
 
 function Layout:SetBottomLeft(frame, x, y)
@@ -390,6 +419,9 @@ function Layout:Observe()
             hooksecurefunc(frame, "ApplySystemAnchor", function()
                 -- The game put the frame where its layout has it now (a saved Edit Mode move): the place to return to.
                 self.originals[frame] = nil
+                if Addon.Display and Addon.Display.defaultStatusMoved then
+                    Addon.Display.defaultStatusMoved[frame] = nil
+                end
                 Invalidate()
             end)
         end

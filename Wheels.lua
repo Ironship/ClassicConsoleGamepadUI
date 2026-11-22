@@ -28,6 +28,7 @@ local GROUPS = {
     { modifier = "PADRSTICK", letter = "R3", keys = { "PADDUP", "PADDRIGHT", "PADDDOWN", "PADDLEFT" } },
     { modifier = "PADLSTICK", letter = "L3", keys = { "PAD3" } },
 }
+Wheels.COUNT, Wheels.SLOTS, Wheels.GROUPS = COUNT, SLOTS, GROUPS
 local WHEEL_PLACE = { { 1, 1 }, { 1, 2 }, { 1, 3 }, { 1, 4 }, { 2, 1 } }
 local function GroupOf(wheel) return WHEEL_PLACE[wheel][1] end
 local FACE_NAME = "ClassicConsoleGamepadUIWheelFace"
@@ -98,6 +99,11 @@ local function Describe(action)
             name = type(info) == "table" and info.name or (GetSpellInfo and (GetSpellInfo(id)))
         elseif kind == "item" then
             name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+        elseif kind == "macro" then
+            name = GetActionText(action)
+            if (not name or name == "") and type(id) == "number" and id > 0 and C_Macro and C_Macro.GetMacroName then
+                name = C_Macro.GetMacroName(id)
+            end
         elseif kind == "flyout" then
             isFlyout = true
             local spells, single, active, flyName
@@ -116,7 +122,10 @@ local function Describe(action)
                 icon = C_Flyout.GetFlyoutTexture(id)
             end
         end
-        name = name or GetActionText(action) or (kind and tostring(kind))
+        if name == "" then name = nil end
+        local actionText = GetActionText(action)
+        if actionText == "" then actionText = nil end
+        name = name or actionText or (kind and tostring(kind))
     end)
     if not icon then
         local ok, tex = pcall(GetActionTexture, action)
@@ -179,8 +188,29 @@ watcher:SetScript("OnEvent", function(_, event, unit)
     end
 end)
 
+function Wheels:DynamicCategory(wheel)
+    if wheel == nil or Addon.Dynamic == nil then return nil end
+    return Addon.Dynamic:CategoryOf(wheel)
+end
+
 function Wheels:IsPetWheel(wheel)
-    return wheel ~= nil and Addon.Dynamic ~= nil and Addon.Dynamic:CategoryOf(wheel) == "pet"
+    return self:DynamicCategory(wheel) == "pet"
+end
+
+function Wheels:FirstManualWheel()
+    for wheel = 1, COUNT do
+        if not self:DynamicCategory(wheel) then return wheel end
+    end
+    return 1
+end
+
+function Wheels:ManualWheelList()
+    local free = {}
+    for wheel = 1, COUNT do
+        if not self:DynamicCategory(wheel) then free[#free + 1] = tostring(wheel) end
+    end
+    if #free == 0 then return nil end
+    return table.concat(free, ", ")
 end
 
 -- Live entry for one slot of a pet dynamic wheel. Reads the secure layer's exact petact/petspell mapping when present so HUD and
@@ -313,7 +343,22 @@ end
 -- goes onto the cursor.
 function Wheels:Place(wheel, slot)
     if InCombatLockdown() then Addon:Print(Text("wheelCombat")); return end
-    if self:IsPetWheel(wheel) then return end
+    local category = self:DynamicCategory(wheel)
+    if category then
+        local now = GetTime()
+        self.lastPlace = now
+        if not self.dynWarnAt or now - self.dynWarnAt >= 1.5 then
+            self.dynWarnAt = now
+            local free = self:ManualWheelList()
+            local catName = Text("dynName" .. category)
+            if free then
+                Addon:Print(string.format(Text("wheelDynamicBlocked"), wheel, catName, free))
+            else
+                Addon:Print(string.format(Text("wheelDynamicAllBlocked"), wheel, catName))
+            end
+        end
+        return
+    end
     self.lastPlace = GetTime()
     local action = Wheels.ActionOf(wheel, slot)
     self:Trace("place on wheel %s slot %s (action %s), the cursor holds %s", tostring(wheel), tostring(slot), tostring(action), tostring((GetCursorInfo())))
@@ -895,6 +940,7 @@ end
 -- 0 and the movement stick keeps walking (a stick listener, tried first, stopped the walking too: seen with L3 held). The speeds
 -- the player had are kept in the saved variables while they are 0, so a crash or a logout never leaves the camera still.
 local CAMERA_CVARS = { "GamePadCameraYawSpeed", "GamePadCameraPitchSpeed" }
+Wheels.CAMERA_CVARS = CAMERA_CVARS
 
 function Wheels:SuspendCamera(on)
     local db = Addon.db
@@ -961,46 +1007,6 @@ function Wheels:SetSticks(on)
         if pcall(eater.EnableGamePadStick, eater, false) then self.sticksOn = false end
         eater:Hide()
     end
-end
-
--- /cgp wheels sticks: for six seconds a listener (it never takes anything) counts what the game sends for each stick: the names,
--- how many events and the largest push, and says how the game's own list of sticks is named. Push both sticks about while it runs.
-function Wheels:ProbeSticks()
-    if self.probing then return end
-    self.probing = true
-    local seen = {}
-    local frame = CreateFrame("Frame")
-    frame:SetSize(1, 1)
-    frame:SetPoint("CENTER")
-    if frame.SetPropagateKeyboardInput and not InCombatLockdown() then pcall(frame.SetPropagateKeyboardInput, frame, true) end
-    frame:SetScript("OnGamePadStick", function(_, stick, x, y)
-        local entry = seen[tostring(stick)]
-        if not entry then entry = { n = 0, best = 0, x = 0, y = 0 }; seen[tostring(stick)] = entry end
-        entry.n = entry.n + 1
-        local len = math.sqrt((x or 0) * (x or 0) + (y or 0) * (y or 0))
-        if len > entry.best then entry.best, entry.x, entry.y = len, x or 0, y or 0 end
-        return true
-    end)
-    local ok = frame.EnableGamePadStick and pcall(frame.EnableGamePadStick, frame, true)
-    Addon:Print(ok and "wheels sticks: listening for 6 seconds, push both sticks about (nothing is taken)" or "wheels sticks: the game does not allow a stick listener here")
-    C_Timer.After(6, function()
-        if frame.EnableGamePadStick then pcall(frame.EnableGamePadStick, frame, false) end
-        frame:SetScript("OnGamePadStick", nil)
-        local any = false
-        for name, entry in pairs(seen) do
-            any = true
-            Addon:Print(string.format("wheels sticks: event name %q: %d events, largest push %.2f (x %.2f, y %.2f)", name, entry.n, entry.best, entry.x, entry.y))
-        end
-        if not any then Addon:Print("wheels sticks: no stick event arrived") end
-        local okState, state = pcall(C_GamePad.GetDeviceMappedState)
-        if okState and type(state) == "table" then
-            for index = 1, tonumber(state.stickCount) or 0 do
-                local okName, name = pcall(C_GamePad.StickIndexToConfigName, index - 1)
-                Addon:Print(string.format("wheels sticks: list entry %d is %q", index, tostring(okName and name)))
-            end
-        end
-        self.probing = nil
-    end)
 end
 
 -- Called every refresh; everything that changes protected frames is left for outside combat.
@@ -1257,6 +1263,7 @@ local function CreateSlotFrame(parent, slot, size, radius)
     local labels = CreateFrame("Frame", nil, frame)
     labels:SetAllPoints(frame)
     labels:SetFrameLevel(cooldown:GetFrameLevel() + 2)
+    pcall(labels.EnableMouse, labels, false)
     frame.FlyoutArrow = labels:CreateTexture(nil, "OVERLAY", nil, 2)
     frame.FlyoutArrow:SetSize(size >= 40 and 15 or 10, size >= 40 and 6 or 4)
     frame.FlyoutArrow:SetPoint("TOP", frame, "TOP", 0, size >= 40 and 4 or 3)
@@ -1277,6 +1284,7 @@ function Wheels:WireSlot(frame)
     frame:RegisterForDrag("LeftButton")
     frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     frame:SetScript("OnReceiveDrag", function()
+        self.lastDragAt = GetTime()
         self:Trace("slot %d of wheel %s got OnReceiveDrag", slot, tostring(WheelOf(frame)))
         self:Place(WheelOf(frame), slot)
     end)
@@ -1287,6 +1295,7 @@ function Wheels:WireSlot(frame)
     frame:SetScript("OnClick", function(_, button)
         local wheel = WheelOf(frame)
         self:Trace("slot %d of wheel %s got OnClick %s, the cursor holds %s", slot, tostring(wheel), tostring(button), tostring((GetCursorInfo())))
+        if self.lastDragAt and GetTime() - self.lastDragAt < 0.05 then return end
         if GetCursorInfo() then self:Place(wheel, slot)
         elseif button == "RightButton" then self:Remove(wheel, slot, false) end
     end)
@@ -1428,10 +1437,12 @@ end
 local RING = {
     filled = { 0.48, 0.39, 0.25, 1 }, empty = { 0.48, 0.39, 0.25, 0.55 }, selected = { 1, 0.81, 0.44, 1 },
     active = { 1, 0.85, 0.25, 1 }, dim = { 0.69, 0.54, 0.27, 1 }, drop = { 0.5, 1, 0.55, 1 },
+    blocked = { 0.95, 0.35, 0.3, 1 },
 }
 local WEDGE = {
     filled = { 0.04, 0.035, 0.05, 0.82 }, empty = { 0.04, 0.035, 0.05, 0.62 }, selected = { 0.47, 0.48, 0.5, 0.7 },
     active = { 0.28, 0.23, 0.08, 0.82 }, dim = { 0.36, 0.37, 0.39, 0.62 }, drop = { 0.18, 0.5, 0.24, 0.85 },
+    blocked = { 0.45, 0.12, 0.1, 0.85 },
 }
 
 -- Setting "wheelWedges" (on by default): segments like the game's own wheels. Off: round slots.
@@ -1445,7 +1456,7 @@ function Wheels:Paint(frame)
     local mode
     local wheel = WheelOf(frame)
     if frame.dropHint then
-        mode = "drop"
+        mode = self:DynamicCategory(wheel) and "blocked" or "drop"
     elseif frame.hudIndex and frame.hudIndex == self.selected then
         mode = self.dimmed and "dim" or "selected"
     elseif frame.hudIndex and self.flyoutSpells then
@@ -1968,7 +1979,7 @@ end
 
 -- Open the wheel of a face button (nil closes it).
 function Wheels:SetOpen(wheel)
-    if wheel == nil and self.previewing then wheel = 1 end
+    if wheel == nil and self.previewing then wheel = self:FirstManualWheel() end
     if not wheel then
         self.open, self.opened, self.selected, self.latch, self.dimmed = nil, nil, nil, nil, nil
         self.flyoutID, self.flyoutSpells, self.flyoutName = nil, nil, nil
@@ -2119,10 +2130,30 @@ function Wheels:CreateDock()
         end
         dock.minis[wheel] = mini
     end
-    -- The cell left over says what the wheels are.
-    local note = Addon.Fonts:String(Cell(COUNT + 1), "OVERLAY", "DisableSmall")
-    note:SetPoint("TOPLEFT", 10, -30)
-    note:SetPoint("TOPRIGHT", -10, -30)
+    -- The cell left over says what the wheels are, and holds a button to pick up the selected macro when MacroFrame is open
+    -- (in Gamepad Mode MacroFrame's A only selects a macro and X opens Blizzard's main-bar editor rather than PickupMacro).
+    local extra = Cell(COUNT + 1)
+    local pickMacro = CreateFrame("Button", nil, extra, "UIPanelButtonTemplate")
+    pickMacro:SetSize(d.cellW - 20, 24)
+    pickMacro:SetPoint("TOP", extra, "TOP", 0, -6)
+    local function PickupSelectedMacro()
+        if InCombatLockdown() then Addon:Print(Text("wheelCombat")); return end
+        if not (MacroFrame and MacroFrame.GetSelectedIndex and MacroFrame.GetMacroDataIndex and PickupMacro) then return end
+        local idx = MacroFrame:GetSelectedIndex()
+        if not idx then return end
+        local actual = MacroFrame:GetMacroDataIndex(idx)
+        if type(actual) == "number" and actual > 0 then
+            PickupMacro(actual)
+            Addon:QueueRefresh(true)
+        end
+    end
+    pickMacro:SetScript("OnClick", PickupSelectedMacro)
+    pickMacro.OnSmartNavClick = function() PickupSelectedMacro(); return true end
+    pickMacro:Hide()
+    dock.PickupMacro = pickMacro
+    local note = Addon.Fonts:String(extra, "OVERLAY", "DisableSmall")
+    note:SetPoint("TOPLEFT", 10, -34)
+    note:SetPoint("TOPRIGHT", -10, -34)
     note:SetJustifyH("LEFT")
     dock.Note = note
     dock:SetScript("OnUpdate", function() self:Freshen(); self:WatchSlots(dock.slots, dock.watch) end)
@@ -2141,6 +2172,7 @@ function Wheels:CreateDock()
         return true
     end
     dock:SetScript("OnShow", function()
+        dock.watch.mouseWasDown = IsMouseButtonDown("LeftButton") and true or false
         self:JoinFocus(true)
         self:SetNumbers(dock.slots, true)
     end)
@@ -2227,44 +2259,6 @@ function Wheels:Unfocus()
     end
     local ok = Barrier(manager.SetUIFocusState, manager, false)
     Addon:Print("wheels unfocus: " .. (ok and "the focus was given back to the character" or "the game refused"))
-end
-
--- What the game's window focus did since this addon loaded, for finding out who focuses the interface.
--- Post-hooks only (they leave the game's code secure): every FrameShown, FrameHidden and SetUIFocusState call is noted with its
--- time, the window, the focus state after it and the top of the stack, up to 30 calls; kept in the saved variables too.
-function Wheels:WatchFocus()
-    if self.focusWatched then return end
-    local mode = GamepadMode
-    local manager = type(mode) == "table" and mode.FrameControlsManager or nil
-    if type(manager) ~= "table" or type(hooksecurefunc) ~= "function" then return end
-    self.focusWatched = true
-    local log, started = {}, GetTime()
-    self.focusLog = log
-    Addon.db.wheelFocusLog = log
-    local function Add(what, frame)
-        if #log >= 30 then return end
-        local name
-        if frame ~= nil then
-            local ok, value = pcall(function() return frame.GetName and frame:GetName() end)
-            name = ok and value or tostring(frame)
-        end
-        log[#log + 1] = { at = string.format("%.1f", GetTime() - started), what = what, window = name, focused = tostring(manager.isUIFocused),
-            stack = debugstack and debugstack(3, 8, 0) or nil }
-    end
-    pcall(hooksecurefunc, manager, "FrameShown", function(_, frame) Add("FrameShown", frame) end)
-    pcall(hooksecurefunc, manager, "FrameHidden", function(_, frame) Add("FrameHidden", frame) end)
-    pcall(hooksecurefunc, manager, "SetUIFocusState", function(_, on) Add("SetUIFocusState " .. tostring(on)) end)
-end
-
-function Wheels:PrintFocus()
-    local manager = type(GamepadMode) == "table" and GamepadMode.FrameControlsManager or nil
-    Addon:Print(string.format("wheels focus: interface focused now = %s, windows listed = %s", tostring(type(manager) == "table" and manager.isUIFocused),
-        tostring(type(manager) == "table" and type(manager.shownFrames) == "table" and #manager.shownFrames)))
-    local log = self.focusLog
-    if not log or #log == 0 then Addon:Print("wheels focus: no focus call seen since the addon loaded"); return end
-    for _, entry in ipairs(log) do
-        Addon:Print(string.format("wheels focus: +%ss %s %s (interface focused after: %s)", entry.at, entry.what, tostring(entry.window or ""), entry.focused))
-    end
 end
 
 function Wheels:RedrawDock()
@@ -2393,7 +2387,7 @@ function Wheels:UpdateDock(gamepad)
     -- are being filled (that is how a slot is emptied with the pad: pick it up with A, put it down with B), and, when the player
     -- asked for it, whenever a window to drag from is open.
     local around
-    if gamepad and Addon.db.wheels == true and Addon.db.wheelsDock ~= false and not Addon.nativeView then
+    if (gamepad or self.previewing) and Addon.db.wheels == true and Addon.db.wheelsDock ~= false and not Addon.nativeView then
         local sources, windows = DragWindows()
         if Carrying() or self.previewing or (Addon.db.wheelsDockAlways == true and #sources > 0) then around = windows end
     end
@@ -2403,6 +2397,11 @@ function Wheels:UpdateDock(gamepad)
     end
     self:CreateDock()
     local dock = self.dock
+    if dock.PickupMacro then
+        local macroOpen = Shown(MacroFrame)
+        dock.PickupMacro:SetText(Text("wheelPickupMacro"))
+        dock.PickupMacro:SetShown(macroOpen)
+    end
     if dock:IsShown() and not self.joined then self:JoinFocus(true) end
     if dock:IsShown() then
         -- A window was opened, closed or moved: the small wheels follow.
@@ -2431,14 +2430,16 @@ end
 function Wheels:Preview(on)
     if on then
         self.previewing = true
+        self.watch = { mouseWasDown = IsMouseButtonDown("LeftButton") and true or false }
         self:CreateHUD()
         self:SetEditing(true)
-        self:SetOpen(1)
+        self:SetOpen(self:FirstManualWheel())
     else
         self.previewing = nil
         self:SetEditing(false)
         self:SetOpen(nil)
     end
+    Addon:QueueRefresh(true)
 end
 
 function Wheels:Toggle()
@@ -2544,170 +2545,19 @@ end
 
 function Wheels:Tooltip(frame, action, isPet)
     GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+    local category = self:DynamicCategory(WheelOf(frame))
     if isPet then
         if type(action) == "table" then
             PetTooltip(action)
         else
-            GameTooltip:SetText(Text("wheelEmpty"))
+            GameTooltip:SetText(string.format(Text("wheelDropDynamic"), Text("dynNamepet")))
         end
     elseif action then
         if not pcall(GameTooltip.SetAction, GameTooltip, action) then GameTooltip:SetText((Describe(action))) end
+    elseif category then
+        GameTooltip:SetText(string.format(Text("wheelDropDynamic"), Text("dynName" .. category)))
     else
         GameTooltip:SetText(Text("wheelDropHere"))
     end
     GameTooltip:Show()
-end
-
--- /cgp wheels pet: what the pet wheel sees (the pet bar, the entries, what the secure layer was told, the last release).
-function Wheels:PetDiagnose()
-    local say = function(...) Addon:Print(string.format(...)) end
-    local db = Addon.db
-    local dynamic = Addon.Dynamic
-    say("pet wheel: dynamic wheels=%s, pet goes to wheel %s, wheel kinds: %s", tostring(db.wheelDynamic == true), tostring(db.wheelDynPet),
-        (function()
-            local kinds = {}
-            for wheel = 1, COUNT do kinds[#kinds + 1] = wheel .. "=" .. tostring(dynamic and dynamic:CategoryOf(wheel) or "-") end
-            return table.concat(kinds, " ")
-        end)())
-    say("pet wheel: PetHasActionBar=%s, UnitExists(pet)=%s, pet slots=%s", tostring(type(PetHasActionBar) == "function" and PetHasActionBar()),
-        tostring(UnitExists and UnitExists("pet")), tostring(NUM_PET_ACTION_SLOTS))
-    for index = 1, (type(NUM_PET_ACTION_SLOTS) == "number" and NUM_PET_ACTION_SLOTS or 10) do
-        local ok, name, texture, isToken, isActive, _, _, spellID = pcall(GetPetActionInfo, index)
-        if ok and name then
-            say("  pet bar %d: %s token=%s active=%s spell=%s", index, tostring(name), tostring(isToken), tostring(isActive), tostring(spellID))
-        end
-    end
-    local entries = dynamic and dynamic.PetEntries and dynamic.PetEntries() or {}
-    say("pet wheel: %d entries", #entries)
-    for slot, entry in ipairs(entries) do
-        say("  entry %d: %s %s", slot, tostring(entry.kind), tostring(entry.name))
-    end
-    local layer = self.layer
-    if not layer then say("pet wheel: the secure layer does not exist yet"); return end
-    for wheel = 1, COUNT do
-        if layer:GetAttribute("petmode" .. wheel) then
-            local told = {}
-            for slot = 1, SLOTS do
-                local act, spell = layer:GetAttribute("petact" .. wheel .. "_" .. slot), layer:GetAttribute("petspell" .. wheel .. "_" .. slot)
-                if act or spell then told[#told + 1] = slot .. "=" .. (act and ("pet:" .. act) or ("spell:" .. tostring(spell))) end
-            end
-            say("pet wheel: the secure layer knows wheel %d as the pet wheel: %s", wheel, #told > 0 and table.concat(told, " ") or "nothing in it")
-            local face = self.faces and self.faces[wheel]
-            local mod = self.mods and (wheel <= 4 and self.mods[1] or self.mods[2])
-            say("pet wheel: last release of its button: %s", tostring(mod and mod:GetAttribute("diag") or "none yet"))
-        end
-    end
-    say("pet wheel: pet attributes are only written outside combat; the last release says 'pet: slot=.. act=..' when the pet branch ran")
-end
-
--- /cgp wheels diag: what the secure code made of the last release, and whether the layer is bound.
-function Wheels:Diagnose()
-    local say = function(...) Addon:Print(string.format(...)) end
-    if not self.layer then say("wheels: not created yet (turn them on in the settings, Controls tab, in Gamepad Mode)"); return end
-    say("wheels: layer shown=%s enabled=%s", tostring(self.layer:IsShown()), tostring(self.layer:GetAttribute("enabled")))
-    for g, group in ipairs(GROUPS) do
-        local ok, action = pcall(GetBindingAction, group.modifier, true)
-        say("%s (%s) -> %s | last release in the secure code: %s", group.letter, group.modifier, tostring(ok and action),
-            tostring(self.mods[g]:GetAttribute("diag") or "none yet (hold it, press a button, push a stick, let go)"))
-    end
-    local manager = type(GamepadMode) == "table" and GamepadMode.FrameControlsManager or nil
-    say("the game's window focus: interface focused=%s, windows listed=%s, the small wheels joined=%s",
-        tostring(type(manager) == "table" and manager.isUIFocused), tostring(type(manager) == "table" and type(manager.shownFrames) == "table" and #manager.shownFrames),
-        tostring(self.joined))
-    -- Which windows the game lists (the one that holds the pad when the controls do not answer), and whether the pad is free for the
-    -- wheels: they are switched off while the interface has the pad.
-    if type(manager) == "table" and type(manager.shownFrames) == "table" then
-        for index, frame in ipairs(manager.shownFrames) do
-            local okName, name = pcall(function() return frame.GetName and frame:GetName() end)
-            local okType, kind = pcall(function() return frame.GetObjectType and frame:GetObjectType() end)
-            local okShown, shown = pcall(function() return frame.IsShown and frame:IsShown() end)
-            say("  listed window %d: %s (%s), shown=%s%s", index, tostring(okName and name or "no name"), tostring(okType and kind), tostring(okShown and shown),
-                manager.focusedFrame == frame and ", has the focus" or "")
-        end
-    end
-    local pad = Addon.Input and Addon.Input.PadFree
-    say("the pad is free for the wheels: %s (the wheels are off while the game's interface bindings are active)", tostring(pad and pad() or "unknown"))
-    local yaw, pitch = GetCVar and GetCVar(CAMERA_CVARS[1]), GetCVar and GetCVar(CAMERA_CVARS[2])
-    local db = Addon.db
-    say("parts that reach into the pad, camera or focus: R3/L3 combos=%s (they take the stick clicks), stick stopping=%s, window-list entry=%s, toggle mode=%s, dynamic wheels=%s, numbers=%s",
-        tostring(db.wheelCombos == true), self:BlockMode(), tostring(db.wheelsDockFocus == true), tostring(db.wheelToggle == true),
-        tostring(db.wheelDynamic == true), tostring(db.wheelNumbers ~= false))
-    -- What the game itself does with the two stick clicks (the combos, when on, take them from it).
-    for _, key in ipairs({ "PADLSTICK", "PADRSTICK" }) do
-        local okAction, action = pcall(GetBindingAction, key)
-        local okOverride, override = pcall(GetBindingAction, key, true)
-        say("the game's action on %s: %s%s", key, tostring(okAction and action ~= "" and action or "none"),
-            (okOverride and override ~= "" and override ~= action) and (" (overridden now by: " .. tostring(override) .. ")") or "")
-    end
-    say("while a wheel button is held: stopping method = %s, choosing with %s | stick listener=%s holding=%s camera held=%s (speeds now yaw=%s pitch=%s, saved=%s)",
-        self:BlockMode(), self:CameraOnly() and "the camera stick only" or "both sticks",
-        tostring(self.sticksOn), tostring(self.holding), tostring(self.cameraHeld), tostring(yaw), tostring(pitch),
-        Addon.db.wheelSavedCamera and "yes" or "no")
-    say("sticks: movement=%s camera=%s | pushed now: %s", tostring(self.stickMove), tostring(self.stickCamera),
-        string.format("%.2f %.2f %.2f", self:Stick()))
-    for wheel = 1, COUNT do
-        local filled = 0
-        for slot = 1, SLOTS do if self:Get(wheel, slot) then filled = filled + 1 end end
-        say("%s = action bar %d (action slots %d-%d): %d of %d slots filled, own key: %s", Wheels.Label(wheel), wheel + 3,
-            Wheels.ActionOf(wheel, 1), Wheels.ActionOf(wheel, SLOTS), filled, SLOTS, tostring(self:KeyText(wheel)))
-    end
-end
-
--- /cgp wheels cd: what the game says about the cooldown and the usability of what is on the five wheels (every slot that has a running
--- cooldown, cannot be used, or holds an item; the rest are counted), and what the slots on the screen made of it.
-function Wheels:CooldownDiagnose()
-    local say = function(...) Addon:Print(string.format(...)) end
-    local function Show(value)
-        if value == nil then return "nil" end
-        if not Readable(value) then return "secret" end
-        return tostring(value)
-    end
-    local bar, spell = C_ActionBar, C_Spell
-    local secrets = C_Secrets
-    local function Ask(name, ...)
-        if type(secrets) ~= "table" or type(secrets[name]) ~= "function" then return "unknown" end
-        local ok, answer = pcall(secrets[name], ...)
-        return ok and Show(answer) or "error"
-    end
-    say("wheels cd: GetActionCooldown=%s GetActionCooldownDuration=%s IsUsableAction=%s | C_Spell.GetSpellCooldown=%s GetSpellCooldownDuration=%s IsSpellUsable=%s | issecretvalue=%s | secret restrictions in this client: %s, cooldowns hidden now: %s | last error: %s",
-        tostring(bar and bar.GetActionCooldown ~= nil), tostring(bar and bar.GetActionCooldownDuration ~= nil), tostring(bar and bar.IsUsableAction ~= nil),
-        tostring(spell and spell.GetSpellCooldown ~= nil), tostring(spell and spell.GetSpellCooldownDuration ~= nil), tostring(spell and spell.IsSpellUsable ~= nil),
-        tostring(issecretvalue ~= nil), Ask("HasSecretRestrictions"), Ask("ShouldCooldownsBeSecret"), tostring(self.stateError or "none"))
-    local filled, quiet = 0, 0
-    for wheel = 1, COUNT do
-        for slot = 1, SLOTS do
-            local action = self:Get(wheel, slot)
-            if action then
-                filled = filled + 1
-                local okInfo, info = pcall(bar.GetActionCooldown, action)
-                local usable, lacking = UsableOf(pcall(bar.IsUsableAction, action))
-                local okKind, kind, id = pcall(GetActionInfo, action)
-                local active = okInfo and type(info) == "table" and info.isActive and true or false
-                if active or not usable or (okKind and kind == "item") then
-                    if okInfo and type(info) == "table" then
-                        say("  wheel %d slot %d (action %d, %s %s): active=%s onGCD=%s start=%s duration=%s rate=%s secret=%s | usable=%s noMana=%s", wheel, slot, action,
-                            Show(okKind and kind or nil), Show(okKind and id or nil), Show(info.isActive), Show(info.isOnGCD), Show(info.startTime),
-                            Show(info.duration), Show(info.modRate), Ask("ShouldActionCooldownBeSecret", action), tostring(usable), tostring(lacking))
-                    else
-                        say("  wheel %d slot %d (action %d, %s %s): GetActionCooldown gave %s | usable=%s noMana=%s", wheel, slot, action,
-                            Show(okKind and kind or nil), Show(okKind and id or nil), Show(info), tostring(usable), tostring(lacking))
-                    end
-                else
-                    quiet = quiet + 1
-                end
-            end
-        end
-    end
-    say("wheels cd: %d slots filled, %d without a cooldown and usable (not listed)", filled, quiet)
-    local hud = self.hud
-    if hud and hud:IsShown() and self.open then
-        local running, grey = 0, 0
-        for _, frame in ipairs(hud.slots) do
-            if frame.Cooldown and frame.Cooldown:IsShown() then running = running + 1 end
-            if frame.cdLong then grey = grey + 1 end
-        end
-        say("wheels cd: the wheel on the screen (wheel %s): %d slots with a cooldown frame showing, %d grey", tostring(self.open), running, grey)
-    else
-        say("wheels cd: no wheel is on the screen; type /cgp wheels first (a wheel stays up while the wheels are filled), then this again, to see what its slots show")
-    end
 end

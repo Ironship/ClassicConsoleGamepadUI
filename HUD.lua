@@ -182,15 +182,10 @@ local function GrowsUp(spot)
     return spot and spot.anchor == "bottom"
 end
 
--- The hints showing right now (the shown children only, unlike LegendExtent): how far below the legend frame's top
--- they start and how high they are, in UIParent points. nil while nothing shown has a size.
-function HUD:LegendContent(legend)
-    local _, _, _, legendTop = Bounds(legend)
-    if not legendTop then return end
+local function MeasureLegendChildren(legendTop, ...)
     local bottom, top
-    -- select() instead of a table: this runs every frame while the legend grows upwards.
-    for i = 1, legend:GetNumChildren() do
-        local child = select(i, legend:GetChildren())
+    for i = 1, select("#", ...) do
+        local child = select(i, ...)
         if child:IsShown() then
             local _, b, _, t = Bounds(child)
             if b then bottom, top = math.min(bottom or b, b), math.max(top or t, t) end
@@ -198,6 +193,14 @@ function HUD:LegendContent(legend)
     end
     if not bottom then return end
     return legendTop - top, top - bottom
+end
+
+-- The hints showing right now (the shown children only, unlike LegendExtent): how far below the legend frame's top
+-- they start and how high they are, in UIParent points. nil while nothing shown has a size.
+function HUD:LegendContent(legend)
+    local _, _, _, legendTop = Bounds(legend)
+    if not legendTop then return end
+    return MeasureLegendChildren(legendTop, legend:GetChildren())
 end
 
 -- The legend frame's top-left corner, in UIParent points from the bottom-left.

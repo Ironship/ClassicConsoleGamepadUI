@@ -5,7 +5,7 @@ local _, Addon = ...
 -- Only the eight keys the game gives them are used, so a key can never be taken from another action: choosing a key that
 -- another slot holds swaps the two. The change is made with SetBinding in the binding context the game itself uses and
 -- saved like any key binding; the bars draw the glyph of the key a slot really has (Display.lua).
-local Buttons = {}
+local Buttons = { keyCache = {} }
 Addon.ButtonBindings = Buttons
 
 local COMMAND = "GAMEPADACTIONBUTTON"
@@ -26,11 +26,19 @@ local function Context(slot)
     end
 end
 
--- The key a slot has now (its first binding), or nil.
+function Buttons:Invalidate()
+    wipe(self.keyCache)
+end
+
+-- The key a slot has now (its first binding), or nil. Cached until bindings change.
 function Buttons:Key(slot)
     if type(GetBindingKey) ~= "function" then return nil end
+    local cached = self.keyCache[slot]
+    if cached ~= nil then return cached ~= false and cached or nil end
     local ok, key = pcall(GetBindingKey, Command(slot), nil, Context(slot))
-    if ok and type(key) == "string" and key ~= "" then return key end
+    local value = ok and type(key) == "string" and key ~= "" and key or false
+    self.keyCache[slot] = value
+    return value ~= false and value or nil
 end
 
 -- The glyph key of a slot when it is not the game's own, or nil (the game's own glyph is then drawn as before).
@@ -72,8 +80,10 @@ function Buttons:Assign(slot, key, done)
     local ok = SetBinding(key, Command(slot), context)
     if other and old then SetBinding(old, Command(other), context) end
     Save()
+    self:Invalidate()
     -- the game may take a moment to answer: what the key has later decides, and the change is taken back when it did not hold
     local function verify()
+        self:Invalidate()
         local now = self:Key(slot)
         if ok and now == key then
             if done then done(true) end
@@ -82,6 +92,7 @@ function Buttons:Assign(slot, key, done)
         if old then SetBinding(old, Command(slot), context) end
         if other then SetBinding(key, Command(other), context) end
         Save()
+        self:Invalidate()
         if done then
             done(false, "failed", string.format("SetBinding=%s context=%s now=%s", tostring(ok), tostring(context), tostring(now)))
         end
@@ -121,6 +132,7 @@ function Buttons:Diagnose()
     local active = C_KeyBindings and C_KeyBindings.IsBindingContextActive and select(2, pcall(C_KeyBindings.IsBindingContextActive, context))
     say("context=%s active=%s gamepadMode=%s", tostring(context), tostring(active), tostring(Addon:IsGamepadMode()))
     local function dump(tag)
+        self:Invalidate()
         local function action(key, withContext)
             local ok, value = pcall(GetBindingAction, key, nil, withContext and context or nil)
             return ok and tostring(value) or "error"
@@ -156,6 +168,7 @@ function Buttons:Reset()
         SetBinding(self.DEFAULT[slot], Command(slot), Context(slot))
     end
     Save()
+    self:Invalidate()
     return true
 end
 

@@ -14,7 +14,7 @@ Addon.Dynamic = Dynamic
 
 -- What the guard against writes that do not settle keeps (see SAME_WRITES): the times of the writes of each "<action>:<key>", until when
 -- a thing is left alone, the times of all writes, the last few writes (for /cgp wheels dyn) and the totals.
-Dynamic.history, Dynamic.refused, Dynamic.rejected, Dynamic.writeLog, Dynamic.recent = {}, {}, {}, {}, {}
+Dynamic.history, Dynamic.refused, Dynamic.rejected, Dynamic.pickupFails, Dynamic.writeLog, Dynamic.recent = {}, {}, {}, {}, {}, {}
 Dynamic.stats = { runs = 0, writes = 0, refused = 0, pauses = 0 }
 
 local CAPACITY = 12
@@ -311,7 +311,7 @@ local function Put(action, key)
     PlaceAction(action)
     local cursorKind, cursorID = GetCursorInfo()
     local after = KeyOf(action)
-    local rejected = kind == "item" and pickedKind == "item" and pickedID == id
+    local rejected = pickedKind == kind and pickedID == id
         and cursorKind == pickedKind and cursorID == pickedID and after ~= key
     local cursor = cursorKind and (tostring(cursorKind) .. ":" .. tostring(cursorID)) or nil
     ClearCursor()
@@ -382,11 +382,26 @@ function Dynamic:Wrote(mark, action, key, now, after, cursor)
     if #recent > 8 then table.remove(recent, 1) end
 end
 
+-- Keeps rejected keys in SavedVariables so known non-placeable items (e.g. Mage cipher scrolls)
+-- are skipped quietly across /reload until they leave the bags or /cgp wheels dyn retry is used.
+function Dynamic:RejectedStore()
+    local db = Addon.db
+    if type(db) == "table" then
+        if type(db.dynamicRejected) ~= "table" then db.dynamicRejected = {} end
+        if self.rejected ~= db.dynamicRejected then
+            for k, v in pairs(self.rejected) do db.dynamicRejected[k] = v end
+            self.rejected = db.dynamicRejected
+        end
+    end
+    return self.rejected
+end
+
 -- A change of a dynamic wheel setting starts the guard over.
 function Dynamic:Reset()
     wipe(self.history)
     wipe(self.refused)
-    wipe(self.rejected)
+    wipe(self:RejectedStore())
+    wipe(self.pickupFails)
     wipe(self.writeLog)
     self.pausedUntil = nil
 end
@@ -394,6 +409,7 @@ end
 -- Brings the bar of one wheel to what it should hold. Returns the attempt count, plan and skipped items.
 function Dynamic:Fill(wheel, wanted, budget)
     local now = GetTime()
+    local rejectedStore = self:RejectedStore()
     local current, present = {}, {}
     for slot = 1, CAPACITY do
         local key = KeyOf(Addon.Wheels.ActionOf(wheel, slot))
@@ -402,7 +418,7 @@ function Dynamic:Fill(wheel, wanted, budget)
     end
     local eligible, skipped = {}, {}
     for _, key in ipairs(wanted) do
-        if self.rejected[key] and not present[key] then
+        if rejectedStore[key] and not present[key] then
             skipped[#skipped + 1] = key
         else
             eligible[#eligible + 1] = key
@@ -427,14 +443,27 @@ function Dynamic:Fill(wheel, wanted, budget)
                     after = KeyOf(action)
                 end
                 if wrote then
+                    if want then self.pickupFails[want] = nil end
                     self:Wrote(mark, action, want, now, after, cursor)
                     changed = changed + 1
                     if rejected then
-                        self.rejected[want] = true
+                        rejectedStore[want] = true
                         if now - (self.rejectNoteAt or -WINDOW) >= 30 then
                             self.rejectNoteAt = now
                             Addon:Print(string.format("dynamic wheels: %s remained on the cursor after action slot %d was attempted; skipping it until it leaves the bags or is retried (/cgp wheels dyn retry)",
                                 want, action))
+                        end
+                        self:Request(1)
+                    end
+                elseif want then
+                    local fails = (self.pickupFails[want] or 0) + 1
+                    self.pickupFails[want] = fails
+                    if fails >= SAME_WRITES then
+                        rejectedStore[want] = true
+                        if now - (self.rejectNoteAt or -WINDOW) >= 30 then
+                            self.rejectNoteAt = now
+                            Addon:Print(string.format("dynamic wheels: %s could not be picked up after %d attempts; skipping it until it leaves the bags or is retried (/cgp wheels dyn retry)",
+                                want, fails))
                         end
                         self:Request(1)
                     end
@@ -471,10 +500,15 @@ function Dynamic:Run(report)
     self.stats.runs = self.stats.runs + 1
     local budget, lines, more = MAX_WRITES, {}, false
     local items, ready = BagItems()
+    local rejectedStore = self:RejectedStore()
     if ready then
-        for key in pairs(self.rejected) do
+        for key in pairs(rejectedStore) do
             local id = tonumber(key:match("^item:(%d+)$"))
-            if id and not items[id] then self.rejected[key] = nil end
+            if id and not items[id] then rejectedStore[key] = nil; self.pickupFails[key] = nil end
+        end
+        for key in pairs(self.pickupFails) do
+            local id = tonumber(key:match("^item:(%d+)$"))
+            if id and not items[id] then self.pickupFails[key] = nil end
         end
     end
     for wheel = 1, WHEELS do

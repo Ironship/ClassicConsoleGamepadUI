@@ -32,10 +32,34 @@ def archive_date():
     return (when.tm_year, when.tm_mon, when.tm_mday, when.tm_hour, when.tm_min, when.tm_sec - when.tm_sec % 2)
 
 
+DEFAULT_DEPLOY = Path(r"C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns") / NAME
+
+
+def deploy_payload(payload, destination):
+    """Sync the exact runtime payload into an installed WoW AddOns folder and verify SHA-256 parity."""
+    destination.mkdir(parents=True, exist_ok=True)
+    updated = []
+    for name, data in sorted(payload.items()):
+        target = destination / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists() or target.read_bytes() != data:
+            target.write_bytes(data)
+            updated.append(name)
+    mismatches = [
+        name for name, data in payload.items()
+        if hashlib.sha256((destination / name).read_bytes()).hexdigest() != hashlib.sha256(data).hexdigest()
+    ]
+    if mismatches:
+        raise SystemExit(f"Deploy verification failed for: {', '.join(mismatches)}")
+    return updated
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT.parent / f"{NAME}-releases")
     parser.add_argument("--luac", default="luac5.1", help="Path to the Lua 5.1 syntax checker")
+    parser.add_argument("--deploy", nargs="?", const=DEFAULT_DEPLOY, type=Path,
+                        help=f"Sync runtime files directly into the game AddOns folder (default: {DEFAULT_DEPLOY})")
     args = parser.parse_args()
     toc = (ROOT / f"{NAME}.toc").read_text(encoding="utf-8")
     version = re.search(r"^## Version: (.+)$", toc, re.M).group(1)
@@ -64,6 +88,10 @@ def main():
     payload = {name: (ROOT / name).read_bytes() for name in files}
     # Forever loads the _Camelot TOC; the plain TOC keeps other loaders working.
     payload[f"{NAME}_Camelot.toc"] = payload[f"{NAME}.toc"]
+    if args.deploy:
+        updated = deploy_payload(payload, args.deploy)
+        print(json.dumps({"deployed": str(args.deploy), "files": len(payload), "updated": len(updated), "changed": updated}, indent=2))
+        return
     args.output.mkdir(parents=True, exist_ok=True)
     # CurseForge expects one top-level folder named after the TOC.
     destination = args.output / f"{NAME}-{version}.zip"

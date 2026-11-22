@@ -256,6 +256,7 @@ function Addon:Note(stage, err)
         self.debugText:Show()
     end
     local now = GetTime and GetTime() or 0
+    if not message and not self.db.debug then return end
     if not changed or (lastSaved and now - lastSaved < 5) then return end
     lastSaved = now
     if C_AddOns and C_AddOns.SaveAddOns then pcall(C_AddOns.SaveAddOns) end
@@ -311,7 +312,7 @@ function Addon:Refresh()
     self:Note(not ok and "Display:Refresh" or "refresh", not ok and visible or nil)
     -- Keep observing while Edit Mode or the action editor temporarily expose the native HUD.
     local watchDelete = gamepad and self.db.easyDelete and self.ItemDelete.dialog
-    local watchWheels = gamepad and self.db.wheels == true
+    local watchWheels = (gamepad or (self.Wheels and self.Wheels.previewing)) and self.db.wheels == true
     driver:SetScript("OnUpdate", (wanted or watchDelete or watchWheels) and Poll or nil)
 end
 
@@ -386,7 +387,13 @@ local function Initialize()
     Try("ItemDelete", function() Addon.ItemDelete:Observe() end)
     Try("Quiet", function() Addon.Quiet:Observe() end)
     Try("Dynamic wheels", function() Addon.Dynamic:Observe() end)
-    Try("Focus log", function() Addon.Wheels:WatchFocus() end)
+    Try("Focus log", function()
+        if Addon.db.debug then
+            Addon.Wheels:WatchFocus()
+        else
+            Addon.db.wheelFocusLog = nil
+        end
+    end)
     Try("Words", function() Addon.Words:Observe() end)
     Try("WordSources", function() Addon.WordSources:Observe() end)
     Try("Keyboard", function() Addon.Keyboard:Observe() end)
@@ -435,7 +442,10 @@ driver:SetScript("OnEvent", function(_, event, addon, action)
         Addon:CaptureBlockedAction(event, addon, action)
         return
     end
-    if event == "UPDATE_BINDINGS" then Addon.Input.dirty = true end
+    if event == "UPDATE_BINDINGS" then
+        Addon.Input.dirty = true
+        if Addon.ButtonBindings then Addon.ButtonBindings:Invalidate() end
+    end
     if event == "DISPLAY_SIZE_CHANGED" or event == "EDIT_MODE_LAYOUTS_UPDATED"
         or event == "NEUTRAL_FACTION_SELECT_RESULT" or event == "PLAYER_REGEN_ENABLED" then
         Addon.Layout.dirty = true
@@ -605,6 +615,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         return
     elseif command == "debug" then
         Addon.db.debug = not Addon.db.debug or nil
+        if Addon.db.debug and Addon.Wheels and Addon.Wheels.WatchFocus then Addon.Wheels:WatchFocus() end
         Addon:Print("Debug overlay " .. (Addon.db.debug and "on" or "off"))
         Addon:Note("debug")
         return

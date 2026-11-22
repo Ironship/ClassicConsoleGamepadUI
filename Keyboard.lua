@@ -320,14 +320,41 @@ local function ChatFunction(name, legacy)
     return (namespace and namespace[name]) or _G[legacy]
 end
 
--- The edit box that has the chat line open. Opening, focusing or sending the chat line from here would run
--- the game's chat focus and gamepad binding code inside this addon's call, and the bindings it sets up would
--- be tainted: opening the game menu in combat is then blocked. The player opens the line natively, and the
--- game itself sends it (X is bound to the game's own send button, see Keyboard:SyncSend).
+local function IsUsableEditBox(box)
+    if not box or (type(box) ~= "table" and type(box) ~= "userdata") then return false end
+    local ok, usable = pcall(function()
+        if box.IsForbidden and box:IsForbidden() then return false end
+        if box.IsObjectType and not box:IsObjectType("EditBox") then return false end
+        if box.IsVisible and not box:IsVisible() then return false end
+        if box.HasFocus and not box:HasFocus() then return false end
+        if box.IsPassword and box:IsPassword() then return false end
+        if box.IsSecureText and box:IsSecureText() then return false end
+        return type(box.Insert) == "function" and type(box.GetText) == "function"
+    end)
+    return ok and usable == true
+end
+
+local function FindFocusedEditBox()
+    if type(GetCurrentKeyBoardFocus) ~= "function" then return nil end
+    local ok, focused = pcall(GetCurrentKeyBoardFocus)
+    if ok and IsUsableEditBox(focused) then return focused end
+    return nil
+end
+
+-- The edit box that currently owns text input: any focused non-password EditBox (chat frames, temporary whisper tabs,
+-- Communities/Guild chat, Mail, Macro editor, search boxes, StaticPopups, addon chat boxes), falling back to the game's
+-- active chat line. Opening, focusing or sending the chat line from here would run the game's chat focus and gamepad binding
+-- code inside this addon's call, and the bindings it sets up would be tainted: opening the game menu in combat is then blocked.
+-- The player opens the line natively, and the game itself sends it (X is bound to the game's own send button, see Keyboard:SyncSend).
 local function FindEditBox()
+    local focused = FindFocusedEditBox()
+    if focused then return focused end
     local active = ChatFunction("GetActiveWindow", "ChatEdit_GetActiveWindow")
     local box = active and active()
-    if box then return box end
+    if box and (not box.IsForbidden or not box:IsForbidden()) then return box end
+    local override = ChatFunction("GetChatFocusOverride", "ChatEdit_GetChatFocusOverride")
+    local overridden = override and override()
+    if IsUsableEditBox(overridden) then return overridden end
     -- The game may not report its chat line as the active one: take one that has the focus.
     for i = 1, NUM_CHAT_WINDOWS or 10 do
         local candidate = _G["ChatFrame" .. i .. "EditBox"]
@@ -1165,8 +1192,10 @@ function Keyboard:Show(auto)
     self.shownAt = GetTime()
     self.shift, self.tap, self.pred, self.buffer = false, nil, nil, ""
     self.unreadable, self.sawChat = nil, nil
+    self.lastAutoBox = FindFocusedEditBox() or FindEditBox()
     self:UpdateHints()
     self.frame:Show()
+    if self.frame.Raise then self.frame:Raise() end
     self:SyncPad()
     self:UpdateStatus()
     self:Refresh()
@@ -1315,7 +1344,7 @@ function Keyboard:WantsNativeSend()
     if not box then return false, "no chat line is open" end
     if not (box.HasFocus and box:HasFocus()) then return false, "the chat line has no focus" end
     -- The footer is a mixin table whose metatable throws on a field it does not have: read it raw.
-    local chatFrame = box.chatFrame
+    local chatFrame = type(box) == "table" and rawget(box, "chatFrame") or nil
     local footer = type(chatFrame) == "table" and rawget(chatFrame, "footer") or nil
     if type(footer) ~= "table" then return false, "the chat frame has no footer" end
     if rawget(footer, "isShown") ~= true then return false, "the chat footer is not shown" end
@@ -1447,13 +1476,27 @@ function Keyboard:PadPress(token)
     elseif token == "b" or token == "select" then
         self:Hide()
     elseif token == "x" then
-        -- Send. While the line can be sent X is the game's own send button and this press never arrives. It does
-        -- arrive when a word is waiting (it goes into the line, X sends the next time) or there is no chat line.
+        -- Send. While the chat line can be sent X is the game's own send button and this press never arrives. It does
+        -- arrive when a word is waiting (it goes into the line, X sends the next time) or on non-chat edit boxes.
         if self:Pending() ~= "" then
             self:Flush(false)
-        elseif EditBox() then
-            self:ReportSend()
-            self:SyncSend()
+        else
+            local box = EditBox()
+            if box then
+                local isChat = type(box) == "table" and rawget(box, "chatFrame") ~= nil
+                if isChat then
+                    self:ReportSend()
+                    self:SyncSend()
+                else
+                    local okML, multi = pcall(function() return box.IsMultiLine and box:IsMultiLine() end)
+                    if okML and multi then
+                        box:Insert("\n")
+                        self:UpdateHints()
+                    else
+                        self:Hide()
+                    end
+                end
+            end
         end
     elseif token == "delete" then
         self:Press(self.special.back)
@@ -1479,23 +1522,70 @@ function Keyboard:Toggle()
     if self.frame and self.frame:IsShown() then self:Hide() else self:Show(false) end
 end
 
--- Optionally open with the chat line, only in Gamepad Mode where there is no other way to type. Not while the
--- game is still loading in: the chat line is set up (and may report focus) at login without the player.
+-- Optionally open with any focused chat or text edit box, only in Gamepad Mode where there is no other way to type.
+-- Not while the game is still loading in: the chat line is set up (and may report focus) at login without the player.
+local FOCUS_POLL = 0.15
+local LOGIN_SETTLE = 1.5
+
+function Keyboard:QueueAutoOpen(box)
+    if not (Addon.db and Addon.db.autoKeyboard and Addon:IsGamepadMode() and self:IsEnabled()) then return end
+    if self.worldTime and GetTime() - self.worldTime < LOGIN_SETTLE then return end
+    if self.frame and self.frame:IsShown() then return end
+    if box and box == self.lastAutoBox then return end
+    self.lastAutoBox = box
+    -- Not inside the game's own call stack that is opening the edit box: a frame later, on our own.
+    C_Timer.After(0, function()
+        if self.frame and self.frame:IsShown() then return end
+        if not (Addon.db and Addon.db.autoKeyboard and Addon:IsGamepadMode() and self:IsEnabled()) then return end
+        local current = FindEditBox()
+        if not current then
+            self.lastAutoBox = nil
+            return
+        end
+        if box and current ~= box and current == self.lastAutoBox then return end
+        self.lastAutoBox = current
+        self:Show(true)
+    end)
+end
+
 function Keyboard:Observe()
     self:WatchBindings()
-    if not EventRegistry or not EventRegistry.RegisterCallback then return end
+    self.worldTime = GetTime()
     local loader = CreateFrame("Frame")
     loader:RegisterEvent("PLAYER_ENTERING_WORLD")
-    loader:SetScript("OnEvent", function() self.worldTime = GetTime() end)
-    EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusLost", function() self:QueueSendSync() end, self)
-    EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusGained", function()
-        self:QueueSendSync()
-        if not (Addon.db.autoKeyboard and Addon:IsGamepadMode() and self:IsEnabled()) then return end
-        if not self.worldTime or GetTime() - self.worldTime < 5 then return end
-        if self.frame and self.frame:IsShown() then return end
-        -- Not inside the game's own call stack that is opening the chat line: a frame later, on our own.
-        C_Timer.After(0, function()
-            if FindEditBox() and not (self.frame and self.frame:IsShown()) then self:Show(true) end
-        end)
-    end, self)
+    loader:SetScript("OnEvent", function(_, _, isInitialLogin, isReloadingUi)
+        if isInitialLogin or isReloadingUi then self.worldTime = GetTime() end
+    end)
+    local elapsedPoll = 0
+    loader:SetScript("OnUpdate", function(_, elapsed)
+        elapsedPoll = elapsedPoll + elapsed
+        if elapsedPoll < FOCUS_POLL then return end
+        elapsedPoll = 0
+        if not (Addon.db and Addon.db.autoKeyboard and Addon:IsGamepadMode() and self:IsEnabled()) then
+            self.lastAutoBox = nil
+            return
+        end
+        local focused = FindFocusedEditBox()
+        if not focused then
+            self.lastAutoBox = nil
+            return
+        end
+        if self.frame and self.frame:IsShown() then
+            self.lastAutoBox = focused
+            return
+        end
+        if focused ~= self.lastAutoBox then
+            self:QueueAutoOpen(focused)
+        end
+    end)
+    if EventRegistry and EventRegistry.RegisterCallback then
+        EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusLost", function()
+            self:QueueSendSync()
+            if not FindFocusedEditBox() then self.lastAutoBox = nil end
+        end, self)
+        EventRegistry:RegisterCallback("ChatFrame.OnEditBoxFocusGained", function(_, editBox)
+            self:QueueSendSync()
+            self:QueueAutoOpen(editBox or FindEditBox())
+        end, self)
+    end
 end

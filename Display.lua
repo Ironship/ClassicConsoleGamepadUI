@@ -294,34 +294,76 @@ function Display:AvoidDefaultStatusOverlap()
         local left, right, bottom, height = UIBox(region)
         if left then obstacles[#obstacles + 1] = { left, right, bottom, bottom + height } end
     end
+    -- Treat the classic bar stack (slots and art) as one solid envelope so a status bar cannot wedge
+    -- into the gap between the lower and upper action rows or overlap the end caps.
+    local barLeft, barRight, barBottom, barTop
+    local function IncludeBar(region)
+        local left, right, bottom, height = UIBox(region)
+        if left then
+            barLeft = barLeft and math.min(barLeft, left) or left
+            barRight = barRight and math.max(barRight, right) or right
+            barBottom = barBottom and math.min(barBottom, bottom) or bottom
+            barTop = barTop and math.max(barTop, bottom + height) or (bottom + height)
+        end
+    end
     for i, slot in ipairs(self.slots or {}) do
-        if i <= 8 or slot:IsShown() then Add(slot) end
+        if i <= 8 or slot:IsShown() then IncludeBar(slot) end
     end
-    for _, frame in ipairs({ BagsBar, MicroMenuContainer }) do
-        if frame and frame:IsShown() and frame:GetAlpha() > 0 then Add(frame) end
+    for _, entry in ipairs(self.art or {}) do
+        local tex = entry.texture
+        if tex and tex:IsShown() and (tex.GetAlpha == nil or tex:GetAlpha() > 0) then IncludeBar(tex) end
     end
-    local bars = { SecondaryStatusTrackingBarContainer, MainStatusTrackingBarContainer }
+    if barLeft then obstacles[#obstacles + 1] = { barLeft, barRight, barBottom, barTop } end
+    for _, frame in pairs({ BagsBar, MicroMenuContainer }) do
+        if frame:IsShown() and frame:GetAlpha() > 0 then Add(frame) end
+    end
+    -- Process Main (bottom) before Secondary (above Main) to preserve Blizzard's native stacking order,
+    -- and iterate with an explicit count so a nil frame never stops the loop.
+    local bars = { [1] = MainStatusTrackingBarContainer, [2] = SecondaryStatusTrackingBarContainer }
     local function Default(frame)
         return frame and frame.IsInDefaultPosition and frame:IsInDefaultPosition()
     end
-    for _, frame in ipairs(bars) do
-        if frame:IsShown() and not Default(frame) then Add(frame) end
+    for i = 1, 2 do
+        local frame = bars[i]
+        if frame and frame:IsShown() and not Default(frame) then Add(frame) end
     end
-    for _, frame in ipairs(bars) do
-        if frame:IsShown() and Default(frame) then
+    local moved = self.defaultStatusMoved or {}
+    self.defaultStatusMoved = moved
+    local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+    for i = 1, 2 do
+        local frame = bars[i]
+        if frame and frame:IsShown() and Default(frame) then
             local left, right, bottom, height, scale = UIBox(frame)
             if left and scale > 0 then
-                local target, changed = bottom, true
+                local base = moved[frame]
+                local baseLeft, baseBottom = base and base[1] or left, base and base[2] or bottom
+                local baseRight = baseLeft + (right - left)
+                local target, changed = baseBottom, true
                 while changed do
                     changed = false
                     for _, box in ipairs(obstacles) do
-                        if left < box[2] and right > box[1] and target < box[4] + 4 and target + height > box[3] - 4 then
+                        if baseLeft < box[2] and baseRight > box[1] and target < box[4] + 4 and target + height > box[3] - 4 then
                             target, changed = box[4] + 4, true
                         end
                     end
                 end
-                if target > bottom then Addon.Layout:SetBottomLeft(frame, left / scale, target / scale) end
-                obstacles[#obstacles + 1] = { left, right, target, target + height }
+                if screenHeight and screenHeight > height and target + height > screenHeight then
+                    target = screenHeight - height
+                end
+                if target > baseBottom + 0.5 then
+                    if not base then moved[frame] = { baseLeft, baseBottom } end
+                    if math.abs(target - bottom) > 0.5 then
+                        Addon.Layout:SetBottomLeft(frame, baseLeft / scale, target / scale)
+                    end
+                elseif base then
+                    moved[frame] = nil
+                    local snapshot = Addon.Layout.originals and Addon.Layout.originals[frame]
+                    if not (snapshot and Addon.Layout.Apply and Addon.Layout.Apply(frame, snapshot)) then
+                        Addon.Layout:SetBottomLeft(frame, baseLeft / scale, baseBottom / scale)
+                    end
+                    target = baseBottom
+                end
+                obstacles[#obstacles + 1] = { baseLeft, baseRight, target, target + height }
             end
         end
     end
@@ -1198,7 +1240,10 @@ end
 
 function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
     slot:Show()
-    if slot.Key then slot.Key:SetShown(Addon.db.showKeyboardHints) end
+    if slot.Key then
+        slot.Key:SetShown(Addon.db.showKeyboardHints)
+        if slot.Key.SetTextColor then slot.Key:SetTextColor(1, 1, 1) end
+    end
     if not source then
         slot:SetAlpha(1)
         slot.source, slot.action = nil, nil
@@ -1233,9 +1278,37 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
             and (slot.keyboardSlot or (bar and not bar.isGamepadPossessBar and source.GetGamepadPageUnitSlotID))
             and Readable(action) and type(action) == "number" and action > 0
             and C_ActionBar and C_ActionBar.IsUsableAction then
-            local usable, lacking = C_ActionBar.IsUsableAction(action)
-            if Readable(usable) and Readable(lacking) and usable == false and lacking == true then
-                slot.Icon:SetVertexColor(0.5, 0.5, 1)
+            local isFlyout = false
+            if slot.keyboardSlot and GetActionInfo then
+                local okKind, kind = pcall(GetActionInfo, action)
+                isFlyout = okKind and kind == "flyout"
+            end
+            if not isFlyout then
+                local outOfRange = false
+                if slot.keyboardSlot and C_ActionBar.IsActionInRange then
+                    local inRange = C_ActionBar.IsActionInRange(action)
+                    if Readable(inRange) and inRange == false then outOfRange = true end
+                end
+                if outOfRange and slot.Key and slot.Key.SetTextColor then
+                    slot.Key:SetTextColor(1, 0.2, 0.2)
+                end
+                local usable, lacking = C_ActionBar.IsUsableAction(action)
+                if Readable(usable) and Readable(lacking) then
+                    if usable == true then
+                        local keyShown = slot.Key and Addon.db.showKeyboardHints and slot.Key.GetText and (slot.Key:GetText() or "") ~= ""
+                        if outOfRange and not keyShown then
+                            slot.Icon:SetVertexColor(1, 0.35, 0.35)
+                        elseif slot.keyboardSlot or not source.icon.GetVertexColor then
+                            -- Hidden keyboard buttons stop receiving Blizzard's UpdateUsable events,
+                            -- so clear any stale OOM/unusable vertex color copied from source.icon.
+                            slot.Icon:SetVertexColor(1, 1, 1)
+                        end
+                    elseif lacking == true then
+                        slot.Icon:SetVertexColor(0.5, 0.5, 1)
+                    elseif slot.keyboardSlot then
+                        slot.Icon:SetVertexColor(0.4, 0.4, 0.4)
+                    end
+                end
             end
         end
         local unit = PortraitUnit(source, icon)
@@ -1293,9 +1366,13 @@ function Display:PlacePrompt(slot)
     slot.Prompt:SetPoint("TOPRIGHT", 4 * promptScale, 4 * promptScale - drop)
 end
 
+local updateSelected, updateStandard = {}, {}
+local SHOULDER_KEYS = { "LeftShoulderIcon", "RightShoulderIcon" }
+local OVERRIDE_BAR_KEYS = { "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }
+
 function Display:Update(unit)
-    self.slotBySource = {}
-    for i, key in ipairs({ "LeftShoulderIcon", "RightShoulderIcon" }) do
+    if self.slotBySource then wipe(self.slotBySource) else self.slotBySource = {} end
+    for i, key in ipairs(SHOULDER_KEYS) do
         local slot = self.slots[36 + i]
         self:UpdateSlot(slot, nil)
         CopyTexture(slot.Icon, unit[key])
@@ -1305,9 +1382,9 @@ function Display:Update(unit)
     end
     local base = unit.actionBars
     local page = unit:GetCurrentPage()
-    local selected = {}
+    local selected = wipe(updateSelected)
     if page <= Constants.GamepadActionBarConstants.NUM_STANDARD_PAGES_PER_GAMEPAD_ACTION_BAR_PAGE_UNIT then
-        selected = { base.topBar, base.leftBar, base.rightBar, base.bottomBar }
+        selected[1], selected[2], selected[3], selected[4] = base.topBar, base.leftBar, base.rightBar, base.bottomBar
     end
     local anchors = { unit.TopCenteredAnchor, unit.LeftCenteredAnchor, unit.RightCenteredAnchor, unit.BottomCenteredAnchor }
     for _, bar in ipairs({ base.possessBar, base.stanceBar }) do
@@ -1315,7 +1392,7 @@ function Display:Update(unit)
             for i, anchor in ipairs(anchors) do if bar:GetParent() == anchor then selected[i] = bar end end
         end
     end
-    for _, key in ipairs({ "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }) do
+    for _, key in ipairs(OVERRIDE_BAR_KEYS) do
         local bar = unit[key]
         if bar and bar:IsShown() then selected[1] = bar end
     end
@@ -1323,9 +1400,12 @@ function Display:Update(unit)
     -- Setting "padKeyboard": a slot of the four standard bars shows the keyboard bar's button at its place (Input.lua
     -- presses the same button); the game's own four (interact, target menu, back, jump) stay.
     -- Not in the action editor: it writes the game's own gamepad storage, which the keyboard bars do not show.
-    local standard = {}
+    local standard = wipe(updateStandard)
     if Addon.db.padKeyboard == true and not self.barEditing then
-        for _, bar in ipairs({ base.topBar, base.leftBar, base.rightBar, base.bottomBar }) do standard[bar] = true end
+        if base.topBar then standard[base.topBar] = true end
+        if base.leftBar then standard[base.leftBar] = true end
+        if base.rightBar then standard[base.rightBar] = true end
+        if base.bottomBar then standard[base.bottomBar] = true end
     end
     local function KeyboardButton(bar, index, native)
         local source = bar and standard[bar] and bar.actionButtons[native]
