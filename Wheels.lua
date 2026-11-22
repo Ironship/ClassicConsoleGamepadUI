@@ -1336,6 +1336,10 @@ function Wheels:CreateHUD()
     hud.Name = Addon.Fonts:String(text, "OVERLAY", "Normal")
     hud.Name:SetPoint("CENTER", hud, "CENTER", 0, 12)
     hud.Name:SetWidth(124)
+    hud.Description = Addon.Fonts:String(text, "OVERLAY", "HighlightSmall")
+    hud.Description:SetJustifyH("CENTER")
+    hud.Description:SetWordWrap(true)
+    pcall(hud.Description.SetMaxLines, hud.Description, 2)
     hud.Hint = Addon.Fonts:String(text, "OVERLAY", "HighlightSmall")
     hud.Hint:SetPoint("TOP", hud.Name, "BOTTOM", 0, -6)
     hud.Hint:SetWidth(124)
@@ -1380,7 +1384,7 @@ function Wheels:CreateHUD()
     hud.Top.RB = Addon.Fonts:String(hud.Top, "OVERLAY", "HighlightSmall")
     hud.Top.RB:SetPoint("CENTER", hud.Top, "BOTTOM", (COUNT + 1) * 10 + 16, 18)
     hud.Bottom = Band(hud)
-    hud.Bottom:SetSize(400, 58)
+    hud.Bottom:SetSize(400, 76)
     hud.Bottom:SetPoint("TOP", hud, "BOTTOM", 0, -18)
     hud.slots = {}
     for slot = 1, SLOTS do
@@ -1488,6 +1492,9 @@ local function DurationObject(kind, id)
             local ok, object = pcall(C_ActionBar.GetActionCooldownDuration, id)
             return ok and object or nil
         end
+    elseif kind == "item" and C_Item and C_Item.GetItemCooldownDuration then
+        local ok, object = pcall(C_Item.GetItemCooldownDuration, id)
+        return ok and object or nil
     elseif C_Spell and C_Spell.GetSpellCooldownDuration then
         local ok, object = pcall(C_Spell.GetSpellCooldownDuration, id)
         return ok and object or nil
@@ -1527,6 +1534,31 @@ local function ActionState(frame, action)
     local ok, info = pcall(C_ActionBar.GetActionCooldown, action)
     local long = false
     if ok then long = ApplyInfo(frame.Cooldown, info, "action", action) else frame.Cooldown:Clear() end
+    local okKind, kind, id = pcall(GetActionInfo, action)
+    if okKind and kind == "item" and type(id) == "number" then
+        local getItemCooldown = C_Item and C_Item.GetItemCooldown or GetItemCooldown
+        if type(getItemCooldown) == "function" then
+            local itemOK, start, duration, enabled, rate = pcall(getItemCooldown, id)
+            if itemOK and Readable(start) and Readable(duration) and Readable(enabled) and Readable(rate)
+                and type(start) == "number" and type(duration) == "number" then
+                if start > 0 and duration > 0 and enabled ~= 0 and enabled ~= false then
+                    frame.Cooldown:SetCooldown(start, duration, type(rate) == "number" and rate > 0 and rate or 1)
+                    long = duration > GCD_SECONDS
+                end
+            elseif itemOK then
+                local object = DurationObject("item", id) or DurationObject("action", action)
+                if object then
+                    frame.Cooldown:SetCooldownFromDurationObject(object)
+                    long = true
+                end
+            end
+        end
+    elseif okKind and kind == "spell" and type(id) == "number" and C_Spell and C_Spell.GetSpellCooldown then
+        local spellOK, spellInfo = pcall(C_Spell.GetSpellCooldown, id)
+        if spellOK and type(spellInfo) == "table" and spellInfo.isActive then
+            long = ApplyInfo(frame.Cooldown, spellInfo, "spell", id)
+        end
+    end
     local usable, lacking = UsableOf(pcall(C_ActionBar.IsUsableAction, action))
     return long, usable, lacking
 end
@@ -1695,15 +1727,20 @@ function Wheels:ApplyStyle()
     -- While the wheel is filled the panel below makes room for the buttons that pick a wheel.
     hud.Bottom:SetShown(wedges and not self.previewing)
     hud.Name:ClearAllPoints()
+    hud.Description:ClearAllPoints()
     hud.Hint:ClearAllPoints()
     if wedges and not self.previewing then
-        hud.Name:SetPoint("TOP", hud.Bottom, "TOP", 0, -10)
+        hud.Name:SetPoint("TOP", hud.Bottom, "TOP", 0, -7)
         hud.Name:SetWidth(380)
-        hud.Hint:SetPoint("TOP", hud.Name, "BOTTOM", 0, -6)
+        hud.Description:SetPoint("TOP", hud.Name, "BOTTOM", 0, -1)
+        hud.Description:SetSize(380, 34)
+        hud.Hint:SetPoint("BOTTOM", hud.Bottom, "BOTTOM", 0, 5)
         hud.Hint:SetWidth(380)
     else
         hud.Name:SetPoint("CENTER", hud, "CENTER", 0, 12)
         hud.Name:SetWidth(124)
+        hud.Description:SetPoint("TOP", hud.Name, "BOTTOM", 0, -2)
+        hud.Description:SetSize(124, 24)
         hud.Hint:SetPoint("TOP", hud.Name, "BOTTOM", 0, -6)
         hud.Hint:SetWidth(124)
     end
@@ -1745,20 +1782,49 @@ function Wheels:DrawCenter()
     local hud, db = self.hud, Addon.db
     if not hud then return end
     self:DrawHeader()
-    local name
+    local name, description
     if self.flyoutSpells then
         local spell = self.selected and self.flyoutSpells[self.selected]
         if spell then
             local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spell.id)
             name = (type(info) == "table" and info.name) or spell.name or tostring(spell.id)
+            if C_Spell and C_Spell.GetSpellDescription then
+                local ok, value = pcall(C_Spell.GetSpellDescription, spell.id)
+                if ok then description = value end
+            end
         end
     elseif self.open and self:IsPetWheel(self.open) then
         local entry = self.selected and self:PetSlot(self.open, self.selected)
         name = entry and entry.name
+        if entry and entry.kind == "spell" and C_Spell and C_Spell.GetSpellDescription then
+            local ok, value = pcall(C_Spell.GetSpellDescription, entry.id)
+            if ok then description = value end
+        end
     else
         local entry = self.selected and self.open and self:Get(self.open, self.selected)
         name = entry and Describe(entry)
+        if entry then
+            local ok, kind, id = pcall(GetActionInfo, entry)
+            if ok and kind == "spell" and C_Spell and C_Spell.GetSpellDescription then
+                local good, value = pcall(C_Spell.GetSpellDescription, id)
+                if good then description = value end
+            elseif ok and kind == "item" then
+                local getItemInfo = C_Item and C_Item.GetItemInfo or GetItemInfo
+                if type(getItemInfo) == "function" then
+                    local values = { pcall(getItemInfo, id) }
+                    if values[1] then description = values[19] end
+                end
+            end
+        end
     end
+    if type(description) == "string" then
+        description = description:gsub("[\r\n]+", " "):gsub("  +", " ")
+        if description == "" then description = nil end
+    else
+        description = nil
+    end
+    hud.Description:SetText(description or "")
+    hud.Description:SetShown(self:Wedges() and not self.previewing and description ~= nil)
     if self:Wedges() and not self.previewing then
         -- The panel below: the name of the chosen slot and what the buttons do.
         hud.Name:SetText(db.wheelNames and (name or (self.selected and Text("wheelEmpty")) or "") or "")

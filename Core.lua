@@ -383,6 +383,7 @@ local function Initialize()
         Addon:CheckNativeTaint("Options:Register")
     end)
     Try("ItemDelete", function() Addon.ItemDelete:Observe() end)
+    Try("Quiet", function() Addon.Quiet:Observe() end)
     Try("Dynamic wheels", function() Addon.Dynamic:Observe() end)
     Try("Focus log", function() Addon.Wheels:WatchFocus() end)
     Try("Words", function() Addon.Words:Observe() end)
@@ -519,6 +520,10 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
             Addon.Wheels:Toggle()
         end
         return
+    elseif command == "sound" or command == "quiet" then
+        -- /cgp sound [on | off | test | listen [seconds]]: the muted item sounds (Quiet.lua).
+        Addon.Quiet:Command(input:lower():match("^%s*%S+%s+(.-)%s*$"))
+        return
     elseif command == "edit" then
         Addon.Options:EditActions()
         return
@@ -632,7 +637,7 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
     else
         local state = Addon.classicVisible and "classic HUD" or "native HUD"
         Addon:Print(Addon.version .. " | " .. state .. " | gamepad mode " .. (Addon:IsGamepadMode() and "on" or "off"))
-        Addon:Print("/cgp settings | keyboard | keys | language | bindings | wheels | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | perf | debug")
+        Addon:Print("/cgp settings | keyboard | keys | language | bindings | wheels | edit | resetframes | resetbars | resetlegend | legend | clicks | on | off | native | classic | status | taint | perf | sound | debug")
         return
     end
     Addon:QueueRefresh(true)

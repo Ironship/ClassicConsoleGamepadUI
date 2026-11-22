@@ -398,6 +398,8 @@ function Dynamic:Fill(wheel, wanted, budget)
         if want ~= current[slot] then
             local mark = action .. ":" .. tostring(want)
             if self:MayWrite(mark, action, want, now) then
+                -- The game's item and spell icon sounds of this write are muted for a moment (Quiet.lua; it cannot break the write).
+                if Addon.Quiet then pcall(Addon.Quiet.Writing, Addon.Quiet) end
                 local wrote = true
                 if want then wrote = Put(action, want) else Clear(action) end
                 if wrote then

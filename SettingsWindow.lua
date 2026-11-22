@@ -202,6 +202,7 @@ local function Tabs()
             { "wheelkey", 1 }, { "wheelkey", 2 }, { "wheelkey", 3 }, { "wheelkey", 4 }, { "wheelkey", 5 },
             { "control", "wheelDynamic" },
             { "choice", "wheelDynFood", "wheelDynamic" }, { "choice", "wheelDynUse", "wheelDynamic" }, { "choice", "wheelDynProf", "wheelDynamic" }, { "choice", "wheelDynPet", "wheelDynamic" },
+            { "control", "quietDynamic" },
             { "button", "wheelsEdit", "btnOpen", "wheelsEditTip", function() Addon.Wheels:Toggle() end, "wheels" },
             { "button", "wheelsClear", "btnReset", "wheelsClearTip", Confirmed(function() Addon.Wheels:ClearAll() end), "wheels" },
             { "header", "secAssign", "secAssignNote" },
@@ -226,7 +227,7 @@ local function Tabs()
             { "control", "raiseChat" }, { "control", "chatGap" },
             { "control", "anchorChat" }, { "control", "chatLeft" }, { "control", "chatBottom" },
             { "header", "items" },
-            { "control", "easyDelete" },
+            { "control", "easyDelete" }, { "control", "muteItemSounds" },
         } },
         { id = "keyboard", label = Text("tabKeyboard"), items = {
             { "header", "keyboard", "keyboardNote" },

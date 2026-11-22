@@ -21,6 +21,7 @@ Locales/koKR.lua
 Hangul.lua
 Languages.lua
 Perf.lua
+Quiet.lua
 Fonts.lua
 Layout.lua
 ButtonBindings.lua

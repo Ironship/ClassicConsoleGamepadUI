@@ -29,6 +29,8 @@ local controls = {
     { key = "wheelDynUse", default = 4, parent = "wheelDynamic", choice = true },
     { key = "wheelDynProf", default = 5, parent = "wheelDynamic", choice = true },
     { key = "wheelDynPet", default = 0, parent = "wheelDynamic", choice = true },
+    -- The game's item and spell icon sounds of the dynamic wheels' writes to the bars are muted while they write (Quiet.lua).
+    { key = "quietDynamic", default = true, parent = "wheelDynamic" },
     { key = "wheelKeep", default = 800, min = 200, max = 3000, step = 100, parent = "wheels" },
     { key = "wheelsDock", default = true, parent = "wheels" },
     { key = "wheelsDockAlways", default = false, parent = "wheelsDock" },
@@ -80,6 +82,8 @@ local controls = {
     { key = "keyboardTransparency", default = 0, min = 0, max = 0.9, step = 0.05, parent = "keyboardEnabled" },
     { key = "wordHunter", default = true, parent = "keyboardEnabled" },
     { key = "easyDelete", default = true, section = "items" },
+    -- Mutes the game's sounds of bags being sorted, of items picked up and put down and of spell icons picked up and dropped (Quiet.lua).
+    { key = "muteItemSounds", default = false },
 }
 
 -- Settings that hand a stock frame to Edit Mode or take it back: every frame returns to its own place first.
@@ -145,6 +149,8 @@ function Options:Changed(key)
     elseif key == "wheels" or key:sub(1, 5) == "wheel" then
         Addon.Wheels:Changed(key)
         Addon:QueueRefresh(true)
+    elseif key == "muteItemSounds" or key == "quietDynamic" then
+        Addon.Quiet:Changed(key)
     elseif key == "legendGrowUp" then
         Addon.HUD:SetLegendGrowUp()
     elseif key == "legendFrame" or key == "legendShade" then
@@ -239,6 +245,7 @@ function Options:ResetAll()
         keyboard.frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 120)
     end
     Addon.WordSources:Changed()
+    Addon.Quiet:Apply()
     Addon.MenuHints:Refresh()
     Addon:QueueRefresh(true)
     Addon:Print(text.settingsReset)

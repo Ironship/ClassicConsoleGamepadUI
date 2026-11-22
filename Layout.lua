@@ -209,11 +209,11 @@ function Layout:Prepare()
         { "SecondaryStatusTrackingBarContainer", SecondaryStatusTrackingBarContainer },
         { "MainStatusTrackingBarContainer", MainStatusTrackingBarContainer },
     }) do
-        local key, frame = entry[1], entry[2]
+        local frame = entry[2]
         if frame then
-            if not Apply(frame, Addon.db.keyboardBars[key]) then
-                Anchor(frame, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", 0, y)
-            end
+            -- Status bars enabled by placeStatusBars must follow the classic action bar, not a saved keyboard-layout
+            -- position. A stored MKB anchor can leave the exp/reputation bar offset and narrower after layout changes.
+            Anchor(frame, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", 0, y)
             ResizeStatus(frame, STATUS_BAR_CONTAINER_WIDTH, STATUS_BAR_NUM_SEGMENTS)
             -- A kept status bar is elsewhere: the bars above close the gap it would leave.
             if frame:IsShown() and not kept[frame] then
