@@ -211,11 +211,11 @@ Addon.Locales.Register("frFR", "Français", {
     off = "Le clavier à l'écran est désactivé. Activez-le dans les réglages (/cgp, onglet Clavier).",
     -- Edit Mode, bar size, placement settings, legend style, reset (from the Edit Mode pull request)
     barScale = "Taille des barres classiques",
-    barScaleTip = "La taille des barres classiques, avec leurs griffons, indicateurs, barre d'expérience et (avec des barres compactes) sacs. Elles restent centrées en bas de l'écran. Aussi dans le mode édition, dans le panneau des barres classiques.",
+    barScaleTip = "Redimensionne les barres, griffons, indicateurs, barre d'expérience, sacs et menu lorsque leur placement par l'addon est activé. Aussi dans le panneau des barres du mode édition.",
     placeBags = "Sacs avec les barres classiques",
     placeBagsTip = "Place les sacs à leur endroit classique (avec des barres compactes, sous la moitié R2). Désactivez pour les placer vous-même dans le mode édition.",
     placeStatusBars = "Barres d'expérience et de réputation au-dessus des barres classiques",
-    placeStatusBarsTip = "Place ces barres au-dessus des barres classiques, aussi larges qu'elles. Désactivez pour les placer vous-même dans le mode édition.",
+    placeStatusBarsTip = "Place ces barres au-dessus des barres classiques, aussi larges qu'elles. Désactivez pour utiliser le mode édition ; la position par défaut évite de chevaucher les boutons.",
     placeTotemBar = "Barre de totems au-dessus des barres classiques",
     placeTotemBarTip = "Place la barre de totems du chaman au-dessus des barres classiques. Désactivez pour la placer vous-même dans le mode édition. Une barre de totems déplacée dans le mode édition reste de toute façon où vous l'avez mise.",
     showLeftCap = "Griffon gauche",

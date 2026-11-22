@@ -211,11 +211,11 @@ Addon.Locales.Register("ptBR", "Português", {
     off = "O teclado na tela está desativado. Ative-o nas configurações (/cgp, aba Teclado).",
     -- Edit Mode, bar size, placement settings, legend style, reset (from the Edit Mode pull request)
     barScale = "Tamanho das barras clássicas",
-    barScaleTip = "O tamanho das barras clássicas, com seus grifos, indicadores, barra de experiência e (com barras compactas) bolsas. Elas ficam centralizadas na parte inferior da tela. Também no modo de edição, no painel das barras clássicas.",
+    barScaleTip = "Redimensiona barras, grifos, indicadores, barra de experiência, bolsas e menu quando o posicionamento pelo addon está ativado. Também no painel das barras no modo de edição.",
     placeBags = "Bolsas com as barras clássicas",
     placeBagsTip = "Coloca as bolsas no lugar clássico (com barras compactas, sob a metade R2). Desative para posicioná-las você mesmo no modo de edição.",
     placeStatusBars = "Barras de experiência e reputação acima das barras clássicas",
-    placeStatusBarsTip = "Coloca estas barras acima das barras clássicas, tão largas quanto elas. Desative para posicioná-las você mesmo no modo de edição.",
+    placeStatusBarsTip = "Coloca estas barras acima das barras clássicas, tão largas quanto elas. Desative para usar o modo de edição; a posição padrão evita sobrepor os botões.",
     placeTotemBar = "Barra de totens acima das barras clássicas",
     placeTotemBarTip = "Coloca a barra de totens do xamã acima das barras clássicas. Desative para posicioná-la você mesmo no modo de edição. Uma barra de totens movida no modo de edição fica onde você a colocou de qualquer forma.",
     showLeftCap = "Grifo esquerdo",

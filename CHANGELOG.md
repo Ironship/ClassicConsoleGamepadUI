@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Default experience and reputation bars no longer overlap the classic controls when their placement option is off.** Their native size is kept, and a default-positioned bar moves only when it collides; positions set in Edit Mode remain untouched.
+- **Dynamic wheels skip items that remain on the cursor after a placement attempt.** Other items can take the slot, without attempting the rejected item every two minutes. It is eligible again when it leaves the bags, the wheels are reconfigured, the UI reloads, or `/cgp wheels dyn retry` is used. `/cgp wheels dyn` shows the planned and actual slot contents and the immediate action and cursor state. `/cgp status` also identifies the most recent blocked action from any addon since reload.
+- **Hiding the micro menu no longer pulls the action bar, experience bar and bags out of alignment.** Frames anchored to the menu keep their screen positions before it is moved off-screen.
+- **Action icons show insufficient resources.** Ordinary gamepad and keyboard-backed action slots use the game's blue tint when an action lacks mana or another resource, returning to the native icon color when it becomes usable.
+- **The whole status bar and copied action-button text scale with the classic bars.** Status height and decoration now scale along with width; other addons' copied numbers no longer stay large at smaller bar sizes. Hidden caps no longer shift the scaling pivot. Full-layout menu hiding and non-default stock frame scales are also handled.
+- **The rested experience overlay follows the resized experience bar.** Its width and marker are recalculated when the classic bars change size.
+- **Bags and the micro menu scale with the classic bars.** The 12-slot layout now scales and moves both panels with the bars; in compact mode the menu also scales while staying at the screen edge. Frames left to Edit Mode keep their own scale and position.
+
 ## 0.1.0-alpha.87
 
 - **Experience and reputation bars keep the same alignment as the classic bars.** The status-bar placement no longer restores a saved keyboard-layout anchor when "Experience and reputation bars" is enabled; it now follows the bottom action bar directly, so it cannot inherit an old offset or stale width after layout/MKB changes. Tested with a stand-in alignment mock and Lua syntax checks; not seen in the game yet.

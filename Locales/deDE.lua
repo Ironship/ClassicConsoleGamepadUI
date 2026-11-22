@@ -211,11 +211,11 @@ Addon.Locales.Register("deDE", "Deutsch", {
     off = "Die Bildschirmtastatur ist ausgeschaltet. Einschalten in den Einstellungen (/cgp, Tab Tastatur).",
     -- Edit Mode, bar size, placement settings, legend style, reset (from the Edit Mode pull request)
     barScale = "Größe der Leisten",
-    barScaleTip = "Skaliert die Leisten mit ihren Greifen, Anzeigen, der Erfahrungsleiste und (bei kompakten Leisten) den Taschen. Auch im Bearbeitungsmodus, auf dem Feld der Leisten.",
+    barScaleTip = "Skaliert die Leisten mit Greifen, Anzeigen, Erfahrungsleiste, Taschen und Menü, sofern das Addon diese platziert. Auch im Bearbeitungsmodus auf dem Feld der Leisten.",
     placeBags = "Taschen",
     placeBagsTip = "An: an ihrem klassischen Platz, bei kompakten Leisten unter der R2-Hälfte. Aus: Ihr platziert sie im Bearbeitungsmodus.",
     placeStatusBars = "Erfahrungs- und Rufleisten",
-    placeStatusBarsTip = "An: über den Leisten, so breit wie sie. Aus: Ihr platziert sie im Bearbeitungsmodus.",
+    placeStatusBarsTip = "An: über den Leisten, so breit wie sie. Aus: Position im Bearbeitungsmodus; die Standardposition vermeidet Überlappungen mit den Tasten.",
     placeTotemBar = "Totemleiste (Schamane)",
     placeTotemBarTip = "An: über den Leisten. Aus: Ihr platziert sie im Bearbeitungsmodus; eine dort verschobene Totemleiste bleibt in beiden Fällen, wo sie ist.",
     showLeftCap = "Linker Greif",

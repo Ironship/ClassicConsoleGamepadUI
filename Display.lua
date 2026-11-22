@@ -285,10 +285,53 @@ local function MoveX(region, left, bottom)
     set(region, "BOTTOMLEFT", UIParent, "BOTTOMLEFT", left / ratio, bottom / ratio)
 end
 
+-- The game's default gamepad status-bar position is at the bottom of the screen, underneath the classic buttons.
+-- Leave custom Edit Mode positions alone, and move a default bar only far enough to clear visible controls.
+function Display:AvoidDefaultStatusOverlap()
+    if Addon.db.placeStatusBars ~= false or InCombatLockdown() then return end
+    local obstacles = {}
+    local function Add(region)
+        local left, right, bottom, height = UIBox(region)
+        if left then obstacles[#obstacles + 1] = { left, right, bottom, bottom + height } end
+    end
+    for i, slot in ipairs(self.slots or {}) do
+        if i <= 8 or slot:IsShown() then Add(slot) end
+    end
+    for _, frame in ipairs({ BagsBar, MicroMenuContainer }) do
+        if frame and frame:IsShown() and frame:GetAlpha() > 0 then Add(frame) end
+    end
+    local bars = { SecondaryStatusTrackingBarContainer, MainStatusTrackingBarContainer }
+    local function Default(frame)
+        return frame and frame.IsInDefaultPosition and frame:IsInDefaultPosition()
+    end
+    for _, frame in ipairs(bars) do
+        if frame:IsShown() and not Default(frame) then Add(frame) end
+    end
+    for _, frame in ipairs(bars) do
+        if frame:IsShown() and Default(frame) then
+            local left, right, bottom, height, scale = UIBox(frame)
+            if left and scale > 0 then
+                local target, changed = bottom, true
+                while changed do
+                    changed = false
+                    for _, box in ipairs(obstacles) do
+                        if left < box[2] and right > box[1] and target < box[4] + 4 and target + height > box[3] - 4 then
+                            target, changed = box[4] + 4, true
+                        end
+                    end
+                end
+                if target > bottom then Addon.Layout:SetBottomLeft(frame, left / scale, target / scale) end
+                obstacles[#obstacles + 1] = { left, right, target, target + height }
+            end
+        end
+    end
+end
+
 function Display:AlignCompactChrome()
     if not Addon.Layout.compact then
         local border = self.art and self.art[1] and self.art[1].texture
         if border then border:SetWidth(border:GetWidth() - (Addon.Layout.cutWidth or 0)) end
+        if Addon.db.hideMenu == true then self:PlaceMicroMenuRight() end
         return
     end
     -- Work from one set of measured positions; later moves never re-read rects.
@@ -397,7 +440,7 @@ function Display:AlignCompactChrome()
         local point = statusPoints[frame]
         if point and point[3] > 0 then
             Addon.Layout:SetStatusWidth(frame, span / point[3])
-            Addon.Layout:SetBottomLeft(frame, left + centerShift, point[2])
+            Addon.Layout:SetBottomLeft(frame, (left + centerShift) / point[3], point[2] / point[3])
         end
     end
     if bagsLeft and bagsScale and bagsScale > 0 then
@@ -455,13 +498,14 @@ function Display:PlaceMicroMenuRight()
     if Addon.db.hideMenu == true then
         -- Invisible and out of reach of the mouse: well past the right edge of the screen (also when Edit Mode keeps it).
         -- Edit Mode systems are clamped to the screen, which would pull it back (invisible, but still clickable).
+        Addon.Layout:UnhookFrom(menu)
         menu:SetAlpha(0)
         self:AnchorFramerate(true)
         if menu.IsClampedToScreen and menu:IsClampedToScreen() then
             menu:SetClampedToScreen(false)
             self.menuUnclamped = true
         end
-        Addon.Layout:SetBottomLeft(menu, UIParent:GetWidth() + 64, Addon.db.menuBottom)
+        Addon.Layout:SetBottomLeft(menu, (UIParent:GetWidth() + 64) / scale, Addon.db.menuBottom / scale)
         return
     end
     if menu:GetAlpha() ~= 1 then menu:SetAlpha(1) end
@@ -472,7 +516,7 @@ function Display:PlaceMicroMenuRight()
     local margin = Addon.db.menuRight
     local x = UIParent:GetWidth() - width - margin
     if x < margin then x = margin end
-    Addon.Layout:SetBottomLeft(menu, x, Addon.db.menuBottom)
+    Addon.Layout:SetBottomLeft(menu, x / scale, Addon.db.menuBottom / scale)
 end
 
 -- The gryphons at the two ends (the stock end caps' art, self.art[2] and [3]), each shown or hidden by its own setting.
@@ -485,18 +529,20 @@ end
 
 -- The classic bars at the size the player chose (barScale, 1 = the stock size), grown or shrunk about the middle of their
 -- bottom edge so they stay centered on the bottom of the screen. Slots are scaled whole (icon, cooldown, prompts and all),
--- the art is resized, and the status bars and the compact layout's bags travel along: the status bars as wide as the bars,
--- the bags scaled with them, right-aligned under the R2 half as before. Every place is measured before anything changes.
+-- the art is resized, and the managed stock frames follow. In compact mode the menu stays at the screen edge.
 function Display:ApplyScale(scale)
     if not scale or math.abs(scale - 1) < 0.001 then return end
     local own, stock = self:Regions()
     local boxes, left, right, bottom = {}, nil, nil, nil
-    for _, region in ipairs(own) do
+    for index, region in ipairs(own) do
         local regionLeft, regionRight, regionBottom, height = UIBox(region)
         if regionLeft then
             boxes[#boxes + 1] = { region, regionLeft, regionRight, regionBottom, height }
-            -- The pivot comes from what shows: hidden spare slots can sit at stock places outside the bars.
-            if region:IsShown() then
+            -- Keep the pivot stable when caps, class actions or other slots change visibility.
+            local slot = index <= #self.slots
+            local spare = slot and Addon.Layout.compact and
+                ((index >= 11 and index <= 12) or (index >= 21 and index <= 24) or (index >= 33 and index <= 36))
+            if not spare then
                 left, right = math.min(left or regionLeft, regionLeft), math.max(right or regionRight, regionRight)
                 bottom = math.min(bottom or regionBottom, regionBottom)
             end
@@ -522,31 +568,34 @@ function Display:ApplyScale(scale)
     end
     for _, box in ipairs(stockBoxes) do
         local frame, ratio = box[1], box[5]
-        if frame == BagsBar then
-            -- Scaled with the bars, still right-aligned under the R2 half. ResetBagsScale undoes it before a rebuild.
-            local base = frame:GetScale()
-            local scaled, setScale = base * scale, frame.SetScaleBase or frame.SetScale
-            setScale(frame, scaled)
-            self.bagsBase, self.bagsApplied = base, scaled
-            local width = (box[3] - box[2]) * scale
-            ratio = ratio * scale
-            Addon.Layout:SetBottomLeft(frame, (X(box[3]) - width) / ratio, Y(box[4]) / ratio)
-        else
-            Addon.Layout:SetStatusWidth(frame, (box[3] - box[2]) * scale / ratio)
-            Addon.Layout:SetBottomLeft(frame, X(box[2]) / ratio, Y(box[4]) / ratio)
-        end
+        local base = frame:GetScale()
+        local scaled, setScale = base * scale, frame.SetScaleBase or frame.SetScale
+        setScale(frame, scaled)
+        self.stockScales = self.stockScales or {}
+        self.stockScales[frame] = { base = base, applied = scaled }
+        ratio = ratio * scale
+        Addon.Layout:SetBottomLeft(frame, X(box[2]) / ratio, Y(box[4]) / ratio)
+    end
+    local menu = MicroMenuContainer
+    if Addon.Layout.compact and menu and Addon.db.hideMenu ~= true and not Addon.Layout:Keeps(menu) then
+        local base = menu:GetScale()
+        local scaled, setScale = base * scale, menu.SetScaleBase or menu.SetScale
+        setScale(menu, scaled)
+        self.stockScales = self.stockScales or {}
+        self.stockScales[menu] = { base = base, applied = scaled }
+        self:PlaceMicroMenuRight()
     end
 end
 
--- The bags back at the size they had before ApplyScale grew or shrank them, unless something else (the layout's own
--- anchor and scale, a restore) has set their size since.
-function Display:ResetBagsScale()
-    local applied = self.bagsApplied
-    self.bagsApplied = nil
-    if not applied or not BagsBar or InCombatLockdown() then return end
-    if math.abs(BagsBar:GetScale() - applied) < 0.0001 then
-        (BagsBar.SetScaleBase or BagsBar.SetScale)(BagsBar, self.bagsBase)
+-- Restore only scales that are still ours before measuring a new layout.
+function Display:ResetStockScales()
+    if InCombatLockdown() then return end
+    for frame, saved in pairs(self.stockScales or {}) do
+        if math.abs(frame:GetScale() - saved.applied) < 0.0001 then
+            (frame.SetScaleBase or frame.SetScale)(frame, saved.base)
+        end
     end
+    self.stockScales = nil
 end
 
 -- Where the player put the bars, as an offset from their computed place in UIParent points. While the Edit Mode
@@ -555,15 +604,18 @@ function Display:GetOffset()
     return (Addon.db.barX or 0) + (self.dragX or 0), (Addon.db.barY or 0) + (self.dragY or 0)
 end
 
--- The stock frames that travel with the classic bars: the status bars above them, and in the compact layout the bags,
--- which AlignCompactChrome tucks under the R2 half (with 12 slots the bags keep their own place by the micro menu).
+-- Stock frames that travel with the classic bars; the compact menu stays at the screen edge.
 local function TravellingFrames()
     local frames = {}
     for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
         if frame and not Addon.Layout:Keeps(frame) then frames[#frames + 1] = frame end
     end
-    if Addon.Layout.compact and BagsBar and BagsBar:IsShown() and not Addon.Layout:Keeps(BagsBar) then
+    if BagsBar and BagsBar:IsShown() and not Addon.Layout:Keeps(BagsBar) then
         frames[#frames + 1] = BagsBar
+    end
+    if not Addon.Layout.compact and MicroMenuContainer and Addon.db.hideMenu ~= true
+        and MicroMenuContainer:IsShown() and not Addon.Layout:Keeps(MicroMenuContainer) then
+        frames[#frames + 1] = MicroMenuContainer
     end
     return frames
 end
@@ -1085,11 +1137,11 @@ local function CopyForeignText(mirror, region, slot)
         mirror:Hide()
         return
     end
-    -- The slot and the native button can differ in scale: sizes and offsets are in each frame's own units.
+    -- Preserve the native text's relative size while letting it follow the classic slot's scale.
     local ratio = 1
     local regionScale, mirrorScale = region:GetEffectiveScale(), mirror:GetEffectiveScale()
     if Readable(regionScale) and Readable(mirrorScale) and regionScale and mirrorScale and mirrorScale > 0 then
-        ratio = regionScale / mirrorScale
+        ratio = regionScale / mirrorScale * slot:GetScale()
     end
     if ratio <= 0 then ratio = 1 end
     local font, size, flags = region:GetFont()
@@ -1177,6 +1229,15 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
     if source.SpecialActionIcon and RegionShown(source.SpecialActionIcon) then icon = source.SpecialActionIcon end
     if RegionShown(icon) then
         PresentActionIcon(slot, icon)
+        if not self.barEditing and icon == source.icon and not source.isFlyoutAction
+            and (slot.keyboardSlot or (bar and not bar.isGamepadPossessBar and source.GetGamepadPageUnitSlotID))
+            and Readable(action) and type(action) == "number" and action > 0
+            and C_ActionBar and C_ActionBar.IsUsableAction then
+            local usable, lacking = C_ActionBar.IsUsableAction(action)
+            if Readable(usable) and Readable(lacking) and usable == false and lacking == true then
+                slot.Icon:SetVertexColor(0.5, 0.5, 1)
+            end
+        end
         local unit = PortraitUnit(source, icon)
         if unit then
             -- Never let a portrait failure switch the classic bars off.
@@ -1472,8 +1533,8 @@ function Display:Refresh(wanted)
         or self.layoutRevision ~= Addon.Layout.revision
     if needsGeometry then
         self:RevealTemplates()
-        -- The layout measures the bags at their own size.
-        self:ResetBagsScale()
+        -- The layout measures stock panels at their own sizes.
+        self:ResetStockScales()
     end
     local prepared = Addon.Layout:Prepare()
     if not prepared then self:HideTemplates(); self.reason = "layout"; return false end
@@ -1499,6 +1560,7 @@ function Display:Refresh(wanted)
         end
     end
     self:Update(unit)
+    self:AvoidDefaultStatusOverlap()
     -- Like the game's own bars, everything but the radial fades while one is open.
     self.root:SetAlpha(self:IsFlyoutOpen(bars, unit) and FLYOUT_ALPHA or 1)
     -- The visual HUD must not depend on the optional secure click layer.

@@ -211,11 +211,11 @@ Addon.Locales.Register("itIT", "Italiano", {
     off = "La tastiera su schermo è disattivata. Attivala nelle impostazioni (/cgp, scheda Tastiera).",
     -- Edit Mode, bar size, placement settings, legend style, reset (from the Edit Mode pull request)
     barScale = "Dimensione delle barre classiche",
-    barScaleTip = "La dimensione delle barre classiche, con grifoni, indicatori, barra dell'esperienza e (con barre compatte) borse. Restano centrate in basso sullo schermo. Anche nella modalità modifica, nel pannello delle barre classiche.",
+    barScaleTip = "Ridimensiona barre, grifoni, indicatori, barra esperienza, borse e menu quando il loro posizionamento tramite addon è attivo. Anche nel pannello delle barre in modalità modifica.",
     placeBags = "Borse con le barre classiche",
     placeBagsTip = "Mette le borse al loro posto classico (con barre compatte, sotto la metà R2). Disattiva per posizionarle tu nella modalità modifica.",
     placeStatusBars = "Barre di esperienza e reputazione sopra le barre classiche",
-    placeStatusBarsTip = "Mette queste barre sopra le barre classiche, larghe quanto esse. Disattiva per posizionarle tu nella modalità modifica.",
+    placeStatusBarsTip = "Mette queste barre sopra le barre classiche, larghe quanto esse. Disattiva per usare la modalità modifica; la posizione predefinita evita di sovrapporsi ai pulsanti.",
     placeTotemBar = "Barra dei totem sopra le barre classiche",
     placeTotemBarTip = "Mette la barra dei totem dello sciamano sopra le barre classiche. Disattiva per posizionarla tu nella modalità modifica. Una barra dei totem spostata nella modalità modifica resta comunque dove l'hai messa.",
     showLeftCap = "Grifone sinistro",

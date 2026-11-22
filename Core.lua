@@ -4,7 +4,7 @@ Addon.version = "0.1.0-alpha.87"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
-local ready, queued, lastMode, lastSaved, capturedBlock
+local ready, queued, lastMode, lastSaved, capturedBlock, lastObservedBlock
 local elapsedSinceRefresh = 0
 local lastRefreshAt = 0
 local firstTaintCaptured
@@ -161,6 +161,7 @@ end
 -- Every blocked or forbidden call attributed to this addon, up to six per session:
 -- which protected function, the stack, and what this addon had done just before.
 function Addon:CaptureBlockedAction(event, addon, action)
+    lastObservedBlock = { event = event, addon = addon, action = action }
     if addon ~= name and type(action) == "string" then WarnForeign(addon, action) end
     if not self.diagnostics or addon ~= name or type(action) ~= "string" then return end
     local list = self.diagnostics.blocked
@@ -511,7 +512,14 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         elseif mode == "safe" then
             Addon.Wheels:Safe()
         elseif mode == "dyn" or mode == "dynamic" then
-            Addon.Dynamic:Report()
+            local option = input:lower():match("^%s*%S+%s+%S+%s+(%S+)")
+            if option == "retry" then
+                Addon.Dynamic:Reset()
+                Addon.Dynamic:Request(0.2)
+                Addon:Print("dynamic wheels: cleared the write guards and requested a retry")
+            else
+                Addon.Dynamic:Report()
+            end
         elseif mode == "trace" then
             -- What the wheel sees of the mouse while it is filled, printed in the chat (for a drop that does nothing).
             Addon.traceWheels = not Addon.traceWheels
@@ -629,6 +637,10 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         if type(blocked) == "table" and #blocked > 0 then
             Addon:Print("Blocked actions this session: " .. #blocked .. " (first: " .. blocked[1].action
                 .. " at " .. blocked[1].time .. "). Details are saved with the diagnostics.")
+        end
+        if lastObservedBlock then
+            Addon:Print("Last blocked action since reload: " .. tostring(lastObservedBlock.event)
+                .. ", addon: " .. tostring(lastObservedBlock.addon) .. ", function: " .. tostring(lastObservedBlock.action))
         end
         local first = diag and diag.firstTaint
         if first then Addon:Print("First observed native taint: " .. first.stage .. " at " .. first.time) end

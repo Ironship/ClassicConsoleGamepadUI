@@ -38,7 +38,7 @@ Version 0.1.0-alpha.81. Alpha: expect bugs as blizzard i still activly changes b
 *   Controller button hints in micro menu tooltips.
 *   Easy item deletion: X, X, A, A.
 *   Chat, controller legend and micro menu position options, or hide the micro menu.
-*   Every frame the addon places (micro menu, bags, experience bars, totem bar) has its own switch, so you can place it yourself in Edit Mode.
+*   Every frame the addon places (micro menu, bags, experience bars, totem bar) has its own switch, so you can place it yourself in Edit Mode. If experience-bar placement is off, the game's default position is moved only when it overlaps the classic controls; custom Edit Mode positions stay untouched.
 *   Text that other addons put on action buttons (like damage numbers) shows on the classic bars.
 *   The classic bars stay visible in the game's action editor and when you pick a stance, form or aura from the radial menu.
 *   The Shaman's totem bar is placed above the bars instead of on top of them.

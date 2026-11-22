@@ -1,5 +1,19 @@
 # Native source contracts
 
+Dynamic wheels check both the action slot and cursor immediately after placing an
+item. If the same item remains on the cursor and the slot does not hold it, the
+item is skipped until it leaves the bags, the wheel settings change, the UI
+reloads, or `/cgp wheels dyn retry` is used; items already on the wheel remain
+there. This does not classify an item as unusable from missing item data.
+`/cgp wheels dyn` reports immediate write results and current slot contents;
+`/cgp status` reports the latest blocked-action event since reload, including its
+attributed addon and function.
+
+When status-bar placement is disabled, bars retain their Edit Mode size and
+custom position. A bar still in the game's default position is moved only if it
+overlaps the classic controls; each geometry rebuild starts from the saved
+native position before checking for collisions again.
+
 Inspected on 2026-10-22 against Gethe/wow-ui-source branch `forever`, commit
 `172a387e3ab85b26e6640d3058d5ec1e6ccd4c63`. These are exported Blizzard source files;
 their presence does not establish live-client execution permission.
@@ -130,7 +144,8 @@ matching the exported source commit's build **1.60.1 (70450)**.
   bottom at UIParent y = 0 by default. The settings panel exposes both edge distances. With `hideMenu` the menu is faded
   out (alpha 0) and moved just past the right edge; Edit Mode systems are clamped to the screen
   (`EditModeSystemTemplates.xml`), so the clamp is switched off while it is hidden (`Display.menuUnclamped`, restored with the
-  menu and in `Layout:Restore`), else it would be pulled back, invisible but clickable. The frame-rate display is anchored to
+  menu and in `Layout:Restore`), else it would be pulled back, invisible but clickable. Before moving it, `Layout:UnhookFrom`
+  pins stock frames anchored directly to the menu, preserving the positions of their dependants as well. The frame-rate display is anchored to
   the micro menu (`FramerateFrameOverrides.lua`), so `Display:AnchorFramerate` puts it at the bottom right corner while the
   menu is hidden and asks the game to anchor it again afterwards.
   The original menu anchor, the other anchors, and keyboard status widths are restored on exit. Sizes of
@@ -166,7 +181,10 @@ matching the exported source commit's build **1.60.1 (70450)**.
   the keyboard empty-slot plate (`SlotArt` and `SlotBackground`) and draws the
   native action icon across the frame interior, without the icon mask. An empty
   slot keeps the flat background only. The class-slot weapon icon stays the
-  action icon; the plate was the misleading background.
+  action icon; the plate was the misleading background. Ordinary action slots
+  query `C_ActionBar.IsUsableAction` and use the stock blue tint when resources
+  are insufficient; otherwise they retain the native icon's color. Secret
+  usability values and special, pet and flyout icons keep the native appearance.
 - `InputConstantsDocumentation.lua` exposes only `Mkb` and `Gamepad` interface types.
   Steam Deck uses the same saved compact/extended choice while in Gamepad Mode;
   keyboard/mouse mode remains native. Layout size never changes native binding
@@ -236,16 +254,20 @@ matching the exported source commit's build **1.60.1 (70450)**.
 - Bar geometry after the slots are placed, in this order (`Display:RefreshGeometry`): `AlignCompactChrome`, `ApplyCaps`,
   `ApplyScale`, `Translate` with the Edit Mode offset, then `PlaceTotemBar`, so the totem bar, chat
   clearance and the Edit Mode box measure the finished bars. `Display:Regions` lists what moves: the slots and the art,
-  and the stock frames that travel with them (the status bars; the bags in the compact layout; neither
-  while a placement setting keeps it). `Translate` measures everything before it moves anything, since the shoulder
+  and the stock frames that travel with them (status bars and bags in both layouts, and the menu in the full layout;
+  none while a placement setting keeps it). `Translate` measures everything before it moves anything, since the shoulder
   indicators hang off slots; during a drag `FollowOffset` moves the built bars by the difference, and the rebuild after
   the drop moves chat and the totem bar along. `MoveX` takes UIParent points and divides by the region's effective scale.
 - `db.barScale` (0.5-1.5, "Classic bars size"): `Display:ApplyScale` grows or shrinks the built bars about the middle of
   the bottom edge of what shows (hidden spare slots of the compact layout can sit at stock places outside it). Slots get
   `SetScale` (icon, cooldown, prompts and glyphs follow) after `RefreshGeometry` set them back to 1, the art gets
-  `SetSize`, the status bars are widened with the bars and the compact bags get `SetScaleBase` and stay right-aligned
-  under the R2 half. The bags' scale is set back (`ResetBagsScale`, only if nothing else changed it since) before the
-  layout measures them again, so it never compounds whichever way `ApplyStockAnchor` placed them.
+  `SetSize`, and managed status bars, bags and menu scale as whole frames in both layouts. This includes the status
+  bars' height, dividers, text and rested overlay. Compact bags stay under the
+  R2 half and the compact menu stays at the screen edge. Their scales are restored (`ResetStockScales`, only if nothing
+  else changed them since) before the layout measures them again, so repeated rebuilds do not compound the scale.
+  Resizing a status bar also updates its tick, which recalculates the rested experience overlay's width.
+  The scaling pivot includes both caps even when hidden and excludes unused compact slots, so changing visibility does
+  not shift the remaining bars. Copied text from other addons scales with the classic slot rather than the native button.
 - `db.showLeftCap`, `db.showRightCap`: the gryphons (`art[2]`, `art[3]`) are shown or hidden after they are placed; a
   hidden one still sets where the bars are centered, so the bars do not move. Changing either
   rebuilds the layout (outside combat; the art itself changes at once).

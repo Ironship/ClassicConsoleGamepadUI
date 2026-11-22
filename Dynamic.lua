@@ -14,7 +14,7 @@ Addon.Dynamic = Dynamic
 
 -- What the guard against writes that do not settle keeps (see SAME_WRITES): the times of the writes of each "<action>:<key>", until when
 -- a thing is left alone, the times of all writes, the last few writes (for /cgp wheels dyn) and the totals.
-Dynamic.history, Dynamic.refused, Dynamic.writeLog, Dynamic.recent = {}, {}, {}, {}
+Dynamic.history, Dynamic.refused, Dynamic.rejected, Dynamic.writeLog, Dynamic.recent = {}, {}, {}, {}, {}
 Dynamic.stats = { runs = 0, writes = 0, refused = 0, pauses = 0 }
 
 local CAPACITY = 12
@@ -306,10 +306,16 @@ local function Put(action, key)
         local pick = (C_Spell and C_Spell.PickupSpell) or PickupSpell
         if pick then pcall(pick, id) end
     end
-    if GetCursorInfo() == nil then return false end
+    local pickedKind, pickedID = GetCursorInfo()
+    if pickedKind == nil then return false end
     PlaceAction(action)
+    local cursorKind, cursorID = GetCursorInfo()
+    local after = KeyOf(action)
+    local rejected = kind == "item" and pickedKind == "item" and pickedID == id
+        and cursorKind == pickedKind and cursorID == pickedID and after ~= key
+    local cursor = cursorKind and (tostring(cursorKind) .. ":" .. tostring(cursorID)) or nil
     ClearCursor()
-    return true
+    return true, after, cursor, rejected
 end
 
 local function Clear(action)
@@ -346,7 +352,7 @@ function Dynamic:MayWrite(mark, action, key, now)
             -- One line is enough when many buttons do it at once (the totals are in /cgp wheels dyn).
             if now - (self.noteAt or -WINDOW) >= 30 then
                 self.noteAt = now
-                Addon:Print(string.format("dynamic wheels: %s was put on action slot %d %d times within a minute and keeps going away, so it is left alone there for %d seconds (does another addon use that bar? /cgp wheels dyn says what was written)",
+                Addon:Print(string.format("dynamic wheels: %s was attempted on action slot %d %d times within a minute and keeps going away or was not accepted, so it is left alone there for %d seconds (/cgp wheels dyn shows the immediate results)",
                     tostring(key or "an empty button"), action, count, REFUSE_FOR))
             end
             return false
@@ -362,7 +368,7 @@ function Dynamic:MayWrite(mark, action, key, now)
     return true
 end
 
-function Dynamic:Wrote(mark, action, key, now)
+function Dynamic:Wrote(mark, action, key, now, after, cursor)
     local times = self.history[mark]
     if not times then
         times = {}
@@ -372,7 +378,7 @@ function Dynamic:Wrote(mark, action, key, now)
     self.writeLog[#self.writeLog + 1] = now
     self.stats.writes = self.stats.writes + 1
     local recent = self.recent
-    recent[#recent + 1] = { at = now, action = action, key = key }
+    recent[#recent + 1] = { at = now, action = action, key = key, after = after, cursor = cursor }
     if #recent > 8 then table.remove(recent, 1) end
 end
 
@@ -380,16 +386,29 @@ end
 function Dynamic:Reset()
     wipe(self.history)
     wipe(self.refused)
+    wipe(self.rejected)
     wipe(self.writeLog)
     self.pausedUntil = nil
 end
 
--- Brings the bar of one wheel to what it should hold. Returns how many buttons were changed and the plan.
+-- Brings the bar of one wheel to what it should hold. Returns the attempt count, plan and skipped items.
 function Dynamic:Fill(wheel, wanted, budget)
     local now = GetTime()
-    local current = {}
-    for slot = 1, CAPACITY do current[slot] = KeyOf(Addon.Wheels.ActionOf(wheel, slot)) end
-    local plan = Dynamic.Plan(current, wanted, CAPACITY)
+    local current, present = {}, {}
+    for slot = 1, CAPACITY do
+        local key = KeyOf(Addon.Wheels.ActionOf(wheel, slot))
+        current[slot] = key
+        if key then present[key] = true end
+    end
+    local eligible, skipped = {}, {}
+    for _, key in ipairs(wanted) do
+        if self.rejected[key] and not present[key] then
+            skipped[#skipped + 1] = key
+        else
+            eligible[#eligible + 1] = key
+        end
+    end
+    local plan = Dynamic.Plan(current, eligible, CAPACITY)
     local changed = 0
     for slot = 1, CAPACITY do
         if changed >= budget then break end
@@ -400,16 +419,30 @@ function Dynamic:Fill(wheel, wanted, budget)
             if self:MayWrite(mark, action, want, now) then
                 -- The game's item and spell icon sounds of this write are muted for a moment (Quiet.lua; it cannot break the write).
                 if Addon.Quiet then pcall(Addon.Quiet.Writing, Addon.Quiet) end
-                local wrote = true
-                if want then wrote = Put(action, want) else Clear(action) end
+                local wrote, after, cursor, rejected = true
+                if want then
+                    wrote, after, cursor, rejected = Put(action, want)
+                else
+                    Clear(action)
+                    after = KeyOf(action)
+                end
                 if wrote then
-                    self:Wrote(mark, action, want, now)
+                    self:Wrote(mark, action, want, now, after, cursor)
                     changed = changed + 1
+                    if rejected then
+                        self.rejected[want] = true
+                        if now - (self.rejectNoteAt or -WINDOW) >= 30 then
+                            self.rejectNoteAt = now
+                            Addon:Print(string.format("dynamic wheels: %s remained on the cursor after action slot %d was attempted; skipping it until it leaves the bags or is retried (/cgp wheels dyn retry)",
+                                want, action))
+                        end
+                        self:Request(1)
+                    end
                 end
             end
         end
     end
-    return changed, plan
+    return changed, plan, skipped
 end
 
 local function Enabled()
@@ -437,7 +470,13 @@ function Dynamic:Run(report)
     self.dirty = false
     self.stats.runs = self.stats.runs + 1
     local budget, lines, more = MAX_WRITES, {}, false
-    local _, ready = BagItems()
+    local items, ready = BagItems()
+    if ready then
+        for key in pairs(self.rejected) do
+            local id = tonumber(key:match("^item:(%d+)$"))
+            if id and not items[id] then self.rejected[key] = nil end
+        end
+    end
     for wheel = 1, WHEELS do
         local category = self:CategoryOf(wheel)
         if category == "pet" then
@@ -456,15 +495,21 @@ function Dynamic:Run(report)
         elseif category and (category == "prof" or ready) then
             local wanted = self:Wanted(category)
             if wanted then
-                local changed, plan = self:Fill(wheel, wanted, budget)
+                local changed, plan, skipped = self:Fill(wheel, wanted, budget)
                 budget = budget - changed
                 if budget <= 0 then more = true end
                 if report then
                     local names = {}
                     for slot = 1, CAPACITY do
-                        if plan[slot] then names[#names + 1] = slot .. "=" .. plan[slot] end
+                        local actual = KeyOf(Addon.Wheels.ActionOf(wheel, slot))
+                        if plan[slot] or actual then
+                            local entry = slot .. "=" .. tostring(plan[slot] or "(empty)")
+                            if actual ~= plan[slot] then entry = entry .. " (actual " .. tostring(actual or "empty") .. ")" end
+                            names[#names + 1] = entry
+                        end
                     end
-                    lines[#lines + 1] = string.format("wheel %d (bar %d): %s, %d wanted, %d changed: %s", wheel, wheel + 3, category, #wanted, changed,
+                    lines[#lines + 1] = string.format("wheel %d (bar %d): %s, %d wanted, %d skipped%s, %d attempted: %s", wheel, wheel + 3, category, #wanted, #skipped,
+                        #skipped > 0 and (" (" .. table.concat(skipped, ", ") .. ")") or "", changed,
                         #names > 0 and table.concat(names, " ") or "nothing")
                 end
             elseif report then
@@ -501,7 +546,8 @@ function Dynamic:PrintStats()
     Addon:Print(string.format("dynamic wheels: %d runs and %d writes since the addon loaded, %d writes in the last minute, %d things left alone, %d pauses",
         self.stats.runs, self.stats.writes, lately, self.stats.refused, self.stats.pauses))
     for _, write in ipairs(self.recent) do
-        Addon:Print(string.format("  %.0f s ago: action slot %d <- %s", now - write.at, write.action, tostring(write.key or "(emptied)")))
+        Addon:Print(string.format("  %.0f s ago: action slot %d <- %s; immediately after: %s, cursor: %s",
+            now - write.at, write.action, tostring(write.key or "(emptied)"), tostring(write.after or "empty"), tostring(write.cursor or "empty")))
     end
 end
 

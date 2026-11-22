@@ -130,10 +130,17 @@ local function Unhook(frame, from)
     end
 end
 
+function Layout:UnhookFrom(frame)
+    for _, entry in ipairs(Frames()) do
+        if entry[2] and entry[2] ~= frame then Unhook(entry[2], frame) end
+    end
+end
+
 local function ResizeStatus(frame, width, segments)
     frame:SetWidth(width)
     if frame.ResizeContainerBars then frame:ResizeContainerBars() end
     if frame.UpdateDividers then frame:UpdateDividers(segments) end
+    if frame.UpdateBarTick then frame:UpdateBarTick() end
 end
 
 -- The key ring button of the bag bar shown with the classic bars opens the key ring as a single bag (ToggleBag_Individual),
@@ -163,6 +170,16 @@ function Layout:Prepare()
     if self.releasePending then
         self.releasePending = false
         self:Restore()
+    end
+    -- A default status bar may have been moved out of the classic bars' way by Display. Start each rebuild from its
+    -- Edit Mode position so that changing the classic layout can also remove that temporary adjustment.
+    if self.active and Addon.db.placeStatusBars == false then
+        for _, frame in ipairs({ MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer }) do
+            local snapshot = self.originals[frame]
+            if frame.IsInDefaultPosition and frame:IsInDefaultPosition() and Apply(frame, snapshot) then
+                ResizeStatus(frame, snapshot.width, STATUS_BAR_NUM_SEGMENTS_GAMEPAD)
+            end
+        end
     end
     Addon:Trace("Layout:Prepare")
     local compact, cutWidth = Addon.db.compact, 0
@@ -253,7 +270,8 @@ function Layout:Prepare()
             end
         end
         for _, position in ipairs(positions) do
-            Anchor(position[1], "BOTTOMLEFT", UIParent, "BOTTOMLEFT", position[2], position[3])
+            local scale = position[1]:GetEffectiveScale() / UIParent:GetEffectiveScale()
+            Anchor(position[1], "BOTTOMLEFT", UIParent, "BOTTOMLEFT", position[2] / scale, position[3] / scale)
         end
         for _, entry in ipairs({
             { MainStatusTrackingBarContainer }, { SecondaryStatusTrackingBarContainer },
@@ -291,6 +309,7 @@ function Layout:Restore(changedMode)
     if changedMode then
         -- The client has already switched layouts; discard snapshots of the old mode.
         self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
+        Addon.Display.stockScales = nil
     end
     if InCombatLockdown() then return end
     if not self.active then return end
@@ -311,6 +330,7 @@ function Layout:Restore(changedMode)
     Addon.Display:AnchorFramerate(false)
     self:BlockKeyRing(false)
     self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
+    Addon.Display.stockScales = nil
 end
 
 function Layout:SetBottomLeft(frame, x, y)
