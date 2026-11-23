@@ -366,6 +366,13 @@ function Mover:Refresh()
     for _, box in ipairs(self.list) do box:Refresh(editing) end
 end
 
+function Mover:Relocalize()
+    for _, box in ipairs(self.list) do
+        if box.frame then box:Paint() end
+        if box.panel and box.panel:IsShown() then box:UpdatePanel() end
+    end
+end
+
 function Mover:Observe()
     local manager = EditModeManagerFrame
     -- The game selected one of its own frames: only one thing is selected at a time.

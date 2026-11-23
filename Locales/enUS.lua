@@ -4,6 +4,7 @@ local _, Addon = ...
 Addon.Locales.Register("enUS", "English", {
     -- Language
     languageHeader = "Language",
+    secLanguageNote = "The language of the settings, hints and on-screen keyboard.",
     language = "Interface language",
     languageTip = "The language of this addon's settings, hints and on-screen keyboard. English is the default; Game language follows the game client. The language the keyboard types in is set on the Keyboard tab.",
     languageAuto = "Game language",
@@ -357,9 +358,10 @@ Addon.Locales.Register("enUS", "English", {
     wheelKeepTip = "A stick let go springs back to the middle, often before you let go of the button. The slot you were on stays chosen for this long, so letting go of the button a moment later still uses it. While it waits the slot dims and a bar in the middle runs down; keep the stick in the middle for longer and the wheel does nothing. Pushing to another slot changes the choice at once. Small (about 300): the choice goes quickly. Large (about 1500): there is time to let go of the stick first.",
     wheelsEdit = "Fill the wheels",
     wheelsEditTip = "Puts the wheel on the screen, at its place and size from the settings, so you can fill it: open the spellbook, your bags or the macro window and drag a spell, item or macro onto a slot like onto an action bar. The buttons under the wheel pick one of the five wheels; dragging a slot out takes it off, a right click clears it. Done, Esc or /cgp wheels ends it. Outside combat.",
-            wheelsClear = "Empty all wheels",
+    wheelsClear = "Empty all wheels",
     wheelsClearTip = "Empties the action bars 4 to 8, which are the wheels. Nothing else is touched.",
     wheelsDone = "Done",
+    wheelFlyout = "Flyout",
     wheelsEditorNote = "Drag spells, items and macros onto the slots. Drag a slot out to take it off, right click clears it. The buttons pick the wheel.",
     wheelEditHub = "Drag spells onto the slots",
     wheelDropHere = "Drop a spell, item or macro here",

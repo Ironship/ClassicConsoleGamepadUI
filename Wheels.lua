@@ -1763,7 +1763,7 @@ function Wheels:DrawHeader()
     local hud = self.hud
     if not hud or not hud.Top or not self.open then return end
     if self.flyoutSpells then
-        hud.Top.Title:SetText(self.flyoutName or "Flyout")
+        hud.Top.Title:SetText(self.flyoutName or Text("wheelFlyout"))
         for _, dot in ipairs(hud.Top.Dots) do dot:Hide() end
         hud.Top.LB:SetText("")
         hud.Top.RB:SetText("")
@@ -2466,12 +2466,14 @@ function Wheels:SetEditing(on)
         hud.Tabs = {}
         for wheel = 1, COUNT do
             local tab = CreateFrame("Button", nil, hud, "UIPanelButtonTemplate")
+            Addon.Fonts:Button(tab, true)
             tab:SetSize(84, 22)
             tab:SetPoint("TOPLEFT", hud, "BOTTOMLEFT", 8 + ((wheel - 1) % 4) * 86, -38 - math.floor((wheel - 1) / 4) * 24)
             tab:SetScript("OnClick", function() self:SetOpen(wheel) end)
             hud.Tabs[wheel] = tab
         end
         hud.Done = CreateFrame("Button", nil, hud, "UIPanelButtonTemplate")
+        Addon.Fonts:Button(hud.Done)
         hud.Done:SetSize(120, 24)
         hud.Done:SetPoint("TOP", hud, "BOTTOM", 0, -92)
         hud.Done:SetScript("OnClick", function() self:Preview(false) end)
@@ -2496,6 +2498,30 @@ function Wheels:SetEditing(on)
     end
     SpecialFrame("ClassicConsoleGamepadUIWheel", on)
     self:ApplyStyle()
+end
+
+function Wheels:Relocalize()
+    self:NameBindings()
+    if self.hud and self.hud:IsShown() then self:DrawCenter() end
+    if self.editBuilt and self.hud then
+        local on = self.previewing and true or false
+        self.hud.Note:SetText(on and Text("wheelsEditorNote") or "")
+        self.hud.Done:SetText(Text("wheelsDone"))
+        for wheel, tab in ipairs(self.hud.Tabs) do tab:SetText(Wheels.Label(wheel)) end
+    end
+    if self.dock and self.dock:IsShown() then
+        local dock = self.dock
+        if dock.PickupMacro then dock.PickupMacro:SetText(Text("wheelPickupMacro")) end
+        dock.Title:SetText(Text("wheelsDockTitle"))
+        dock.Note:SetText(Text("wheelsDockNote"))
+        for wheel, mini in ipairs(dock.minis) do
+            local modifier, key = WheelKeys(wheel)
+            local ok, glyphs = pcall(function() return Addon.MenuHints:KeyText(modifier .. "-" .. key) end)
+            local keys = ok and type(glyphs) == "string" and glyphs ~= "" and glyphs or Wheels.Label(wheel)
+            mini.Label:SetText(keys .. "  -  " .. string.format(Text("wheelsBar"), wheel + 3))
+        end
+        self:RedrawDock()
+    end
 end
 
 function Wheels:Changed(key)

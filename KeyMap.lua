@@ -397,6 +397,7 @@ function KeyMap:Create()
     local slotsTitle = Fonts:String(frame, "OVERLAY", "Normal")
     slotsTitle:SetPoint("TOPLEFT", 16, -84)
     slotsTitle:SetText(Text("keymapSlots"))
+    self.slotsTitle = slotsTitle
     self.rowLabels = {}
     local slotsTop = -108
     for r = 1, 3 do
@@ -432,6 +433,7 @@ function KeyMap:Create()
     local keysTitle = Fonts:String(frame, "OVERLAY", "Normal")
     keysTitle:SetPoint("TOPLEFT", 16, modsTop)
     keysTitle:SetText(Text("keymapKeys"))
+    self.keysTitle = keysTitle
     self.picked = Fonts:String(frame, "OVERLAY", "Highlight")
     self.picked:SetPoint("TOPRIGHT", -16, modsTop)
     self.picked:SetJustifyH("RIGHT")
@@ -497,6 +499,8 @@ function KeyMap:Create()
     -- the legend of the colours
     local legendY = keysTop - 6 * (KEY_H + GAP) - 6
     local x = 16
+    local legendKeys = { "keymapRowMain", "keymapRowLeft", "keymapRowRight", "keymapRowBoth" }
+    self.legendLabels = {}
     for _, group in ipairs({ 1, 2, 3, 4 }) do
         local swatch = CreateFrame("Frame", nil, frame)
         swatch:SetSize(14, 14)
@@ -504,7 +508,8 @@ function KeyMap:Create()
         Fill(swatch, COLORS[group])
         local label = Fonts:String(frame, "OVERLAY", "DisableSmall")
         label:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
-        label:SetText(Text(({ "keymapRowMain", "keymapRowLeft", "keymapRowRight", "keymapRowBoth" })[group]))
+        label:SetText(Text(legendKeys[group]))
+        self.legendLabels[group] = { label = label, key = legendKeys[group] }
         x = x + 150
     end
 
@@ -689,6 +694,18 @@ function KeyMap:EnablePad()
         if InCombatLockdown() then return end
         self:PadButton(key)
     end)
+end
+
+function KeyMap:Relocalize()
+    if not self.frame then return end
+    if self.frame.SetTitle then self.frame:SetTitle(Text("keymapTitle"))
+    elseif self.frame.TitleText then self.frame.TitleText:SetText(Text("keymapTitle")) end
+    if self.slotsTitle then self.slotsTitle:SetText(Text("keymapSlots")) end
+    if self.keysTitle then self.keysTitle:SetText(Text("keymapKeys")) end
+    for _, entry in ipairs(self.legendLabels or {}) do
+        entry.label:SetText(Text(entry.key))
+    end
+    self:Refresh()
 end
 
 function KeyMap:Open()

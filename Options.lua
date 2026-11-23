@@ -135,6 +135,9 @@ function Options:Changed(key)
         Addon.Fonts:Update()
         Addon.SettingsWindow:Relocalize()
         Addon.Keyboard:Relocalize()
+        if Addon.KeyMap and Addon.KeyMap.Relocalize then Addon.KeyMap:Relocalize() end
+        if Addon.Wheels and Addon.Wheels.Relocalize then Addon.Wheels:Relocalize() end
+        if Addon.Mover and Addon.Mover.Relocalize then Addon.Mover:Relocalize() end
     elseif key == "keyboardLanguage" then
         Addon.Keyboard:SetLanguage(Addon.db[key])
     elseif key == "keyboardMode" then

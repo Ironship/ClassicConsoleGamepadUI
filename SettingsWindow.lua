@@ -94,6 +94,7 @@ local function EnsureList()
     local list = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     list:SetFrameStrata("FULLSCREEN_DIALOG")
     list:SetFrameLevel(catcher:GetFrameLevel() + 2)
+    list:SetClampedToScreen(true)
     list:EnableMouse(true)
     Panel(list, 1)
     list:Hide()
@@ -110,7 +111,7 @@ local function OpenList(owner, entries, current, pick)
     list:SetParent(UIParent)
     list:ClearAllPoints()
     list:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
-    list:SetWidth(math.max(owner:GetWidth() or 200, 160))
+    local width = math.max(owner:GetWidth() or 200, 160)
     list:SetHeight(#entries * LIST_ROW + 8)
     for i, entry in ipairs(entries) do
         local row = list.rows[i]
@@ -133,6 +134,8 @@ local function OpenList(owner, entries, current, pick)
         row:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -4 - (i - 1) * LIST_ROW)
         row:SetPoint("RIGHT", list, "RIGHT", -4, 0)
         row.label:SetText(entry[2])
+        local labelWidth = tonumber(row.label:GetStringWidth()) or 0
+        if labelWidth + 28 > width then width = math.ceil(labelWidth) + 28 end
         row.mark:SetShown(entry[1] == current)
         row:SetScript("OnClick", function()
             CloseList()
@@ -140,6 +143,7 @@ local function OpenList(owner, entries, current, pick)
         end)
         row:Show()
     end
+    list:SetWidth(width)
     for i = #entries + 1, #list.rows do list.rows[i]:Hide() end
     Window.listCatcher:Show()
     list:Show()
@@ -221,6 +225,8 @@ local function Tabs()
             { "control", "moveLegend" }, { "control", "legendX" }, { "control", "legendGap" },
         } },
         { id = "interface", label = Text("tabInterface"), items = {
+            { "header", "languageHeader", "secLanguageNote" },
+            { "choice", "language" },
             { "header", "menu", "menuNote" },
             { "control", "hideMenu" }, { "control", "placeMenu" }, { "control", "menuRight" }, { "control", "menuBottom" },
             { "header", "chat", "chatNote" },
@@ -256,6 +262,11 @@ end
 -- the interface at every step.
 local pending = {}
 local function Changed(key)
+    if key == "language" then
+        pending[key] = nil
+        Addon.Options:Changed(key)
+        return
+    end
     if pending[key] then return end
     pending[key] = true
     C_Timer.After(0.15, function()
@@ -439,6 +450,14 @@ local function Choice(page, y, key, parent)
     local arrow = Fonts:String(button, "OVERLAY", "Highlight")
     arrow:SetPoint("RIGHT", -8, 0)
     arrow:SetText("v")
+    local buttonText = button.GetFontString and button:GetFontString()
+    if buttonText then
+        buttonText:ClearAllPoints()
+        buttonText:SetPoint("LEFT", 10, 0)
+        buttonText:SetPoint("RIGHT", -22, 0)
+        buttonText:SetJustifyH("CENTER")
+        buttonText:SetWordWrap(false)
+    end
     local function Name()
         for _, choice in ipairs(choices) do
             if choice[1] == Addon.db[key] then return ChoiceName(choice) end
@@ -747,10 +766,10 @@ local function LanguageName()
 end
 
 -- A button as wide as its text needs (a long translation would be cut off), never narrower than `least`.
-local function FitButton(button, least)
+local function FitButton(button, least, extra)
     local label = button.GetFontString and button:GetFontString()
     local width = label and tonumber(label:GetStringWidth()) or 0
-    button:SetWidth(math.max(least, math.ceil(width) + 28))
+    button:SetWidth(math.max(least, math.ceil(width) + (extra or 28)))
 end
 
 -- The texts that are not on the pages: the switch, the help line, the footer, the language button.
@@ -761,7 +780,7 @@ function Window:UpdateTexts()
     self.resetButton.baseText = Text("resetSettings")
     self.languageButton:SetText("Language: " .. LanguageName())
     FitButton(self.resetButton, 190)
-    FitButton(self.languageButton, 170)
+    FitButton(self.languageButton, 170, 42)
     local tip = Text("enabledTip")
     AddHelp(self.switchBox, Text("enabled"), tip)
     AddHelp(self.switchRow, Text("enabled"), tip)
@@ -780,6 +799,7 @@ end
 
 function Window:Relocalize()
     if not self.frame then return end
+    local wasLanguage = self.selected == self.languageButton
     local selected
     for i, node in ipairs(self.page and self.page.nodes or {}) do
         if node == self.selected then selected = i end
@@ -791,8 +811,11 @@ function Window:Relocalize()
     self:UpdateHint()
     self:UpdateTexts()
     self:SelectTab(self.index or 1)
-    local nodes = self.page and self.page.nodes
-    if selected and nodes and nodes[selected] and self.frame:IsShown() then self:Mark(nodes[selected]) end
+    if self.frame:IsShown() then
+        local nodes = self.page and self.page.nodes
+        if wasLanguage then self:Mark(self.languageButton)
+        elseif selected and nodes and nodes[selected] then self:Mark(nodes[selected]) end
+    end
 end
 
 -- The tab labels are gold, the selected one white (the tabs of UsefulPlatesAndTooltips).
@@ -912,12 +935,32 @@ function Window:Create()
     language:SetSize(170, 20)
     if frame.CloseButton then language:SetPoint("TOPRIGHT", frame.CloseButton, "TOPLEFT", -4, -3)
     else language:SetPoint("TOPRIGHT", -34, -8) end
+    -- Stay above ButtonFrameTemplate's NineSlice/TitleContainer so it is always visible and clickable.
+    local level = (frame:GetFrameLevel() or 0) + 10
+    if frame.CloseButton and frame.CloseButton.GetFrameLevel then
+        level = math.max(level, frame.CloseButton:GetFrameLevel() + 1)
+    end
+    if frame.TitleContainer and frame.TitleContainer.GetFrameLevel then
+        level = math.max(level, frame.TitleContainer:GetFrameLevel() + 1)
+    end
+    language:SetFrameLevel(level)
+    local langArrow = Fonts:String(language, "OVERLAY", "Highlight")
+    langArrow:SetPoint("RIGHT", -8, 0)
+    langArrow:SetText("v")
+    local langText = language.GetFontString and language:GetFontString()
+    if langText then
+        langText:ClearAllPoints()
+        langText:SetPoint("LEFT", 10, 0)
+        langText:SetPoint("RIGHT", -22, 0)
+        langText:SetJustifyH("LEFT")
+        langText:SetWordWrap(false)
+    end
     language:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     local function PickLanguage(value)
         Addon.db.language = value
         Changed("language")
         language:SetText("Language: " .. LanguageName())
-        FitButton(language, 170)
+        FitButton(language, 170, 42)
     end
     function language.StepChoice(direction)
         local choices, index = Addon.Options.choices.language, 1
