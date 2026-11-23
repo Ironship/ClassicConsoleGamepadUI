@@ -377,6 +377,8 @@ function KeyMap:Create()
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetPoint("CENTER")
     if frame.SetTitle then frame:SetTitle(Text("keymapTitle")) elseif frame.TitleText then frame.TitleText:SetText(Text("keymapTitle")) end
+    local titleText = (frame.GetTitleText and frame:GetTitleText()) or frame.TitleText
+    if titleText and Fonts.object.Normal then titleText:SetFontObject(Fonts.object.Normal) end
     if frame.CloseButton then frame.CloseButton:SetScript("OnClick", function() self:Hide() end) end
     tinsert(UISpecialFrames, "ClassicConsoleGamepadUIKeyMap")
     frame:SetScript("OnKeyDown", function(f, key)

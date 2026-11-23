@@ -450,6 +450,7 @@ local function Choice(page, y, key, parent)
     local arrow = Fonts:String(button, "OVERLAY", "Highlight")
     arrow:SetPoint("RIGHT", -8, 0)
     arrow:SetText("v")
+    button:SetText("")
     local buttonText = button.GetFontString and button:GetFontString()
     if buttonText then
         buttonText:ClearAllPoints()
@@ -466,6 +467,10 @@ local function Choice(page, y, key, parent)
     end
     local function Pick(value)
         Addon.db[key] = value
+        if key == "language" then
+            Changed(key)
+            return
+        end
         button:SetText(Name())
         Changed(key)
         page.Refresh()
@@ -766,10 +771,12 @@ local function LanguageName()
 end
 
 -- A button as wide as its text needs (a long translation would be cut off), never narrower than `least`.
-local function FitButton(button, least, extra)
+local function FitButton(button, least, extra, maxWidth)
     local label = button.GetFontString and button:GetFontString()
-    local width = label and tonumber(label:GetStringWidth()) or 0
-    button:SetWidth(math.max(least, math.ceil(width) + (extra or 28)))
+    local raw = label and (label.GetUnboundedStringWidth and label:GetUnboundedStringWidth() or label:GetStringWidth())
+    local width = math.max(least, math.ceil(tonumber(raw) or 0) + (extra or 28))
+    if maxWidth then width = math.min(width, maxWidth) end
+    button:SetWidth(width)
 end
 
 -- The texts that are not on the pages: the switch, the help line, the footer, the language button.
@@ -780,7 +787,7 @@ function Window:UpdateTexts()
     self.resetButton.baseText = Text("resetSettings")
     self.languageButton:SetText("Language: " .. LanguageName())
     FitButton(self.resetButton, 190)
-    FitButton(self.languageButton, 170, 42)
+    FitButton(self.languageButton, 170, 36, 220)
     local tip = Text("enabledTip")
     AddHelp(self.switchBox, Text("enabled"), tip)
     AddHelp(self.switchRow, Text("enabled"), tip)
@@ -800,6 +807,7 @@ end
 function Window:Relocalize()
     if not self.frame then return end
     local wasLanguage = self.selected == self.languageButton
+    local scrollOffset = self.page and self.page.scroll and self.page.scroll:GetVerticalScroll() or 0
     local selected
     for i, node in ipairs(self.page and self.page.nodes or {}) do
         if node == self.selected then selected = i end
@@ -811,6 +819,7 @@ function Window:Relocalize()
     self:UpdateHint()
     self:UpdateTexts()
     self:SelectTab(self.index or 1)
+    if self.page and scrollOffset > 0 then self.page.ScrollTo(scrollOffset) end
     if self.frame:IsShown() then
         local nodes = self.page and self.page.nodes
         if wasLanguage then self:Mark(self.languageButton)
@@ -947,6 +956,7 @@ function Window:Create()
     local langArrow = Fonts:String(language, "OVERLAY", "Highlight")
     langArrow:SetPoint("RIGHT", -8, 0)
     langArrow:SetText("v")
+    language:SetText("")
     local langText = language.GetFontString and language:GetFontString()
     if langText then
         langText:ClearAllPoints()
@@ -959,8 +969,6 @@ function Window:Create()
     local function PickLanguage(value)
         Addon.db.language = value
         Changed("language")
-        language:SetText("Language: " .. LanguageName())
-        FitButton(language, 170, 42)
     end
     function language.StepChoice(direction)
         local choices, index = Addon.Options.choices.language, 1

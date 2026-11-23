@@ -2134,6 +2134,7 @@ function Wheels:CreateDock()
     -- (in Gamepad Mode MacroFrame's A only selects a macro and X opens Blizzard's main-bar editor rather than PickupMacro).
     local extra = Cell(COUNT + 1)
     local pickMacro = CreateFrame("Button", nil, extra, "UIPanelButtonTemplate")
+    Addon.Fonts:Button(pickMacro)
     pickMacro:SetSize(d.cellW - 20, 24)
     pickMacro:SetPoint("TOP", extra, "TOP", 0, -6)
     local function PickupSelectedMacro()
