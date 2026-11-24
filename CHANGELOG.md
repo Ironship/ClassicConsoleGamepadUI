@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.88
+
+- **Radial wheels stay usable when the gamepad cursor takes control.** Reverts the `padKeyboard` changes that could disable wheels, while retaining the other recent fixes and improvements.
 - **Default experience and reputation bars no longer overlap the classic controls when their placement option is off.** Their native size is kept, and a default-positioned bar moves only when it collides; positions set in Edit Mode remain untouched.
 - **Dynamic wheels skip items that remain on the cursor after a placement attempt.** Other items can take the slot, without attempting the rejected item every two minutes. It is eligible again when it leaves the bags, the wheels are reconfigured, the UI reloads, or `/cgp wheels dyn retry` is used. `/cgp wheels dyn` shows the planned and actual slot contents and the immediate action and cursor state. `/cgp status` also identifies the most recent blocked action from any addon since reload.
 - **Hiding the micro menu no longer pulls the action bar, experience bar and bags out of alignment.** Frames anchored to the menu keep their screen positions before it is moved off-screen.
