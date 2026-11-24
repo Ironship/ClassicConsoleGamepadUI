@@ -444,14 +444,12 @@ driver:SetScript("OnEvent", function(_, event, addon, action)
         return
     end
     if event == "UPDATE_BINDINGS" then
-        if Addon.Input and Addon.Input.applyingBindings then return end
         Addon.Input.dirty = true
         if Addon.ButtonBindings then Addon.ButtonBindings:Invalidate() end
     end
     if event == "DISPLAY_SIZE_CHANGED" or event == "EDIT_MODE_LAYOUTS_UPDATED"
         or event == "NEUTRAL_FACTION_SELECT_RESULT" or event == "PLAYER_REGEN_ENABLED" then
         Addon.Layout.dirty = true
-        if event == "PLAYER_REGEN_ENABLED" and Addon.Input then Addon.Input.padPending = true end
     end
     if event == "PLAYER_LOGIN" then Initialize() else Addon:QueueRefresh(true) end
     if ready and (event == "UPDATE_BINDINGS" or event == "GAME_PAD_ACTIVE_CHANGED"

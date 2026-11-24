@@ -694,10 +694,6 @@ local LAYER_SHOW = [[
             self:SetBindingClick(true, self:GetAttribute("modkey" .. g), self:GetAttribute("modname" .. g), "LeftButton")
         end
     end
-    local open = self:GetAttribute("openwheel") or self:GetAttribute("page")
-    if self:GetAttribute("enabled") and open then
-        self:RunAttribute("openbind", open)
-    end
 ]]
 local LAYER_HIDE = [[
     self:RunAttribute("closewheel")
@@ -806,7 +802,7 @@ function Wheels:Cancel()
 end
 
 function Wheels:BindingLost()
-    if Addon.db.wheelCombos ~= true or self.open then return false end
+    if Addon.db.wheelCombos ~= true then return false end
     local now = GetTime()
     if self.bindingCheck and now - self.bindingCheck < 1 then return false end
     self.bindingCheck = now
