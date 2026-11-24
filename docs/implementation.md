@@ -437,8 +437,11 @@ matching the exported source commit's build **1.60.1 (70450)**.
   (the classic bars have no page to switch); the action editor keeps its own page tracker.
 - `Blizzard_EditMode/Camelot/EditModeUtil.lua` and
   `Blizzard_EditMode/Camelot/EditModePresetLayoutConstants.lua`: Gamepad Mode skips
-  the keyboard bottom-bar stack. Outside combat, restore its native anchors using
-  captured keyboard positions or the client's preset. The 36 original slot rectangles
+  the keyboard bottom-bar stack. Outside combat, restore its native anchors from
+  the client's Classic preset (`EDIT_MODE_CLASSIC_SYSTEM_MAP`, with Classic fallback
+  anchors) and computed bottom-bar stack offsets rather than captured keyboard/mouse
+  positions, preventing non-Classic MKB layouts (Modern, DaylightUI, etc.) from
+  colliding with or offsetting the classic bars. The 36 original slot rectangles
   hold 32 controller actions and two class actions, with two empty stock slots.
   Two additional display frames hold the shoulder indicators, the right one at the far end of the upper row.
 - `Blizzard_StatusTrackingBar/Camelot/StatusTrackingBarConstants.lua`: restore the

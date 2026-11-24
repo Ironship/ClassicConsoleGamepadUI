@@ -65,20 +65,17 @@ function Layout:CanCaptureKeyboard()
     return info and info.interfaceStyle == Enum.InputDeviceInterfaceType.Mkb and not manager.layoutApplyInProgress
 end
 
-function Layout:Capture()
-    if not self:CanCaptureKeyboard() then return end
-    for _, entry in ipairs(Frames()) do
-        local key, frame = entry[1], entry[2]
-        -- Hidden bars can still carry their XML placeholder at TOPLEFT, 0, 0.
-        if frame and not entry[3] and frame:IsVisible() then
-            local snapshot = Snapshot(frame, true)
-            if snapshot then Addon.db.keyboardBars[key] = snapshot end
-        end
-    end
-end
+-- Fallback anchors matching Blizzard's Classic preset when EDIT_MODE_CLASSIC_SYSTEM_MAP lacks an entry.
+local CLASSIC_ANCHORS = {
+    MicroMenuContainer = { "BOTTOM", "UIParent", "BOTTOM", 116.5, 6 },
+    BagsBar = { "BOTTOMLEFT", "MicroMenuContainer", "BOTTOMRIGHT", 7, -4 },
+    MainActionBar = { "BOTTOMRIGHT", "MicroMenuContainer", "BOTTOMLEFT", -4.5, -4 },
+    LeftEndCap = { "RIGHT", "MainActionBar", "LEFT", 30, 5 },
+    RightEndCap = { "LEFT", "BagsBar", "RIGHT", -30, 5 },
+}
 
 function Layout:ApplyStockAnchor(key, frame)
-    if Apply(frame, Addon.db.keyboardBars[key]) then return true end
+    if not frame then return false end
     local map = EDIT_MODE_CLASSIC_SYSTEM_MAP
     local system = map and frame.system and map[frame.system]
     local info = system and (frame.systemIndex and system[frame.systemIndex] or system)
@@ -86,6 +83,12 @@ function Layout:ApplyStockAnchor(key, frame)
     local relative = anchor and _G[anchor.relativeTo]
     if relative then
         Anchor(frame, anchor.point, relative, anchor.relativePoint, anchor.offsetX, anchor.offsetY)
+        return true
+    end
+    local fallback = CLASSIC_ANCHORS[key]
+    local fallbackRelative = fallback and _G[fallback[2]]
+    if fallbackRelative then
+        Anchor(frame, fallback[1], fallbackRelative, fallback[3], fallback[4], fallback[5])
         return true
     end
     return false
@@ -247,17 +250,18 @@ function Layout:Prepare()
             end
         end
     end
-    if not Apply(MultiBarBottomRight, Addon.db.keyboardBars.MultiBarBottomRight) then
-        local barScale = MultiBarBottomRight:GetEffectiveScale() / uiScale
-        if not barScale or barScale <= 0 then barScale = 1 end
-        Anchor(MultiBarBottomRight, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT",
-            ACTION_BAR_3_BOTTOM_BAR_OFFSET_X * mainScale / barScale, y / barScale)
-    end
-    if not Apply(MultiBarBottomLeft, Addon.db.keyboardBars.MultiBarBottomLeft) then
-        local barScale = MultiBarBottomLeft:GetEffectiveScale() / uiScale
-        if not barScale or barScale <= 0 then barScale = 1 end
-        Anchor(MultiBarBottomLeft, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT",
-            ACTION_BAR_2_BOTTOM_BAR_OFFSET_X * mainScale / barScale, y / barScale)
+    -- Always build the classic bar stack from Blizzard's Classic preset and live status-bar height
+    -- rather than saved keyboard/mouse Edit Mode positions, so non-Classic MKB layouts cannot misalign it.
+    for _, entry in ipairs({
+        { MultiBarBottomRight, ACTION_BAR_3_BOTTOM_BAR_OFFSET_X or 606 },
+        { MultiBarBottomLeft, ACTION_BAR_2_BOTTOM_BAR_OFFSET_X or 22 },
+    }) do
+        local bar = entry[1]
+        if bar then
+            local barScale = bar:GetEffectiveScale() / uiScale
+            if not barScale or barScale <= 0 then barScale = 1 end
+            Anchor(bar, "BOTTOMLEFT", MainActionBar, "BOTTOMLEFT", entry[2] * mainScale / barScale, y / barScale)
+        end
     end
     local caps = MainActionBar.EndCaps
     if caps then

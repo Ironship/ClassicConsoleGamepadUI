@@ -308,7 +308,7 @@ function Addon:Refresh()
     -- The wheels on R3 (Wheels.lua); a failure there must not touch the bars.
     local wheelsOk, wheelsError = pcall(self.Wheels.Refresh, self.Wheels, gamepad)
     if not wheelsOk then self:Note("Wheels:Refresh", wheelsError) end
-    if not gamepad and not changed then self.HUD:CaptureKeyboardLayout(); self.Layout:Capture() end
+    if not gamepad and not changed then self.HUD:CaptureKeyboardLayout() end
     self:Note(not ok and "Display:Refresh" or "refresh", not ok and visible or nil)
     -- Keep observing while Edit Mode or the action editor temporarily expose the native HUD.
     local watchDelete = gamepad and self.db.easyDelete and self.ItemDelete.dialog
@@ -340,12 +340,13 @@ local function Initialize()
         Addon.db.legendOptIn = 1
     end
     if type(Addon.db.keyboardHUD) ~= "table" then Addon.db.keyboardHUD = {} end
-    if type(Addon.db.keyboardBars) ~= "table" then Addon.db.keyboardBars = {} end
+    -- Drop any previously captured MKB bar positions so non-Classic layouts cannot misalign the classic bars.
+    Addon.db.keyboardBars = nil
     -- Where the player dragged the unit frames in Edit Mode while in Gamepad Mode.
     if type(Addon.db.gamepadHUD) ~= "table" then Addon.db.gamepadHUD = {} end
     -- Older caches can contain hidden-bar placeholders or gamepad transition anchors.
     if Addon.db.keyboardLayoutVersion ~= 1 then
-        Addon.db.keyboardHUD, Addon.db.keyboardBars = {}, {}
+        Addon.db.keyboardHUD = {}
         Addon.db.keyboardLayoutVersion = 1
     end
     if type(Addon.db.diagnostics) ~= "table" then Addon.db.diagnostics = {} end
