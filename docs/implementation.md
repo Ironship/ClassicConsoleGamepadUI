@@ -466,9 +466,11 @@ secure attributes (`type` "target", `unit`) and asks for the same portrait on th
 (`CircleMask`) like the game's; the mask is taken off again for any other action.
 
 Setting `padKeyboard` ("Keyboard bars on the controller", off by default since 0.1.0-alpha.84 (it was on for new installations before; a saved value is kept; an installation from before the setting
-existed is told apart in `Options:InitializeDefaults` by `hybridDefault` that every earlier version set): the classic bars show and press
+existed is told apart in `Options:InitializeDefaults` by `hybridDefault` that every earlier version set): on gamepad page 1, the classic bars show and press
 the keyboard action bars 1-3 (the slot's keyboard button, `Input.PadSlot`), not the game's own controller storage, whose
-slots (`GamepadActionBarBindingUtil.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID`) the keyboard bars do not use. The
+slots (`GamepadActionBarBindingUtil.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID`) the keyboard bars do not use.
+Switching gamepad pages (e.g. LB + RB + D-pad Left/Right) to pages 2-3 shows and presses the controller's own pages 2-3 (`Display:Update` checks `page == 1`; `Input.lua` `PRE_CLICK` checks `sources[1][1]:GetID() == padpage1id` in combat-safe secure code).
+The eight pad buttons use non-priority override bindings (`priority = false`, promoted once by `Input:VerifyPadPriority` if the client binding context outranks them) over the regular `GamepadModeInGameCore` bindings (`GAMEPADACTIONBUTTON1-8`), so priority overrides from Blizzard UI, Wheels, Keyboard, ItemDelete, and third-party gamepad addons (such as QuestieForeverGamepad's tracker) automatically take precedence even in combat. `Input:BindingsLost` distinguishes dropped bindings (fallen back to base/`GAMEPADACTIONBUTTON*`) from active foreign overrides and never steals pad buttons while a wheel is open or another override holds any pad button; `PadFree` also yields while `FrameControlsManager.isUIFocused` or `IsGamePadCursorControlEnabled()` is true. The
 native action editor ("Bind to Action Bar", "Edit Action Bars") writes that controller storage, so it is kept in step with
 the keyboard bars (`Display:EditorPairs`, `SnapshotEditor`, `SyncEditor`): when the editor opens, the storage slot of each pad
 button of page 1 is made a copy of the keyboard slot at the same place (spells, items and macros are put on the cursor again
