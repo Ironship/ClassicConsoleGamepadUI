@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.89
+
+- **Spell flyouts no longer throw a Lua error when `C_Spell.IsActiveSpell` returns a secret boolean.** `Addon.FlyoutSpells` now checks `Readable(...)` before testing `isAct` or other flyout API return values, preventing repeated errors in `Wheels:SyncFlyouts()` and keeping flyout lookup working cleanly.
+- **On-screen keyboard no longer taints Blizzard settings or panel search boxes.** Excludes Blizzard settings, Edit Mode, and Blizzard panel search `EditBox` frames from keyboard auto-open and text insertion, registers `ClassicConsoleGamepadUIWheel` in `UISpecialFrames` once, and expands native taint field checks.
+
 ## 0.1.0-alpha.88
 
 - **Radial wheels stay usable when the gamepad cursor takes control.** Reverts the `padKeyboard` changes that could disable wheels, while retaining the other recent fixes and improvements.
