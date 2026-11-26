@@ -108,8 +108,8 @@ end
 -- first one is caught, which in a clean session means every refresh, so the key lists are made once and a clean look
 -- allocates nothing (it used to make a closure and seven tables each time, five times per refresh).
 local TAINT_CHAT = { "SELECTED_CHAT_FRAME", "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX" }
-local TAINT_FOCUS = { "focusedFrame", "isUIFocused" }
-local TAINT_NAVIGATION = { "activeInfo", "currentDirections", "selectButtonSequence" }
+local TAINT_FOCUS = { "focusedFrame", "isUIFocused", "topSuspendedFrame", "fallThroughCatcherActive" }
+local TAINT_NAVIGATION = { "activeInfo", "activePanels", "currentDirections", "selectButtonSequence" }
 local TAINT_BINDINGS = { "currentCoreBindingActive", "bindingSetStack", "coreBindingListenerFunctions" }
 local TAINT_ACTIVE = { "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADFORWARD", "PADBACK" }
 local TAINT_UNIT = { "activeBar" }

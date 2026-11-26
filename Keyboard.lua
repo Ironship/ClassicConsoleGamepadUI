@@ -320,6 +320,44 @@ local function ChatFunction(name, legacy)
     return (namespace and namespace[name]) or _G[legacy]
 end
 
+local TAINT_ANCESTORS = {
+    "SettingsPanel",
+    "EditModeManagerFrame",
+    "EditModeNewLayoutDialog",
+    "EditModeImportLayoutDialog",
+    "EditModeUnsavedChangesDialog",
+    "EditModeSystemSettingsDialog",
+    "GameMenuFrame",
+    "AddonList",
+    "KeyBindingFrame",
+}
+
+local function IsTaintRiskEditBox(box)
+    local curr, hops = box, 0
+    while curr and curr ~= UIParent and hops < 16 do
+        hops = hops + 1
+        if curr.IsForbidden and curr:IsForbidden() then return true end
+        for _, key in ipairs(TAINT_ANCESTORS) do
+            if _G[key] and curr == _G[key] then return true end
+        end
+        local frameName = curr.GetName and curr:GetName()
+        if type(frameName) == "string" and (frameName:find("^SettingsPanel") or frameName:find("^EditMode")) then
+            return true
+        end
+        curr = curr.GetParent and curr:GetParent() or nil
+    end
+    if type(box) == "table" and type(issecurevariable) == "function" and issecurevariable(box, 0) == true then
+        if rawget(box, "searchIcon") ~= nil or rawget(box, "clearButton") ~= nil
+            or rawget(box, "searchPreviewContainer") ~= nil or rawget(box, "SearchIcon") ~= nil
+            or rawget(box, "ClearButton") ~= nil then
+            return true
+        end
+        local boxName = box.GetName and box:GetName()
+        if type(boxName) == "string" and boxName:lower():find("search", 1, true) then return true end
+    end
+    return false
+end
+
 local function IsUsableEditBox(box)
     if not box or (type(box) ~= "table" and type(box) ~= "userdata") then return false end
     local ok, usable = pcall(function()
@@ -329,6 +367,7 @@ local function IsUsableEditBox(box)
         if box.HasFocus and not box:HasFocus() then return false end
         if box.IsPassword and box:IsPassword() then return false end
         if box.IsSecureText and box:IsSecureText() then return false end
+        if IsTaintRiskEditBox(box) then return false end
         return type(box.Insert) == "function" and type(box.GetText) == "function"
     end)
     return ok and usable == true
@@ -342,10 +381,12 @@ local function FindFocusedEditBox()
 end
 
 -- The edit box that currently owns text input: any focused non-password EditBox (chat frames, temporary whisper tabs,
--- Communities/Guild chat, Mail, Macro editor, search boxes, StaticPopups, addon chat boxes), falling back to the game's
--- active chat line. Opening, focusing or sending the chat line from here would run the game's chat focus and gamepad binding
--- code inside this addon's call, and the bindings it sets up would be tainted: opening the game menu in combat is then blocked.
--- The player opens the line natively, and the game itself sends it (X is bound to the game's own send button, see Keyboard:SyncSend).
+-- Communities/Guild chat, Mail, Macro editor, StaticPopups, addon chat/input boxes), falling back to the game's
+-- active chat line. Blizzard settings, Edit Mode, and Blizzard panel search boxes are intentionally excluded because
+-- calling Insert/SetText on them runs Blizzard's OnTextChanged panel rebuilds under addon taint. Opening, focusing or
+-- sending the chat line from here would also run the game's chat focus and gamepad binding code inside this addon's call,
+-- leaving those bindings tainted so opening the game menu in combat is blocked. The player opens the line natively, and
+-- the game itself sends it (X is bound to the game's own send button, see Keyboard:SyncSend).
 local function FindEditBox()
     local focused = FindFocusedEditBox()
     if focused then return focused end

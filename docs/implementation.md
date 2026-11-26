@@ -296,8 +296,12 @@ matching the exported source commit's build **1.60.1 (70450)**.
   (`HUD:ResetFrames`); every stock frame is restored before the layout runs again. The interface language, the learned
   words and the captured keyboard/mouse layout stay.
 - No on-screen keyboard exists in the client's Lua UI (`Blizzard_Gamepad*`, chat, API documentation), so
-  `Keyboard.lua` draws one from plain unprotected frames. It acts only on a chat line the player has already opened
-  (`ChatFrameUtil.GetActiveWindow`; any shown `ChatFrameNEditBox` as fallback) and only with `Insert` and `SetText`.
+  `Keyboard.lua` draws one from plain unprotected frames. It targets focused text edit boxes
+  (`GetCurrentKeyBoardFocus`, falling back to `ChatFrameUtil.GetActiveWindow` and shown `ChatFrameNEditBox`),
+  excluding `SettingsPanel`, `EditMode*`, `GameMenuFrame`/`AddonList`, and Blizzard-owned search boxes
+  (because `Insert`/`SetText` on them runs their `OnTextChanged` panel rebuilds such as
+  `SettingsPanelMixin:OnSearchTextChanged` and `ScrollBox` filters under addon taint, tainting
+  `FrameControlsManager` and `SmartNavigation.activePanels`), and only writes with `Insert` and `SetText`.
   It never opens, focuses or sends the line. `Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua`:
   `OnEditFocusGained` and `SendMessage` (through `ClearChat`, `Hide` and `ChatFrameUtil.DeactivateChat`) run
   `FrameControlsManager` and the `InputBindingManager` binding sets, and `SendText` calls `ParseText(1)`, which runs

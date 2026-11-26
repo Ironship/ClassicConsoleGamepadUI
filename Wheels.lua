@@ -1414,6 +1414,7 @@ function Wheels:CreateHUD()
             self:SetEditing(false)
         end
     end)
+    tinsert(UISpecialFrames, "ClassicConsoleGamepadUIWheel")
     self.hud = hud
     self:ApplyLayout()
 end
@@ -2447,13 +2448,6 @@ function Wheels:Toggle()
     self:Preview(not self.previewing)
 end
 
-local function SpecialFrame(name, on)
-    for index = #UISpecialFrames, 1, -1 do
-        if UISpecialFrames[index] == name then table.remove(UISpecialFrames, index) end
-    end
-    if on then tinsert(UISpecialFrames, name) end
-end
-
 -- The slots and the wheel itself take the mouse, the wheel buttons and "Done" are shown, and the wheel rises above the
 -- windows while it is filled.
 function Wheels:SetEditing(on)
@@ -2497,7 +2491,6 @@ function Wheels:SetEditing(on)
         hud.Note:SetShown(on and true or false)
         hud.Done:SetShown(on and true or false)
     end
-    SpecialFrame("ClassicConsoleGamepadUIWheel", on)
     self:ApplyStyle()
 end
 
