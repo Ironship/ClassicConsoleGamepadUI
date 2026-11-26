@@ -787,24 +787,32 @@ end
 
 -- Resolves known spells inside a Blizzard SpellFlyout (highest known rank per spell name), plus single/active spell IDs.
 function Addon.FlyoutSpells(flyoutID)
-    if not flyoutID or not GetFlyoutInfo or not GetFlyoutSlotInfo then return {}, nil, nil, nil end
+    if not Readable(flyoutID) or not flyoutID or not GetFlyoutInfo or not GetFlyoutSlotInfo then
+        return {}, nil, nil, nil
+    end
     local ok, name, _, numSlots, isKnown = pcall(GetFlyoutInfo, flyoutID)
-    if not ok or not isKnown or not numSlots or numSlots <= 0 then return {}, nil, nil, ok and name or nil end
+    local flyName = ok and Readable(name) and name or nil
+    if not ok or not Readable(isKnown) or not isKnown or not Readable(numSlots) or type(numSlots) ~= "number" or numSlots <= 0 then
+        return {}, nil, nil, flyName
+    end
     local spells, byName = {}, {}
     local active
     for i = 1, numSlots do
         local sok, spellID, overrideSpellID, slotKnown, spellName = pcall(GetFlyoutSlotInfo, flyoutID, i)
-        if sok and slotKnown and spellID then
+        if sok and Readable(slotKnown) and slotKnown and Readable(spellID) and spellID then
             local petSkip = false
             if GetCallPetSpellInfo then
                 local pok, petIndex, petName = pcall(GetCallPetSpellInfo, spellID)
-                if pok and petIndex and (not petName or petName == "") then petSkip = true end
+                if pok and Readable(petIndex) and petIndex and Readable(petName) and (not petName or petName == "") then
+                    petSkip = true
+                end
             end
             if not petSkip then
-                local castID = overrideSpellID or spellID
-                local key = spellName or castID
+                local castID = (Readable(overrideSpellID) and overrideSpellID) or spellID
+                local readableName = Readable(spellName) and spellName or nil
+                local key = readableName or castID
                 local idx = byName[key]
-                local entry = { id = castID, base = spellID, name = spellName }
+                local entry = { id = castID, base = spellID, name = readableName }
                 if idx then
                     spells[idx] = entry
                 else
@@ -814,13 +822,13 @@ function Addon.FlyoutSpells(flyoutID)
                 end
                 if not active and C_Spell and C_Spell.IsActiveSpell then
                     local aok, isAct = pcall(C_Spell.IsActiveSpell, castID)
-                    if aok and isAct then active = castID end
+                    if aok and Readable(isAct) and isAct then active = castID end
                 end
             end
         end
     end
     local single = #spells == 1 and spells[1].id or nil
-    return spells, single, active, name
+    return spells, single, active, flyName
 end
 
 -- Puts a copy of the action in `slot` on the cursor, for the kinds of action that can be picked up again.
