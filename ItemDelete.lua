@@ -125,7 +125,7 @@ function ItemDelete:Refresh()
     local dialog = self.dialog
     local wanted = Addon.db.easyDelete and Addon:IsGamepadMode() and not Addon.conflict
         and dialog and dialog:IsShown() and dialog.gamepadFocused
-        and deleteDialogs[dialog.which] and dialog.dialogInfo.requiresConfirmation
+        and deleteDialogs[dialog.which] and dialog.dialogInfo and dialog.dialogInfo.requiresConfirmation
     if not wanted then
         if self.header and self.header:IsShown() then Addon:Trace("ItemDelete hide") end
         if self.header then self.header:Hide() end

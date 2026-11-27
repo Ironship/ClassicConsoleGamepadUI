@@ -452,9 +452,13 @@ driver:SetScript("OnEvent", function(_, event, addon, action)
         return
     end
     if event == "UPDATE_BINDINGS" then
+        if Addon.Input and Addon.Input.applyingBindings then return end
         Addon.Input.dirty = true
         if Addon.ButtonBindings then Addon.ButtonBindings:Invalidate() end
         if Addon.Display and Addon.Display.InvalidateBindingGlyphs then Addon.Display:InvalidateBindingGlyphs() end
+    end
+    if event == "PLAYER_REGEN_ENABLED" and Addon.Input then
+        Addon.Input.padPending = true
     end
     if event == "DISPLAY_SIZE_CHANGED" or event == "EDIT_MODE_LAYOUTS_UPDATED"
         or event == "NEUTRAL_FACTION_SELECT_RESULT" then
@@ -483,6 +487,9 @@ SlashCmdList.CLASSICCONSOLEGAMEPADUI = function(input)
         return
     elseif command == "padtest" then
         Addon.ButtonBindings:PadTest()
+        return
+    elseif command == "pad" then
+        Addon.Input:DiagnosePad()
         return
     elseif command == "bindtest" then
         Addon.ButtonBindings:Diagnose()

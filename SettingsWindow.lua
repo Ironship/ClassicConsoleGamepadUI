@@ -301,15 +301,28 @@ local function Header(page, y, key, noteKey)
     return y
 end
 
+-- True when `parent` or any of its ancestor checkboxes is switched off.
+local function ParentOff(db, parent)
+    local seen = {}
+    while parent and not seen[parent] do
+        seen[parent] = true
+        if not db[parent] then return true end
+        local info = Control(parent)
+        parent = info and info.parent or nil
+    end
+    return false
+end
+
 -- Registers a row's node for navigation and refresh. The row is dimmed (and the node skipped by the pad) while its parent
--- box is off, while its own condition (DIM) holds, or - on a tab of the classic interface - while that is switched off.
+-- box (or an ancestor box) is off, while its own condition (DIM) holds, or - on a tab of the classic interface - while that
+-- is switched off.
 local function Register(page, row, node, y, height, refresh, parent, key)
     node.rowTop, node.rowHeight = y, height
     page.nodes[#page.nodes + 1] = node
     page.refresh[#page.refresh + 1] = function()
         refresh()
         local db = Addon.db
-        local dimmed = (parent and not db[parent]) or (key and DIM[key] and DIM[key](db)) or (page.master and not db.enabled) or false
+        local dimmed = ParentOff(db, parent) or (key and DIM[key] and DIM[key](db)) or (page.master and not db.enabled) or false
         row:SetAlpha(dimmed and 0.45 or 1)
         SetEnabled(node, not dimmed)
         node.dimmed = dimmed
@@ -440,12 +453,13 @@ end
 -- through them without opening it).
 local function Choice(page, y, key, parent)
     local choices = Addon.Options.choices[key]
-    local row = NewRow(page, y, 0, 34)
-    RowLabel(row, Text(key), 0)
+    local indent = parent and 22 or 0
+    local row = NewRow(page, y, indent, 34)
+    RowLabel(row, Text(key), indent)
     local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     Fonts:Button(button)
     button:SetSize(CONTROL_WIDTH, 24)
-    button:SetPoint("LEFT", row, "LEFT", CONTROL_X, 0)
+    button:SetPoint("LEFT", row, "LEFT", CONTROL_X - indent, 0)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     local arrow = Fonts:String(button, "OVERLAY", "Highlight")
     arrow:SetPoint("RIGHT", -8, 0)
@@ -802,6 +816,7 @@ end
 function Window:RefreshPages()
     for _, page in pairs(self.pages or {}) do page.Refresh() end
     if self.switchBox then self.switchBox:SetChecked(Addon.db.enabled and true or false) end
+    if self.selected and self.selected.dimmed then self:Mark(nil) end
 end
 
 function Window:Relocalize()

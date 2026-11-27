@@ -699,6 +699,10 @@ local LAYER_SHOW = [[
             self:SetBindingClick(true, self:GetAttribute("modkey" .. g), self:GetAttribute("modname" .. g), "LeftButton")
         end
     end
+    local open = self:GetAttribute("openwheel") or self:GetAttribute("page")
+    if self:GetAttribute("enabled") and open then
+        self:RunAttribute("openbind", open)
+    end
 ]]
 local LAYER_HIDE = [[
     self:RunAttribute("closewheel")
@@ -807,7 +811,7 @@ function Wheels:Cancel()
 end
 
 function Wheels:BindingLost()
-    if Addon.db.wheelCombos ~= true then return false end
+    if Addon.db.wheelCombos ~= true or self.open then return false end
     local now = GetTime()
     if self.bindingCheck and now - self.bindingCheck < 1 then return false end
     self.bindingCheck = now
@@ -1192,7 +1196,7 @@ function Wheels:CaptureKey(wheel, done)
         frame.Text:SetJustifyH("CENTER")
         frame:SetScript("OnKeyDown", function(f, key)
             local taken = self:CaptureInput(key)
-            if f.SetPropagateKeyboardInput then f:SetPropagateKeyboardInput(not taken) end
+            if not InCombatLockdown() and f.SetPropagateKeyboardInput then f:SetPropagateKeyboardInput(not taken) end
         end)
         frame:SetScript("OnMouseDown", function(_, button) self:CaptureInput(button) end)
         frame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -2485,7 +2489,7 @@ function Wheels:SetEditing(on)
             if button == "PAD2" and self.previewing then self:Preview(false) end
         end)
     end
-    if hud.EnableGamePadButton then pcall(hud.EnableGamePadButton, hud, on and true or false) end
+    if not InCombatLockdown() and hud.EnableGamePadButton then pcall(hud.EnableGamePadButton, hud, on and true or false) end
     hud:EnableMouse(on and true or false)
     hud:SetFrameStrata(on and "DIALOG" or "HIGH")
     for _, frame in ipairs(hud.slots) do frame:EnableMouse(on and true or false) end
@@ -2527,6 +2531,11 @@ function Wheels:Relocalize()
 end
 
 function Wheels:Changed(key)
+    if key == "wheels" and Addon.db.wheels ~= true then
+        if self.previewing then self:Preview(false)
+        elseif self.hud then self:SetOpen(nil) end
+        if self.dock then self.dock:Hide() end
+    end
     if key == "wheelCameraOnly" then self.sticksAt = nil end
     self:ApplyLayout()
     if key == "wheelNames" or key == "wheelHints" or key == "wheelToggle" then self:DrawCenter() end

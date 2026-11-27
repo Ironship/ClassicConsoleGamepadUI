@@ -1707,11 +1707,12 @@ function Display:Update(unit)
         if bar and bar:IsShown() then selected[1] = bar end
     end
     local activeBar = unit:GetActiveBar()
-    -- Setting "padKeyboard": a slot of the four standard bars shows the keyboard bar's button at its place (Input.lua
-    -- presses the same button); the game's own four (interact, target menu, back, jump) stay.
+    -- Setting "padKeyboard": on page 1 a slot of the four standard bars shows the keyboard bar's button at its place
+    -- (Input.lua presses the same button); the game's own four (interact, target menu, back, jump) stay, and pages 2-3
+    -- switch to the controller's own pages as usual.
     -- Not in the action editor: it writes the game's own gamepad storage, which the keyboard bars do not show.
     local standard = wipe(updateStandard)
-    if Addon.db.padKeyboard == true and not self.barEditing then
+    if Addon.db.padKeyboard == true and not self.barEditing and page == 1 then
         if base.topBar then standard[base.topBar] = true end
         if base.leftBar then standard[base.leftBar] = true end
         if base.rightBar then standard[base.rightBar] = true end

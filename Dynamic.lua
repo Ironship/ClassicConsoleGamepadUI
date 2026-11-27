@@ -170,9 +170,11 @@ local function WantedProfessions()
     local book = C_SpellBook
     if type(book) ~= "table" or type(book.GetSpellBookItemInfo) ~= "function" then return nil end
     local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
-    local first, second, firstAid, fishing, cooking = GetProfessions()
-    for _, index in ipairs({ first or false, second or false, cooking or false, fishing or false, firstAid or false }) do
-        if index then
+    local first, second, third, fishing, cooking, sixth = GetProfessions()
+    local seen = {}
+    for _, index in ipairs({ first or false, second or false, cooking or false, fishing or false, sixth or false, third or false }) do
+        if index and not seen[index] then
+            seen[index] = true
             local _, _, _, _, numSpells, offset = GetProfessionInfo(index)
             for i = 1, tonumber(numSpells) or 0 do
                 local ok, item = pcall(book.GetSpellBookItemInfo, (tonumber(offset) or 0) + i, bank)

@@ -106,9 +106,12 @@ local PRE_CLICK = [[
             if not key then return false end
             source = sources[key][index]
             kind = key == 5 and "pet" or (delegates[key][index] and "delegate" or "action")
-            if control:GetAttribute("padkeyboard") and key <= 4 and not delegates[key][index] then
-                -- The keyboard bar's button at the slot's place stands in for the pad's own action. The game's own
-                -- four (interact, target menu, back, jump) and the bars that take a row over stay as they are.
+            local page1Id = control:GetAttribute("padpage1id")
+            local onPage1 = not page1Id or (sources[1] and sources[1][1] and sources[1][1]:GetID() == page1Id)
+            if control:GetAttribute("padkeyboard") and onPage1 and key <= 4 and not delegates[key][index] then
+                -- The keyboard bar's button at the slot's place stands in for the pad's own action on page 1.
+                -- The game's own four (interact, target menu, back, jump), pages 2-3, and the bars that take a
+                -- row over stay as they are.
                 place = control:GetAttribute("padslot" .. group .. "-" .. index)
                 local keyboardButton = place and control:GetFrameRef("kbd" .. place)
                 if keyboardButton then source, kind = keyboardButton, "kbd" end
@@ -213,6 +216,88 @@ local APPLY_BINDINGS = [[
     end
 ]]
 
+local HEADER_SHOW = [[
+    self:ClearBindings()
+    if self:GetAttribute("enabled") then
+        for i = 1, self:GetAttribute("bindingcount") or 0 do
+            self:SetBindingClick(true, self:GetAttribute("key" .. i), self:GetAttribute("button" .. i), "Keybind")
+        end
+        local pad = self:GetFrameRef("padheader")
+        if pad and pad:GetAttribute("padenabled") and PlayerInCombat() then
+            pad:RunAttribute("applypad")
+        end
+    end
+]]
+
+local HEADER_HIDE = [[
+    self:ClearBindings()
+    local pad = self:GetFrameRef("padheader")
+    if pad then pad:ClearBindings() end
+]]
+
+local APPLY_PAD = [[
+    local skip = ...
+    self:ClearBindings()
+    local main = self:GetFrameRef("mainheader")
+    if not self:GetAttribute("padenabled") or not main or not main:IsShown() or not main:GetAttribute("enabled") then return end
+    for i = 1, self:GetAttribute("overridecount") or 0 do
+        local bar = self:GetFrameRef("overridebar" .. i)
+        if bar and bar ~= skip and bar:IsShown() then return end
+    end
+    local prio = self:GetAttribute("padpriority") == true
+    for i = 1, self:GetAttribute("padcount") or 0 do
+        self:SetBindingClick(prio, self:GetAttribute("padkey" .. i), self:GetAttribute("padbutton" .. i), "Keybind")
+    end
+]]
+
+local PAD_STATE_COMBAT = [[
+    if newstate == "combat" and self:GetAttribute("padenabled") then
+        self:RunAttribute("applypad")
+    end
+]]
+
+local OVERRIDE_WRAP_SHOW = [[
+    if control:GetAttribute("padenabled") then
+        control:ClearBindings()
+    end
+]]
+
+local OVERRIDE_WRAP_HIDE_TARGET = [[
+    if not control:GetAttribute("padenabled") then return end
+    if PlayerInCombat() then
+        control:RunAttribute("applypad", self)
+    else
+        control:ClearBindings()
+        control:CallMethod("OnOverrideBarHidden", false)
+    end
+]]
+
+local OVERRIDE_WRAP_HIDE_SHORTCUTS = [[
+    if not control:GetAttribute("padenabled") then return end
+    if PlayerInCombat() then
+        control:RunAttribute("applypad", self)
+    else
+        control:ClearBindings()
+        control:CallMethod("OnOverrideBarHidden", true)
+    end
+]]
+
+local OVERRIDE_CHILD_SHOW = [[
+    local pad = self:GetFrameRef("padheader")
+    if pad and pad:GetAttribute("padenabled") then pad:ClearBindings() end
+]]
+
+local OVERRIDE_CHILD_HIDE = [[
+    local pad = self:GetFrameRef("padheader")
+    if not pad or not pad:GetAttribute("padenabled") then return end
+    if PlayerInCombat() then
+        pad:RunAttribute("applypad", self:GetFrameRef("ownerbar"))
+    else
+        pad:ClearBindings()
+        pad:CallMethod("OnOverrideBarHidden", self:GetAttribute("isshortcuts") == true)
+    end
+]]
+
 -- Runs inside the secure header so EnableMouse does not taint the native buttons.
 -- A tainted action button makes the client's later SetPreferredGamepadInteractTarget fail.
 local SUPPRESS_MOUSE = [[
@@ -305,11 +390,13 @@ function Input.PadSlot(group, native)
     end
 end
 
--- Setting "padKeyboard": the pad's eight bar buttons press the keyboard bars' buttons, so an action sits in the same
--- place with the keyboard and with the pad. The game binds the eight with priority override bindings of UIParent
--- (Blizzard_GamepadSharedUtility, InputBindingStack); the same kind of binding of our header takes their place, which
--- /cgp padtest showed in game. While a menu or a window owns the pad (a binding set above the game's core set) the eight
--- are left alone.
+-- Setting "padKeyboard": on page 1 the pad's eight bar buttons press the keyboard bars' buttons, so an action sits in
+-- the same place with the keyboard and with the pad. The game binds GAMEPADACTIONBUTTON1-8 as regular bindings in the
+-- GamepadModeInGameCore context (Blizzard_GamepadActionBars/Bindings.xml), while menus, SmartNavigation, HUD mode,
+-- radials, wheels, keyboard, item delete, and gamepad addons claim buttons with priority override bindings.
+-- Using non-priority overrides (priority=false) on a dedicated secure header overrides the core action buttons while
+-- automatically yielding to every priority override (even in combat). PadFree only inspects InputBindingManager so
+-- Wheels.lua (which shares PadFree) is never hidden by stuck UI focus or gamepad cursor state.
 local function PadFree()
     local manager = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
     if not manager or not manager.IsOnlyCoreBindingSetActive then return true end
@@ -317,8 +404,107 @@ local function PadFree()
     return not ok or core == true
 end
 
+local function Page1Slot1ID()
+    local util = GamepadActionBarBindingUtil
+    if util and util.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID then
+        local ok, id = pcall(util.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID, 1, 1)
+        if ok and type(id) == "number" and id > 0 then return id end
+    end
+    local native = GamepadMainActionBarFrame
+    local unit = native and native.PageUnit
+    local top = unit and unit.actionBars and unit.actionBars.topBar
+    local btn = top and top.actionButtons and top.actionButtons[1]
+    if unit and type(unit.GetCurrentPage) == "function" and btn and btn.GetID then
+        local okPage, page = pcall(unit.GetCurrentPage, unit)
+        if okPage and page == 1 then
+            local okId, id = pcall(btn.GetID, btn)
+            if okId and type(id) == "number" and id > 0 then return id end
+        end
+    end
+end
+
 -- Wheels.lua leaves the pad alone in the same cases.
 Input.PadFree = PadFree
+
+local SHORTCUTS_GRACE = 0.2
+
+function Input:CurrentPage()
+    local native = GamepadMainActionBarFrame
+    local unit = native and native.PageUnit
+    if unit and type(unit.GetCurrentPage) == "function" then
+        local ok, page = pcall(unit.GetCurrentPage, unit)
+        if ok and type(page) == "number" then return page end
+    end
+    return 1
+end
+
+function Input:OverrideBarShown()
+    for _, bar in ipairs(self.overrideBars or {}) do
+        local ok, shown = pcall(bar.IsShown, bar)
+        if ok and shown == true then return true end
+    end
+    if GamepadMode then
+        if type(GamepadMode.IsHUDBindingModifierDown) == "function" then
+            local ok, down = pcall(GamepadMode.IsHUDBindingModifierDown)
+            if ok and down == true then return true end
+        end
+        if type(GamepadMode.IsTargetingModifierDown) == "function" then
+            local ok, down = pcall(GamepadMode.IsTargetingModifierDown)
+            if ok and down == true then return true end
+        end
+    end
+    return false
+end
+
+function Input:InShortcutsGrace()
+    return self.shortcutsGraceUntil ~= nil and GetTime() < self.shortcutsGraceUntil
+end
+
+function Input:ExecBindings(frame, code)
+    if not frame then return end
+    self.applyingBindings = true
+    local ok, err = pcall(frame.Execute, frame, code)
+    self.applyingBindings = nil
+    if not ok then error(err, 0) end
+end
+
+function Input:SetHeaderShown(shown)
+    if not self.header then return end
+    self.applyingBindings = true
+    local ok, err = pcall(shown and self.header.Show or self.header.Hide, self.header)
+    self.applyingBindings = nil
+    if not ok then error(err, 0) end
+end
+
+function Input:OnOverrideBarHidden(isShortcuts)
+    self.padApplied = false
+    self.padPending = true
+    if isShortcuts then
+        -- Hold off re-applying pad overrides briefly after LB+RB closes so third-party UIs activated from
+        -- ShortcutsActionBar (e.g. QuestieForeverGamepad's quest tracker) can finish claiming the pad.
+        local untilAt = GetTime() + SHORTCUTS_GRACE
+        if not self.shortcutsGraceUntil or untilAt > self.shortcutsGraceUntil then
+            self.shortcutsGraceUntil = untilAt
+        end
+        if not self.shortcutsGraceTimer and C_Timer and C_Timer.After then
+            local function checkGrace()
+                self.shortcutsGraceTimer = nil
+                if self.shortcutsGraceUntil then
+                    local rem = self.shortcutsGraceUntil - GetTime()
+                    if rem > 0.005 then
+                        self.shortcutsGraceTimer = true
+                        C_Timer.After(rem + 0.02, checkGrace)
+                        return
+                    end
+                end
+                Addon:QueueRefresh(true)
+            end
+            self.shortcutsGraceTimer = true
+            C_Timer.After(SHORTCUTS_GRACE + 0.02, checkGrace)
+        end
+    end
+    Addon:QueueRefresh(true)
+end
 
 function Input:PadWanted()
     return Addon.db.padKeyboard == true and self.padButtons ~= nil and PadFree()
@@ -444,8 +630,14 @@ end
 function Input:RestoreAfterError()
     if not self.header or InCombatLockdown() then return end
     local ok, err = pcall(function()
+        if self.padHeader then
+            self.padHeader:SetAttribute("padenabled", false)
+            self:ExecBindings(self.padHeader, "self:ClearBindings()")
+            self.padApplied = false
+            self.padBound = false
+        end
         if self.header:GetAttribute("enabled") then self.header:SetAttribute("enabled", false) end
-        if self.header:IsShown() then self.header:Hide() end
+        if self.header:IsShown() then self:SetHeaderShown(false) end
     end)
     if not ok then
         err = tostring(err)
@@ -614,10 +806,63 @@ function Input:Create(native, unit, bars)
     self.mouseRestored = true
     header:SetAttribute("mousecount", 0)
     header:SetFrameRef("native", native)
-    header:SetAttribute("_onshow", APPLY_BINDINGS)
-    header:SetAttribute("_onhide", "self:ClearBindings()")
+    header:SetAttribute("_onshow", HEADER_SHOW)
+    header:SetAttribute("_onhide", HEADER_HIDE)
     header:SetAttribute("activelevel", self.activeBarFrameLevel)
     header:SetAttribute("pickbar", PICK_BAR)
+    header:HookScript("OnHide", function()
+        self.padApplied = false
+        self.padPending = true
+    end)
+    local padHeader = CreateFrame("Frame", "ClassicConsoleGamepadUIPadInput", UIParent, "SecureHandlerStateTemplate")
+    padHeader:SetSize(1, 1)
+    padHeader:SetPoint("CENTER")
+    padHeader:EnableMouse(false)
+    padHeader:SetAttribute("padenabled", false)
+    padHeader:SetAttribute("padpriority", self.padPriority == true)
+    padHeader:SetAttribute("padcount", 0)
+    padHeader:SetAttribute("applypad", APPLY_PAD)
+    padHeader:SetAttribute("_onstate-combat", PAD_STATE_COMBAT)
+    padHeader.OnOverrideBarHidden = function(_, isShortcuts) self:OnOverrideBarHidden(isShortcuts) end
+    SetRef(padHeader, "mainheader", header)
+    SetRef(header, "padheader", padHeader)
+    if type(RegisterStateDriver) == "function" then
+        pcall(RegisterStateDriver, padHeader, "combat", "[combat] combat; peace")
+    end
+    self.padHeader = padHeader
+    self.overrideBars, self.overrideWatchers, self.overrideModes = {}, {}, {}
+    local overrideCount = 0
+    for _, key in ipairs({ "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }) do
+        local bar = unit[key]
+        if bar then
+            overrideCount = overrideCount + 1
+            local isShortcuts = key == "ShortcutsActionBar"
+            self.overrideBars[overrideCount] = bar
+            SetRef(padHeader, "overridebar" .. overrideCount, bar)
+            local hideSnippet = isShortcuts and OVERRIDE_WRAP_HIDE_SHORTCUTS or OVERRIDE_WRAP_HIDE_TARGET
+            local okShow = pcall(SecureHandlerWrapScript, bar, "OnShow", padHeader, OVERRIDE_WRAP_SHOW)
+            local okHide = okShow and pcall(SecureHandlerWrapScript, bar, "OnHide", padHeader, hideSnippet)
+            if okShow and okHide then
+                self.overrideModes[key] = "wrap"
+            else
+                if okShow then pcall(SecureHandlerUnwrapScript, bar, "OnShow") end
+                local watcher = CreateFrame("Frame", nil, bar, "SecureHandlerShowHideTemplate")
+                watcher:SetSize(1, 1)
+                watcher:SetPoint("CENTER")
+                watcher:EnableMouse(false)
+                SetRef(watcher, "padheader", padHeader)
+                SetRef(watcher, "ownerbar", bar)
+                watcher:SetAttribute("isshortcuts", isShortcuts)
+                watcher:SetAttribute("_onshow", OVERRIDE_CHILD_SHOW)
+                watcher:SetAttribute("_onhide", OVERRIDE_CHILD_HIDE)
+                self.overrideWatchers[overrideCount] = watcher
+                self.overrideModes[key] = "child"
+            end
+        end
+    end
+    padHeader:SetAttribute("overridecount", overrideCount)
+    local page1Id = Page1Slot1ID()
+    if page1Id then header:SetAttribute("padpage1id", page1Id) end
     header:HookScript("OnAttributeChanged", function(_, name, value)
         if name == "kbdflyout" and value then self:ToggleKbdFlyout(value) end
     end)
@@ -891,8 +1136,14 @@ function Input:SetBindingMode(active)
     if not active or InCombatLockdown() or not self.header then return end
     for _, button in pairs(self.buttons) do button:SetAttribute("cgppressed", nil) end
     pcall(function()
+        if self.padHeader then
+            self.padHeader:SetAttribute("padenabled", false)
+            self:ExecBindings(self.padHeader, "self:ClearBindings()")
+            self.padApplied = false
+            self.padBound = false
+        end
         self.header:SetAttribute("enabled", false)
-        self.header:Execute(APPLY_BINDINGS)
+        self:ExecBindings(self.header, APPLY_BINDINGS)
     end)
 end
 
@@ -912,23 +1163,32 @@ local function ShortKeyLabel(key)
     return GetBindingText(key, 1)
 end
 
--- Collect the keyboard keys of every visible slot's classic bar position.
--- The secure header applies them only while the click layer is enabled.
+-- Collect the keyboard keys of every visible slot's classic bar position (on header) and the eight pad buttons
+-- (on padHeader). Splitting the pad onto padHeader lets target/shortcut override bars (LB, RB, LB+RB), pages 2-3,
+-- and foreign gamepad overlays (e.g. QuestieForeverGamepad's tracker) clear the eight pad overrides cleanly without
+-- touching keyboard bindings or mouse hitboxes.
 function Input:UpdateBindings()
-    local header, count = self.header, 0
+    local header, padHeader = self.header, self.padHeader
+    local kbdCount, padCount = 0, 0
+    local kbdParts, padParts = {}, {}
     self.labelShown = {}
-    -- The pad's eight come first: BindingsLost watches the first key, and the game puts its own back on them.
-    self.padBound = self:PadWanted()
-    if self.padBound then
+    local padPriority = self.padPriority == true
+    padParts[1] = padPriority and "1" or "0"
+    if padHeader and self.padButtons then
+        padHeader:SetAttribute("padpriority", padPriority)
         for native, button in ipairs(self.padButtons) do
             local key = Addon.ButtonBindings:Key(native) or Addon.ButtonBindings.DEFAULT[native]
             if key and IsBindingForGamePad(key) then
-                count = count + 1
-                header:SetAttribute("key" .. count, key)
-                header:SetAttribute("button" .. count, button:GetName())
+                padCount = padCount + 1
+                local name = button:GetName()
+                padHeader:SetAttribute("padkey" .. padCount, key)
+                padHeader:SetAttribute("padbutton" .. padCount, name)
+                padParts[#padParts + 1] = key .. "=" .. name
             end
         end
+        padHeader:SetAttribute("padcount", padCount)
     end
+    self.padBindingCount = padCount
     for i, button in pairs(self.buttons) do
         local slot = Addon.Display.slots[i]
         slot.Key:SetText("")
@@ -941,9 +1201,11 @@ function Input:UpdateBindings()
                 local context = C_KeyBindings.GetBindingContextForAction(action)
                 for _, key in ipairs({ GetBindingKey(action, nil, context) }) do
                     if not IsBindingForGamePad(key) then
-                        count = count + 1
-                        header:SetAttribute("key" .. count, key)
-                        header:SetAttribute("button" .. count, button:GetName())
+                        kbdCount = kbdCount + 1
+                        local name = button:GetName()
+                        header:SetAttribute("key" .. kbdCount, key)
+                        header:SetAttribute("button" .. kbdCount, name)
+                        kbdParts[#kbdParts + 1] = key .. "=" .. name
                         label = label or ShortKeyLabel(key)
                     end
                 end
@@ -951,23 +1213,203 @@ function Input:UpdateBindings()
             slot.Key:SetText(label or "")
         end
     end
-    header:SetAttribute("bindingcount", count)
-    self.dirty, self.bindingsPending = false, true
+    header:SetAttribute("bindingcount", kbdCount)
+    local kbdSig = table.concat(kbdParts, ";")
+    local padSig = table.concat(padParts, ";")
+    if kbdSig ~= self.lastKbdSig then
+        self.lastKbdSig = kbdSig
+        self.kbdPending = true
+    end
+    if padSig ~= self.lastPadSig then
+        self.lastPadSig = padSig
+        self.padPending = true
+    end
+    self.dirty = false
     self.labelRevision = Addon.Layout.revision
 end
 
--- True when the first key this layer should own is no longer bound to its hitbox.
--- Checked at most once a second; another addon owning the same key retries at that pace only.
-function Input:BindingsLost()
+-- Tells whether `key` still points to `expected` ("ok"), fell back to its non-override / core binding ("dropped"),
+-- or is currently held or blocked by another override binding such as a wheel, keyboard, Blizzard UI, or another
+-- addon ("overridden"). Also returns the live binding action string when available.
+local function BindingState(key, expected, isPad)
+    local okLive, live = pcall(GetBindingAction, key, true)
+    if not okLive then return "ok", nil end
+    if live == expected then return "ok", live end
+    if isPad and type(live) == "string" and live:sub(1, 19) == "GAMEPADACTIONBUTTON" then
+        return "dropped", live
+    end
+    local okBase, base = pcall(GetBindingAction, key, false)
+    if live == "" or live == nil then
+        -- An override binding set to "" (e.g. BlockKeys) actively blocks a key that has a base binding.
+        if (okBase and type(base) == "string" and base ~= "")
+            or (isPad and Addon.ButtonBindings and Addon.ButtonBindings:Holder(key) ~= nil) then
+            return "overridden", ""
+        end
+        return "dropped", live
+    end
+    if okBase and live == base then return "dropped", live end
+    return "overridden", live
+end
+
+local function IsOwnClick(action)
+    return type(action) == "string" and action:find("^CLICK ClassicConsoleGamepadUI") ~= nil
+end
+
+local FOREIGN_EXTRA_KEYS = { "PADLSHOULDER", "PADRSHOULDER", "ESCAPE" }
+
+-- True when any of the eight pad keys (or shoulders/Escape) is currently held or blocked by a non-addon override
+-- (e.g. Blizzard UI or QuestieForeverGamepad's quest tracker). Our own wheels/keyboard/delete overlays use
+-- priority=true over our non-priority pad bindings and do not require clearing padHeader.
+function Input:ForeignPadOverridden()
+    local padHeader, padCount = self.padHeader, self.padBindingCount or 0
+    if padHeader and padCount > 0 then
+        for i = 1, padCount do
+            local key, button = padHeader:GetAttribute("padkey" .. i), padHeader:GetAttribute("padbutton" .. i)
+            if key and button then
+                local state, live = BindingState(key, "CLICK " .. button .. ":Keybind", true)
+                if state == "overridden" and not IsOwnClick(live) then return true, key, live end
+            end
+        end
+    end
+    for _, key in ipairs(FOREIGN_EXTRA_KEYS) do
+        local okLive, live = pcall(GetBindingAction, key, true)
+        if okLive and type(live) == "string" and live:sub(1, 6) == "CLICK " and not IsOwnClick(live) then
+            return true, key, live
+        end
+    end
+    return false
+end
+
+-- Confirms that non-priority pad overrides actually took effect over GamepadModeInGameCore.
+-- If all pad bindings still read back as dropped (none ok, none held by another override), promote
+-- pad bindings to priority=true once so padKeyboard keeps working without a 1 Hz rebind loop.
+function Input:VerifyPadPriority()
+    if self.padPriority or not self.padApplied or InCombatLockdown() then return end
+    local padHeader, padCount = self.padHeader, self.padBindingCount or 0
+    if not padHeader or padCount == 0 then return end
+    local anyDropped = false
+    for i = 1, padCount do
+        local key, button = padHeader:GetAttribute("padkey" .. i), padHeader:GetAttribute("padbutton" .. i)
+        if key and button then
+            local state = BindingState(key, "CLICK " .. button .. ":Keybind", true)
+            if state == "ok" or state == "overridden" then return end
+            if state == "dropped" then anyDropped = true end
+        end
+    end
+    if not anyDropped then return end
+    self.padPriority = true
+    Addon:Trace("Input:padPriority fallback")
+    padHeader:SetAttribute("padpriority", true)
+    self:ExecBindings(padHeader, APPLY_PAD)
+end
+
+-- True when the client actually dropped the keyboard layer's override bindings.
+function Input:KbdBindingsLost()
     local now = GetTime()
-    if self.bindingCheck and now - self.bindingCheck < 1 then return false end
-    self.bindingCheck = now
+    if self.kbdBindingCheck and now - self.kbdBindingCheck < 1 then return false end
+    self.kbdBindingCheck = now
     local header = self.header
-    if (header:GetAttribute("bindingcount") or 0) == 0 then return false end
+    local total = header:GetAttribute("bindingcount") or 0
+    if total == 0 then return false end
     local key, button = header:GetAttribute("key1"), header:GetAttribute("button1")
-    if not key or not button then return false end
-    local ok, action = pcall(GetBindingAction, key, true)
-    return ok and action ~= "CLICK " .. button .. ":Keybind"
+    return key ~= nil and button ~= nil and BindingState(key, "CLICK " .. button .. ":Keybind", false) == "dropped"
+end
+
+local function OwnPadOverlayActive()
+    if Addon.Wheels and Addon.Wheels.open then return true end
+    if Addon.Keyboard and Addon.Keyboard.pad and Addon.Keyboard.pad:IsShown() then return true end
+    if Addon.ItemDelete and Addon.ItemDelete.header and Addon.ItemDelete.header:IsShown() then return true end
+    return false
+end
+
+-- True when the client actually dropped the pad layer's override bindings (they fell back to base/core bindings).
+-- Never reclaims while a wheel, keyboard, or delete overlay is open or another override owns pad buttons.
+function Input:PadBindingsLost()
+    local now = GetTime()
+    if self.padBindingCheck and now - self.padBindingCheck < 1 then return false end
+    self.padBindingCheck = now
+    if not self.padApplied or OwnPadOverlayActive() then return false end
+    local padHeader, padCount = self.padHeader, self.padBindingCount or 0
+    if not padHeader or padCount == 0 then return false end
+    local padDropped, padOverridden = false, false
+    for i = 1, padCount do
+        local key, button = padHeader:GetAttribute("padkey" .. i), padHeader:GetAttribute("padbutton" .. i)
+        if key and button then
+            local state = BindingState(key, "CLICK " .. button .. ":Keybind", true)
+            if state == "overridden" then padOverridden = true
+            elseif state == "dropped" then padDropped = true end
+        end
+    end
+    if padOverridden and (self.padPriority or not padDropped) then return false end
+    return padDropped
+end
+
+function Input:SyncPadBindings()
+    local padHeader = self.padHeader
+    if not padHeader or InCombatLockdown() then return end
+    local padWanted = Addon.db.padKeyboard == true and self.padButtons ~= nil
+    if padHeader:GetAttribute("padenabled") ~= padWanted then
+        padHeader:SetAttribute("padenabled", padWanted)
+    end
+    local padActive = padWanted and self:CurrentPage() == 1 and PadFree()
+        and not self:OverrideBarShown() and not self:InShortcutsGrace()
+        and not self:ForeignPadOverridden()
+    self.padBound = padActive
+    if not padActive then
+        if self.padApplied or self.padPending then
+            self:ExecBindings(padHeader, "self:ClearBindings()")
+            self.padApplied = false
+        end
+        self.padPending = nil
+        return
+    end
+    if OwnPadOverlayActive() then return end
+    if not self.padApplied or self.padPending then
+        self:ExecBindings(padHeader, APPLY_PAD)
+        self.padApplied = true
+        self.padPending = nil
+        self:VerifyPadPriority()
+    elseif self:PadBindingsLost() then
+        Addon:Trace("Input:PadBindingsLost")
+        self.rebound = (self.rebound or 0) + 1
+        self:ExecBindings(padHeader, APPLY_PAD)
+        self:VerifyPadPriority()
+    end
+end
+
+function Input:DiagnosePad()
+    local foreign, fKey, fLive = self:ForeignPadOverridden()
+    local padHeader = self.padHeader
+    Addon:Print(string.format(
+        "pad: padKeyboard=%s page=%s padEnabled=%s padBound=%s padApplied=%s padPriority=%s padFree=%s overrideBar=%s grace=%s foreign=%s%s",
+        tostring(Addon.db and Addon.db.padKeyboard == true), tostring(self:CurrentPage()),
+        tostring(padHeader and padHeader:GetAttribute("padenabled")), tostring(self.padBound),
+        tostring(self.padApplied), tostring(self.padPriority == true), tostring(PadFree()),
+        tostring(self:OverrideBarShown()), tostring(self:InShortcutsGrace()), tostring(foreign),
+        foreign and (" (" .. tostring(fKey) .. "=" .. tostring(fLive) .. ")") or ""))
+    if self.overrideModes then
+        local parts = {}
+        for _, key in ipairs({ "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }) do
+            local native = GamepadMainActionBarFrame
+            local bar = native and native.PageUnit and native.PageUnit[key]
+            local shown = bar and bar:IsShown() or false
+            parts[#parts + 1] = key .. "=" .. tostring(self.overrideModes[key] or "none") .. (shown and "(shown)" or "")
+        end
+        Addon:Print("pad overrides: " .. table.concat(parts, ", "))
+    end
+    local keys = {}
+    for native = 1, 8 do
+        keys[#keys + 1] = (Addon.ButtonBindings and Addon.ButtonBindings:Key(native)) or (Addon.ButtonBindings and Addon.ButtonBindings.DEFAULT[native])
+    end
+    for _, key in ipairs(FOREIGN_EXTRA_KEYS) do keys[#keys + 1] = key end
+    local bound = {}
+    for _, key in ipairs(keys) do
+        if key then
+            local ok, action = pcall(GetBindingAction, key, true)
+            bound[#bound + 1] = key .. "=" .. tostring(ok and action or "err")
+        end
+    end
+    Addon:Print("pad live: " .. table.concat(bound, " | "))
 end
 
 -- True when a slot appeared or disappeared since the labels were collected.
@@ -981,7 +1423,8 @@ end
 
 function Input:Refresh(wanted, native, unit, bars)
     if self.disabled then self:RestoreAfterError(); return false end
-    if InCombatLockdown() then return self:IsEnabled() end
+    if InCombatLockdown() then self.combatTouched = true; return self:IsEnabled() end
+    if self.combatTouched then self.combatTouched = nil; self.padPending = true end
     self:RestorePendingFlyoutButtons()
     if not self.header then
         if not wanted then return false end
@@ -994,8 +1437,14 @@ function Input:Refresh(wanted, native, unit, bars)
         self:HideKbdFlyout()
         if header:IsShown() then Addon:Trace("Input off") end
         self:SyncNativeMouse(true)
+        if self.padHeader then
+            self.padHeader:SetAttribute("padenabled", false)
+            if self.padApplied then self:ExecBindings(self.padHeader, "self:ClearBindings()") end
+            self.padApplied = false
+            self.padBound = false
+        end
         header:SetAttribute("enabled", false)
-        header:Hide()
+        self:SetHeaderShown(false)
         self.state = "off"
         return false
     end
@@ -1003,6 +1452,10 @@ function Input:Refresh(wanted, native, unit, bars)
     -- the click layer, e.g. right after switching between 8 and 12 slots.
     local padKeyboard = Addon.db.padKeyboard == true
     if header:GetAttribute("padkeyboard") ~= padKeyboard then header:SetAttribute("padkeyboard", padKeyboard) end
+    if not header:GetAttribute("padpage1id") then
+        local page1Id = Page1Slot1ID()
+        if page1Id then header:SetAttribute("padpage1id", page1Id) end
+    end
     local attackStart = Addon.db.attackStart == true
     if header:GetAttribute("attackstart") ~= attackStart then header:SetAttribute("attackstart", attackStart) end
     if self.padRevision ~= Addon.Layout.revision then
@@ -1014,7 +1467,6 @@ function Input:Refresh(wanted, native, unit, bars)
         end
         self.padRevision = Addon.Layout.revision
     end
-    if self:PadWanted() ~= (self.padBound == true) then self.dirty = true end
     local bindingsDirty = self.dirty
     if bindingsDirty or self.labelRevision ~= Addon.Layout.revision or self:SlotsChanged() then
         self:UpdateBindings()
@@ -1022,16 +1474,28 @@ function Input:Refresh(wanted, native, unit, bars)
     if self.bindingMode then
         -- Keep the slot hitboxes shown so they can be hovered, but drop the
         -- temporary key overrides so the pressed key reaches the binder.
+        if self.padHeader then
+            self.padHeader:SetAttribute("padenabled", false)
+            self:ExecBindings(self.padHeader, "self:ClearBindings()")
+            self.padApplied = false
+            self.padBound = false
+        end
         header:SetAttribute("enabled", false)
-        header:Execute(APPLY_BINDINGS)
+        self:ExecBindings(header, APPLY_BINDINGS)
         self.state = "binding"
         return false
     end
     local geometryChanged = self.layoutRevision ~= Addon.Layout.revision
     if bindingsDirty or geometryChanged then self:ObserveBlockers(bars, unit) end
     if self:IsBlocked() then
+        if self.padHeader then
+            self.padHeader:SetAttribute("padenabled", false)
+            if self.padApplied then self:ExecBindings(self.padHeader, "self:ClearBindings()") end
+            self.padApplied = false
+            self.padBound = false
+        end
         header:SetAttribute("enabled", false)
-        header:Hide()
+        self:SetHeaderShown(false)
         self.state = "blocked"
         return false
     end
@@ -1040,8 +1504,14 @@ function Input:Refresh(wanted, native, unit, bars)
         for i, button in pairs(self.buttons) do
             local slot = Addon.Display.slots[i]
             if not Addon.Layout:Place(button, slot) then
+                if self.padHeader then
+                    self.padHeader:SetAttribute("padenabled", false)
+                    if self.padApplied then self:ExecBindings(self.padHeader, "self:ClearBindings()") end
+                    self.padApplied = false
+                    self.padBound = false
+                end
                 header:SetAttribute("enabled", false)
-                header:Hide()
+                self:SetHeaderShown(false)
                 self.state = "blocked"
                 return false
             end
@@ -1062,16 +1532,21 @@ function Input:Refresh(wanted, native, unit, bars)
         end
     end
     if not header:GetAttribute("enabled") then header:SetAttribute("enabled", true) end
-    if not header:IsShown() then Addon:Trace("Input on"); header:Show()
-    elseif self.bindingsPending then header:Execute(APPLY_BINDINGS)
-    elseif self:BindingsLost() then
+    if not header:IsShown() then
+        Addon:Trace("Input on")
+        self.padApplied = false
+        self:SetHeaderShown(true)
+    elseif self.kbdPending then
+        self:ExecBindings(header, APPLY_BINDINGS)
+    elseif self:KbdBindingsLost() then
         -- The client dropped the override bindings while the layer stayed shown (e.g. after the Settings
         -- panel closed); applying them again restores the keyboard without a UI reload.
         Addon:Trace("Input:BindingsLost")
         self.rebound = (self.rebound or 0) + 1
-        header:Execute(APPLY_BINDINGS)
+        self:ExecBindings(header, APPLY_BINDINGS)
     end
-    self.bindingsPending = nil
+    self.kbdPending = nil
+    self:SyncPadBindings()
     self:SyncNativeMouse(false)
     if self.disabled then return false end
     self:RefreshTooltip()

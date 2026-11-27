@@ -208,7 +208,20 @@ function Options:InitializeDefaults()
     end
     for _, info in ipairs(controls) do
         local value = db[info.key]
-        if type(value) ~= type(info.default) or (info.min and (value ~= value or value < info.min or value > info.max)) then
+        local valid = type(value) == type(info.default)
+        if valid and info.min and (value ~= value or value < info.min or value > info.max) then
+            valid = false
+        end
+        if valid and info.choice then
+            local list = Options.choices[info.key]
+            if list then
+                valid = false
+                for _, entry in ipairs(list) do
+                    if entry[1] == value then valid = true; break end
+                end
+            end
+        end
+        if not valid then
             db[info.key] = info.default
         end
     end
@@ -235,11 +248,27 @@ function Options:ResetAll()
     Addon:Trace("Options:ResetAll")
     -- Every stock frame back to its own place, then laid out again from the defaults.
     Addon.Layout.releasePending, Addon.Layout.dirty = true, true
+    if Addon.Input then
+        Addon.Input.dirty = true
+        Addon.Input.padPending = true
+    end
     Addon.HUD:ResetFrames()
     Addon.HUD.legendTop, Addon.HUD.legendX = nil, nil
+    Addon.HUD:SetLegendGrowUp()
     Addon.Display:ApplyCaps()
     Addon.HUD:ApplyLegendStyle()
+    if Addon.Wheels then
+        if Addon.Wheels.previewing then Addon.Wheels:Preview(false)
+        elseif Addon.Wheels.hud then Addon.Wheels:SetOpen(nil) end
+        if Addon.Wheels.dock then Addon.Wheels.dock:Hide() end
+        Addon.Wheels:ApplyLayout()
+        if Addon.Wheels.hud then Addon.Wheels:SetNumbers(Addon.Wheels.hud.slots, true) end
+        Addon.Wheels.petDirty = true
+        Addon.Wheels:SyncPet()
+    end
+    if Addon.Dynamic and Addon.Dynamic.Reset then Addon.Dynamic:Reset() end
     local keyboard = Addon.Keyboard
+    keyboard:SetEnabled(db.keyboardEnabled)
     keyboard:SetLanguage(db.keyboardLanguage)
     keyboard:SetMode(db.keyboardMode)
     keyboard:ApplyTransparency()
@@ -247,6 +276,7 @@ function Options:ResetAll()
         keyboard.frame:ClearAllPoints()
         keyboard.frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 120)
     end
+    if Addon.KeyMap and Addon.KeyMap.frame and Addon.KeyMap.frame:IsShown() then Addon.KeyMap:Refresh() end
     Addon.WordSources:Changed()
     Addon.Quiet:Apply()
     Addon.MenuHints:Refresh()
@@ -324,14 +354,14 @@ function Options:EnsureBindCatcher()
     catcher:EnableMouse(false)
     catcher:SetScript("OnKeyDown", function(frame, key)
         local handled = self:HandleBindInput(key)
-        if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(not handled) end
+        if not InCombatLockdown() and frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(not handled) end
     end)
     catcher:SetScript("OnGamePadButtonDown", function(_, key)
         self:HandleBindInput(key)
     end)
     catcher:SetScript("OnEvent", function() self:StopBarBind() end)
     catcher:RegisterEvent("PLAYER_REGEN_DISABLED")
-    if catcher.EnableGamePadButton then pcall(catcher.EnableGamePadButton, catcher, true) end
+    if not InCombatLockdown() and catcher.EnableGamePadButton then pcall(catcher.EnableGamePadButton, catcher, true) end
     local notice = CreateFrame("Frame", nil, catcher)
     notice:SetSize(720, 64)
     notice:EnableMouse(false)
@@ -418,7 +448,7 @@ end
 
 function Options:WriteBinding(action, key, clear)
     local context = BindingContext(action)
-    if not context or not SetBinding then return false end
+    if not SetBinding then return false end
     local key1, key2 = CurrentKeys(action, context)
     if clear then
         if key1 then SetBinding(key1, nil, context) end
@@ -481,6 +511,9 @@ function Options:StartBarBind()
     if self.binding then return end
     Addon:Trace("Options:StartBarBind")
     self:WatchBindTargets()
+    if self.catcher and not InCombatLockdown() and self.catcher.EnableGamePadButton then
+        pcall(self.catcher.EnableGamePadButton, self.catcher, true)
+    end
     self.binding = {}
     Addon.Input:SetBindingMode(true)
     Addon:QueueRefresh(true)

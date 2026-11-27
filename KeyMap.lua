@@ -383,7 +383,7 @@ function KeyMap:Create()
     tinsert(UISpecialFrames, "ClassicConsoleGamepadUIKeyMap")
     frame:SetScript("OnKeyDown", function(f, key)
         local used = self:OnKey(key)
-        if f.SetPropagateKeyboardInput then f:SetPropagateKeyboardInput(not used) end
+        if not InCombatLockdown() and f.SetPropagateKeyboardInput then f:SetPropagateKeyboardInput(not used) end
     end)
     frame:SetScript("OnHide", function() self:StopListening() end)
     self.mods, self.cells, self.keys, self.slotOfAction, self.keyRows = {}, {}, {}, {}, {}
@@ -421,9 +421,11 @@ function KeyMap:Create()
             end)
             cell:SetScript("OnEnter", function()
                 if not cell.slotIndex then return end
+                local slot = Addon.Display.slots[cell.slotIndex]
+                if not (slot and slot.bindingAction) then return end
                 local _, _, words = self:SlotInfo(cell.slotIndex)
                 local keys = {}
-                for _, key in ipairs(KeysOf(Addon.Display.slots[cell.slotIndex].bindingAction)) do keys[#keys + 1] = KeyLabel(key) end
+                for _, key in ipairs(KeysOf(slot.bindingAction)) do keys[#keys + 1] = KeyLabel(key) end
                 self:Say(string.format(Text("keymapSlotInfo"), words, #keys > 0 and table.concat(keys, ", ") or Text("keymapNoKey")))
             end)
             self.cells[r][c] = cell
@@ -527,7 +529,20 @@ function KeyMap:Create()
     end)
     local events = CreateFrame("Frame")
     events:RegisterEvent("UPDATE_BINDINGS")
-    events:SetScript("OnEvent", function() if frame:IsShown() then self:Refresh() end end)
+    events:RegisterEvent("PLAYER_REGEN_DISABLED")
+    events:RegisterEvent("PLAYER_REGEN_ENABLED")
+    events:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            if self.listening then
+                self:StopListening()
+                if frame:IsShown() then self:Refresh() end
+            end
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            if frame:IsShown() then self:EnablePad() end
+        elseif frame:IsShown() then
+            self:Refresh()
+        end
+    end)
 end
 
 -- Redraw what the slots and the keys have now.
@@ -688,13 +703,15 @@ end
 -- Pad input is switched on out of combat only, like the settings window's.
 function KeyMap:EnablePad()
     local frame = self.frame
-    if not frame or InCombatLockdown() or not frame.EnableGamePadButton then return end
+    if not frame or not frame:IsShown() or InCombatLockdown() or not frame.EnableGamePadButton then return end
     frame:EnableGamePadButton(true)
+    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
     if self.padOn then return end
     self.padOn = true
-    frame:SetScript("OnGamePadButtonDown", function(_, key)
+    frame:SetScript("OnGamePadButtonDown", function(f, key)
         if InCombatLockdown() then return end
-        self:PadButton(key)
+        local used = self:PadButton(key)
+        if f.SetPropagateKeyboardInput then f:SetPropagateKeyboardInput(not used) end
     end)
 end
 
