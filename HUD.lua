@@ -314,6 +314,7 @@ end
 function HUD:ResetChat(changedMode)
     if self.chatOriginal and not changedMode then Apply(self.chatFrame, self.chatOriginal) end
     self.chatFrame, self.chatOriginal, self.chatBaseX, self.chatBaseY = nil, nil, nil, nil
+    self.chatCheckedAt = nil
 end
 
 function HUD:RefreshChat(wanted, changedMode)
@@ -348,6 +349,17 @@ function HUD:RefreshChat(wanted, changedMode)
     end
     local selected = GENERAL_CHAT_DOCK and FCFDock_GetSelectedWindow(GENERAL_CHAT_DOCK) or chat
     selected = selected or chat
+    local now = GetTime()
+    local rev = Addon.Layout.revision
+    if not changedMode and self.chatCheckedAt and (now - self.chatCheckedAt) < 1.0
+        and self.chatCheckRev == rev and self.chatCheckSel == selected
+        and self.chatCheckAnchor == Addon.db.anchorChat and self.chatCheckRaise == Addon.db.raiseChat
+        and self.chatCheckLeft == Addon.db.chatLeft and self.chatCheckBottom == Addon.db.chatBottom
+        and self.chatCheckGap == Addon.db.chatGap
+        and math.abs((self.chatCheckX or -9999) - frameLeft) <= 0.5
+        and math.abs((self.chatCheckY or -9999) - frameBottom) <= 0.5 then
+        return
+    end
     local function IncludeWidget(region, visibleOnly)
         -- Only real widgets. The controller footer is a mixin table: reading a
         -- missing method runs its metatable and throws "attempt to call a nil value".
@@ -395,7 +407,15 @@ function HUD:RefreshChat(wanted, changedMode)
         if barTop > 0 then targetY = math.max(targetY, barTop + Addon.db.chatGap + bottomInset) end
     end
     targetY = math.max(bottomInset, math.min(targetY, UIParent:GetHeight() - (top - frameBottom)))
-    if math.abs(frameLeft - targetX) <= 0.5 and math.abs(frameBottom - targetY) <= 0.5 then return end
+    if math.abs(frameLeft - targetX) <= 0.5 and math.abs(frameBottom - targetY) <= 0.5 then
+        self.chatCheckedAt = now
+        self.chatCheckRev, self.chatCheckSel = rev, selected
+        self.chatCheckAnchor, self.chatCheckRaise = Addon.db.anchorChat, Addon.db.raiseChat
+        self.chatCheckLeft, self.chatCheckBottom, self.chatCheckGap = Addon.db.chatLeft, Addon.db.chatBottom, Addon.db.chatGap
+        self.chatCheckX, self.chatCheckY = frameLeft, frameBottom
+        return
+    end
+    self.chatCheckedAt = nil
     Addon:Trace("HUD:RefreshChat move")
     Apply(chat, { points = { { "BOTTOMLEFT", UIParent, "BOTTOMLEFT", targetX / scale, targetY / scale } }, scale = chat:GetScale() })
 end

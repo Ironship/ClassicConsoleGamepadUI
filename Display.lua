@@ -29,20 +29,125 @@ local function Texture(parent, layer, path)
     return texture
 end
 
+local function HideTexture(target)
+    if not target then return end
+    local c = target._cgpTex
+    if c then
+        if c.shown == false then return end
+        c.shown = false
+    else
+        target._cgpTex = { shown = false }
+    end
+    target:Hide()
+end
+
+local function SetCachedAtlas(target, atlas)
+    local c = target._cgpTex
+    if not c then c = {}; target._cgpTex = c end
+    if atlas then
+        if c.atlas ~= atlas or c.tex ~= nil then
+            c.atlas, c.tex = atlas, nil
+            target:SetAtlas(atlas)
+        end
+        if c.shown ~= true then
+            c.shown = true
+            target:Show()
+        end
+    else
+        if c.shown ~= false then
+            c.shown = false
+            target:Hide()
+        end
+    end
+end
+
+local function SetCachedVertexColor(target, r, g, b)
+    local c = target._cgpTex
+    if c then
+        if c.vr == r and c.vg == g and c.vb == b and c.va == 1 then return end
+        c.vr, c.vg, c.vb, c.va = r, g, b, 1
+    end
+    target:SetVertexColor(r, g, b)
+end
+
 local function CopyTexture(target, source)
-    if not source then target:Hide(); return end
+    local c = target._cgpTex
+    if not c then c = {}; target._cgpTex = c end
+    if not source then
+        if c.shown ~= false then
+            c.shown = false
+            target:Hide()
+        end
+        return
+    end
     local atlas = source.GetAtlas and source:GetAtlas()
     if Readable(atlas) and atlas then
-        target:SetAtlas(atlas)
+        if c.atlas ~= atlas or c.tex ~= nil then
+            c.atlas, c.tex = atlas, nil
+            target:SetAtlas(atlas)
+        end
     else
-        target:SetTexture(source:GetTexture())
+        local tex = source:GetTexture()
+        if not Readable(tex) then
+            c.atlas, c.tex = nil, nil
+            target:SetTexture(tex)
+        elseif c.tex ~= tex or c.atlas ~= nil then
+            c.atlas, c.tex = nil, tex
+            target:SetTexture(tex)
+        end
     end
-    target:SetTexCoord(source:GetTexCoord())
-    if target.SetVertexColor and source.GetVertexColor then target:SetVertexColor(source:GetVertexColor()) end
-    target:SetAlpha(source:GetAlpha())
-    if target.SetBlendMode and source.GetBlendMode then target:SetBlendMode(source:GetBlendMode()) end
-    if target.SetDesaturation and source.GetDesaturation then target:SetDesaturation(source:GetDesaturation()) end
-    target:Show()
+    local ulx, uly, llx, lly, urx, ury, lrx, lry = source:GetTexCoord()
+    if not (Readable(ulx) and Readable(uly) and Readable(llx) and Readable(lly)
+        and Readable(urx) and Readable(ury) and Readable(lrx) and Readable(lry)) then
+        c.ulx = nil
+        target:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry)
+    elseif c.ulx ~= ulx or c.uly ~= uly or c.llx ~= llx or c.lly ~= lly
+        or c.urx ~= urx or c.ury ~= ury or c.lrx ~= lrx or c.lry ~= lry then
+        c.ulx, c.uly, c.llx, c.lly, c.urx, c.ury, c.lrx, c.lry = ulx, uly, llx, lly, urx, ury, lrx, lry
+        target:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry)
+    end
+    if target.SetVertexColor and source.GetVertexColor then
+        local r, g, b, a = source:GetVertexColor()
+        if not (Readable(r) and Readable(g) and Readable(b) and Readable(a)) then
+            c.vr = nil
+            target:SetVertexColor(r, g, b, a)
+        elseif c.vr ~= r or c.vg ~= g or c.vb ~= b or c.va ~= a then
+            c.vr, c.vg, c.vb, c.va = r, g, b, a
+            target:SetVertexColor(r, g, b, a)
+        end
+    end
+    local alpha = source:GetAlpha()
+    if not Readable(alpha) then
+        c.alpha = nil
+        target:SetAlpha(alpha)
+    elseif c.alpha ~= alpha then
+        c.alpha = alpha
+        target:SetAlpha(alpha)
+    end
+    if target.SetBlendMode and source.GetBlendMode then
+        local blend = source:GetBlendMode()
+        if not Readable(blend) then
+            c.blend = nil
+            target:SetBlendMode(blend)
+        elseif c.blend ~= blend then
+            c.blend = blend
+            target:SetBlendMode(blend)
+        end
+    end
+    if target.SetDesaturation and source.GetDesaturation then
+        local desat = source:GetDesaturation()
+        if not Readable(desat) then
+            c.desat = nil
+            target:SetDesaturation(desat)
+        elseif c.desat ~= desat then
+            c.desat = desat
+            target:SetDesaturation(desat)
+        end
+    end
+    if c.shown ~= true then
+        c.shown = true
+        target:Show()
+    end
 end
 
 -- The pictures a prompt can show instead of its normal one, the strongest first. A constant: CopyGlyph runs for every slot
@@ -50,7 +155,7 @@ end
 local GLYPH_STATES = { "PressedTexture", "ActiveTexture", "HoverTexture", "DisabledTexture" }
 
 local function CopyGlyph(target, prompt)
-    if not prompt then target:Hide(); return end
+    if not prompt then HideTexture(target); return end
     local source = prompt.NormalTexture
     for i = 1, #GLYPH_STATES do
         local candidate = prompt[GLYPH_STATES[i]]
@@ -59,21 +164,46 @@ local function CopyGlyph(target, prompt)
     CopyTexture(target, source)
 end
 
-local function BindingGlyphs(slot, command)
+local bindingGlyphCache = {}
+function Display:InvalidateBindingGlyphs()
+    wipe(bindingGlyphCache)
+end
+
+local function ResolveBindingGlyphs(command)
+    local cached = bindingGlyphCache[command]
+    if cached then return cached end
     local context = C_KeyBindings.GetBindingContextForAction(command)
-    local parts = {}
-    for _, key in ipairs({ GetBindingKey(command, 1, context) }) do
-        if IsBindingForGamePad(key) then
-            parts = InputIconTextureSetUtility.GetInputIconNameFromBindingKey(key)
-            break
+    local parts
+    local n = select("#", GetBindingKey(command, 1, context))
+    if n > 0 then
+        local keys = { GetBindingKey(command, 1, context) }
+        for i = 1, #keys do
+            local key = keys[i]
+            if IsBindingForGamePad(key) then
+                parts = InputIconTextureSetUtility.GetInputIconNameFromBindingKey(key)
+                break
+            end
         end
     end
-    for i, target in ipairs({ slot.Prompt, slot.Modifiers[1], slot.Modifiers[2] }) do
-        local key = i == 1 and parts[#parts] or (i <= #parts and parts[i - 1] or nil)
-        local textures = key and InputIconTextureSetUtility.GetActiveInputIconButtonTextures(key)
-        local atlas = textures and InputIconTextureSetUtility.GetNormalActiveInputIconButtonTexture(key)
-        if atlas then target:SetAtlas(atlas); target:Show() else target:Hide() end
+    cached = {}
+    if parts and #parts > 0 then
+        for i = 1, 3 do
+            local key = i == 1 and parts[#parts] or (i <= #parts and parts[i - 1] or nil)
+            local textures = key and InputIconTextureSetUtility.GetActiveInputIconButtonTextures(key)
+            cached[i] = (textures and InputIconTextureSetUtility.GetNormalActiveInputIconButtonTexture(key)) or false
+        end
+    else
+        cached[1], cached[2], cached[3] = false, false, false
     end
+    bindingGlyphCache[command] = cached
+    return cached
+end
+
+local function BindingGlyphs(slot, command)
+    local atlases = ResolveBindingGlyphs(command)
+    SetCachedAtlas(slot.Prompt, atlases[1] or nil)
+    SetCachedAtlas(slot.Modifiers[1], atlases[2] or nil)
+    SetCachedAtlas(slot.Modifiers[2], atlases[3] or nil)
 end
 
 -- The glyph of the key a bar slot really has, where the player moved the eight buttons (ButtonBindings.lua): the game draws
@@ -83,7 +213,7 @@ local function BindingPrompt(slot, index)
     if not key then return end
     local util = InputIconTextureSetUtility
     local atlas = util and util.GetNormalActiveInputIconButtonTexture and util.GetNormalActiveInputIconButtonTexture(key)
-    if atlas then slot.Prompt:SetAtlas(atlas); slot.Prompt:Show() end
+    if atlas then SetCachedAtlas(slot.Prompt, atlas) end
 end
 
 local function StockTexture(parent, source, owner, layer)
@@ -223,6 +353,8 @@ function Display:RefreshGeometry()
         end
         slot.Background:SetShown(template.SlotBackground and template.SlotBackground:IsShown() or false)
         slot.SlotArt:SetShown(template.SlotArt and template.SlotArt:IsShown() or false)
+        slot.Background._cgpTex, slot.SlotArt._cgpTex = nil, nil
+        slot._cgpShoulderInit = nil
         Addon.Layout:Place(slot.Icon, template.icon, template, template)
         Addon.Layout:Place(slot.Cooldown, template.cooldown, template, template)
         slot.iconAnchored = nil
@@ -231,7 +363,7 @@ function Display:RefreshGeometry()
             Addon.Layout:Place(slot.Mask, template.IconMask, template, template)
         end
         if template.Count then slot.Count:SetFont(template.Count:GetFont()) end
-        slot.Glow:SetVertexColor(1, 0.8, 0.25)
+        SetCachedVertexColor(slot.Glow, 1, 0.8, 0.25)
     end
     for i = 1, 2 do
         local shoulder = self.slots[36 + i]
@@ -902,6 +1034,8 @@ function Display:SyncEditor()
         end
     end
     if moved > 0 then
+        if Addon.Input then Addon.Input.flyoutsDirty = true end
+        Display:InvalidateFlyoutCache()
         Addon:Print(Addon.L.editorSynced:format(moved))
         Addon:QueueRefresh(true)
     end
@@ -911,14 +1045,19 @@ function Display:IsBarEditing()
     return GamepadActionBarEditFrame ~= nil and GamepadActionBarEditFrame:IsShown()
 end
 
+local PAGE_EXTRA_BAR_KEYS = { "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }
+local CLASS_ACTION_KEYS = { "LeftClassAction", "RightClassAction" }
+local pageUnitBars = {}
+
 local function PageUnitBars(unit)
     if not unit or not unit.actionBars then return end
-    local bars = {}
-    for _, bar in pairs(unit.actionBars) do bars[#bars + 1] = bar end
-    for _, key in ipairs({ "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }) do
-        if unit[key] then bars[#bars + 1] = unit[key] end
+    wipe(pageUnitBars)
+    for _, bar in pairs(unit.actionBars) do pageUnitBars[#pageUnitBars + 1] = bar end
+    for i = 1, #PAGE_EXTRA_BAR_KEYS do
+        local bar = unit[PAGE_EXTRA_BAR_KEYS[i]]
+        if bar then pageUnitBars[#pageUnitBars + 1] = bar end
     end
-    return bars
+    return pageUnitBars
 end
 
 -- Returns the host frame, the page unit to read, its bars, and whether that is
@@ -946,13 +1085,17 @@ local FLYOUT_ALPHA = 0.35
 -- True while a selection radial (a flyout) is open: the warrior's stances, the druid's forms, the paladin's auras
 -- and the pet commands hang off a class action, any other radial off a bar button.
 function Display:IsFlyoutOpen(bars, unit)
-    for _, bar in ipairs(bars) do
-        for _, source in ipairs(bar.actionButtons or {}) do
-            if source.IsPopupOpen and source:IsPopupOpen() then return true end
+    for i = 1, #bars do
+        local buttons = bars[i].actionButtons
+        if buttons then
+            for j = 1, #buttons do
+                local source = buttons[j]
+                if source.IsPopupOpen and source:IsPopupOpen() then return true end
+            end
         end
     end
-    for _, key in ipairs({ "LeftClassAction", "RightClassAction" }) do
-        local source = unit[key]
+    for i = 1, #CLASS_ACTION_KEYS do
+        local source = unit[CLASS_ACTION_KEYS[i]]
         if source and source.IsPopupOpen and source:IsPopupOpen() then return true end
     end
     return false
@@ -1128,6 +1271,7 @@ local function SetPortrait(slot, unit)
         slot.Icon:AddMaskTexture(slot.PortraitMask)
         slot.portrait = true
     end
+    slot.Icon._cgpTex = nil
     slot.Icon:SetTexCoord(0, 1, 0, 1)
     SetPortraitTexture(slot.Icon, unit)
 end
@@ -1140,7 +1284,7 @@ end
 
 local function PresentEmptySlot(slot)
     ClearPortrait(slot)
-    slot.Icon:Hide()
+    HideTexture(slot.Icon)
     slot.SlotArt:Hide()
     slot.Background:Show()
 end
@@ -1159,8 +1303,9 @@ function Display:ShowKeyboardSlot(slot)
     local action = ActionOf(slot, source)
     if source and type(action) == "number" and action > 0 and C_ActionBar.HasAction(action) then
         self:UpdateSlot(slot, source, nil, false)
-        slot.Prompt:Hide()
-        for _, glyph in ipairs(slot.Modifiers) do glyph:Hide() end
+        HideTexture(slot.Prompt)
+        HideTexture(slot.Modifiers[1])
+        HideTexture(slot.Modifiers[2])
     else
         self:ShowPlaceholder(slot)
     end
@@ -1173,18 +1318,23 @@ local BLIZZARD_TEXT_KEYS = { "HotKey", "Count", "Name", "RangeIndicator" }
 
 local function IsForeignText(region, source)
     -- RangeIndicator is the gamepad button's own unnamed dot (tinted red when out of range), not another addon's text.
-    for _, key in ipairs(BLIZZARD_TEXT_KEYS) do
-        if region == source[key] then return false end
+    for i = 1, #BLIZZARD_TEXT_KEYS do
+        if region == source[BLIZZARD_TEXT_KEYS[i]] then return false end
     end
     if type(region.GetObjectType) ~= "function" or region:GetObjectType() ~= "FontString" then return false end
     return region:GetName() == nil
 end
 
 local function CopyForeignText(mirror, region, slot)
+    local c = mirror._cgpText
+    if not c then c = {}; mirror._cgpText = c end
     local text = region:GetText()
     local shown = region:IsShown()
     if not Readable(text) or not Readable(shown) or type(text) ~= "string" or text == "" or not shown then
-        mirror:Hide()
+        if c.shown ~= false then
+            c.shown = false
+            mirror:Hide()
+        end
         return
     end
     -- Preserve the native text's relative size while letting it follow the classic slot's scale.
@@ -1195,20 +1345,56 @@ local function CopyForeignText(mirror, region, slot)
     end
     if ratio <= 0 then ratio = 1 end
     local font, size, flags = region:GetFont()
-    if font and Readable(font) and Readable(size) then mirror:SetFont(font, size * ratio, flags) end
-    mirror:SetTextColor(region:GetTextColor())
-    mirror:SetJustifyH(region:GetJustifyH())
-    mirror:SetJustifyV(region:GetJustifyV())
-    mirror:SetAlpha(region:GetAlpha())
-    local point, _, relativePoint, x, y = region:GetPoint(1)
-    mirror:ClearAllPoints()
-    if point then
-        mirror:SetPoint(point, slot, relativePoint or point, (x or 0) * ratio, (y or 0) * ratio)
-    else
-        mirror:SetPoint("CENTER", slot, "CENTER")
+    if font and Readable(font) and Readable(size) then
+        local scaled = size * ratio
+        if c.font ~= font or c.size ~= scaled or c.flags ~= flags then
+            c.font, c.size, c.flags = font, scaled, flags
+            mirror:SetFont(font, scaled, flags)
+        end
     end
-    mirror:SetText(text)
-    mirror:Show()
+    local r, g, b, a = region:GetTextColor()
+    if not (Readable(r) and Readable(g) and Readable(b) and Readable(a)) then
+        c.r = nil
+        mirror:SetTextColor(r, g, b, a)
+    elseif c.r ~= r or c.g ~= g or c.b ~= b or c.a ~= a then
+        c.r, c.g, c.b, c.a = r, g, b, a
+        mirror:SetTextColor(r, g, b, a)
+    end
+    local jh = region:GetJustifyH()
+    if not Readable(jh) or c.jh ~= jh then
+        c.jh = Readable(jh) and jh or nil
+        mirror:SetJustifyH(jh)
+    end
+    local jv = region:GetJustifyV()
+    if not Readable(jv) or c.jv ~= jv then
+        c.jv = Readable(jv) and jv or nil
+        mirror:SetJustifyV(jv)
+    end
+    local alpha = region:GetAlpha()
+    if not Readable(alpha) or c.alpha ~= alpha then
+        c.alpha = Readable(alpha) and alpha or nil
+        mirror:SetAlpha(alpha)
+    end
+    local point, _, relativePoint, x, y = region:GetPoint(1)
+    local pt, relPt, px, py
+    if point then
+        pt, relPt, px, py = point, relativePoint or point, (x or 0) * ratio, (y or 0) * ratio
+    else
+        pt, relPt, px, py = "CENTER", "CENTER", 0, 0
+    end
+    if c.pt ~= pt or c.relPt ~= relPt or c.px ~= px or c.py ~= py or c.slot ~= slot then
+        c.pt, c.relPt, c.px, c.py, c.slot = pt, relPt, px, py, slot
+        mirror:ClearAllPoints()
+        mirror:SetPoint(pt, slot, relPt, px, py)
+    end
+    if c.text ~= text then
+        c.text = text
+        mirror:SetText(text)
+    end
+    if c.shown ~= true then
+        c.shown = true
+        mirror:Show()
+    end
 end
 
 -- The regions of the button being looked at, in one table that is reused. Asking for them used to make a closure and a
@@ -1243,41 +1429,84 @@ function Display:MirrorForeignText(slot, source)
             end
         end
     end
-    for i = used + 1, #mirrors do mirrors[i]:Hide() end
+    for i = used + 1, #mirrors do
+        local m = mirrors[i]
+        local c = m._cgpText
+        if not c or c.shown ~= false then
+            if c then c.shown = false end
+            m:Hide()
+        end
+    end
+end
+
+local flyoutActionCache = {}
+function Display:InvalidateFlyoutCache()
+    wipe(flyoutActionCache)
+end
+
+local function ActionIsFlyout(action)
+    if not action or not Readable(action) or type(action) ~= "number" or action <= 0 or not GetActionInfo then
+        return false
+    end
+    local cached = flyoutActionCache[action]
+    if cached ~= nil then return cached end
+    local ok, kind = pcall(GetActionInfo, action)
+    local result = ok and kind == "flyout" and true or false
+    flyoutActionCache[action] = result
+    return result
+end
+
+local function SetSlotShown(region, shown)
+    if region:IsShown() == shown then return end
+    region:SetShown(shown)
 end
 
 function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
-    slot:Show()
+    if not slot:IsShown() then slot:Show() end
     if slot.Key then
-        slot.Key:SetShown(Addon.db.showKeyboardHints)
-        if slot.Key.SetTextColor then slot.Key:SetTextColor(1, 1, 1) end
+        local showKey = Addon.db.showKeyboardHints and true or false
+        if slot._cgpKeyShown ~= showKey then
+            slot._cgpKeyShown = showKey
+            slot.Key:SetShown(showKey)
+        end
+        if slot.Key.SetTextColor and slot._cgpKeyColor ~= 1 then
+            slot._cgpKeyColor = 1
+            slot.Key:SetTextColor(1, 1, 1)
+        end
     end
     if not source then
-        slot:SetAlpha(1)
+        if slot._cgpAlpha ~= 1 then slot._cgpAlpha = 1; slot:SetAlpha(1) end
         slot.source, slot.action = nil, nil
-        slot.Icon:Hide()
+        HideTexture(slot.Icon)
         slot.SlotArt:Hide()
         slot.Background:Hide()
-        slot.Count:SetText("")
-        slot.Prompt:Hide()
-        slot.Checked:Hide()
-        slot.Pushed:Hide()
-        slot.Glow:Hide()
-        if slot.FlyoutArrow then slot.FlyoutArrow:Hide() end
-        slot.Cooldown:Clear()
-        if slot.Overlay then slot.Overlay:Hide() end
-        for _, glyph in ipairs(slot.Modifiers) do glyph:Hide() end
-        pcall(self.MirrorForeignText, self, slot, nil)
+        if slot._cgpCountText ~= "" then slot._cgpCountText = ""; slot.Count:SetText("") end
+        HideTexture(slot.Prompt)
+        SetSlotShown(slot.Checked, false)
+        SetSlotShown(slot.Pushed, false)
+        SetSlotShown(slot.Glow, false)
+        if slot.FlyoutArrow then SetSlotShown(slot.FlyoutArrow, false) end
+        if slot._cgpHasCooldown ~= false then slot._cgpHasCooldown = false; slot.Cooldown:Clear() end
+        if slot.Overlay then HideTexture(slot.Overlay) end
+        HideTexture(slot.Modifiers[1])
+        HideTexture(slot.Modifiers[2])
+        if slot.Foreign and #slot.Foreign > 0 then pcall(self.MirrorForeignText, self, slot, nil) end
         return
     end
-    slot:SetAlpha(source:GetAlpha())
+    local srcAlpha = source:GetAlpha()
+    if not Readable(srcAlpha) or slot._cgpAlpha ~= srcAlpha then
+        slot._cgpAlpha = Readable(srcAlpha) and srcAlpha or nil
+        slot:SetAlpha(srcAlpha)
+    end
     local action = ActionOf(slot, source)
     if slot.source ~= source or (Readable(action) and slot.action ~= action) then
         slot.source, slot.action = source, Readable(action) and action or nil
+        slot._cgpHasCooldown = true
         self:HookSource(source, bar)
         self:MirrorCooldown(slot, source, bar)
     end
     self.slotBySource[source] = slot
+    local actionFlyout = ActionIsFlyout(action)
     local icon = source.icon or source.Icon
     if source.SpecialActionIcon and RegionShown(source.SpecialActionIcon) then icon = source.SpecialActionIcon end
     if RegionShown(icon) then
@@ -1286,18 +1515,15 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
             and (slot.keyboardSlot or (bar and not bar.isGamepadPossessBar and source.GetGamepadPageUnitSlotID))
             and Readable(action) and type(action) == "number" and action > 0
             and C_ActionBar and C_ActionBar.IsUsableAction then
-            local isFlyout = false
-            if slot.keyboardSlot and GetActionInfo then
-                local okKind, kind = pcall(GetActionInfo, action)
-                isFlyout = okKind and kind == "flyout"
-            end
+            local isFlyout = slot.keyboardSlot and actionFlyout or false
             if not isFlyout then
                 local outOfRange = false
                 if slot.keyboardSlot and C_ActionBar.IsActionInRange then
                     local inRange = C_ActionBar.IsActionInRange(action)
                     if Readable(inRange) and inRange == false then outOfRange = true end
                 end
-                if outOfRange and slot.Key and slot.Key.SetTextColor then
+                if outOfRange and slot.Key and slot.Key.SetTextColor and slot._cgpKeyColor ~= 2 then
+                    slot._cgpKeyColor = 2
                     slot.Key:SetTextColor(1, 0.2, 0.2)
                 end
                 local usable, lacking = C_ActionBar.IsUsableAction(action)
@@ -1305,16 +1531,16 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
                     if usable == true then
                         local keyShown = slot.Key and Addon.db.showKeyboardHints and slot.Key.GetText and (slot.Key:GetText() or "") ~= ""
                         if outOfRange and not keyShown then
-                            slot.Icon:SetVertexColor(1, 0.35, 0.35)
+                            SetCachedVertexColor(slot.Icon, 1, 0.35, 0.35)
                         elseif slot.keyboardSlot or not source.icon.GetVertexColor then
                             -- Hidden keyboard buttons stop receiving Blizzard's UpdateUsable events,
                             -- so clear any stale OOM/unusable vertex color copied from source.icon.
-                            slot.Icon:SetVertexColor(1, 1, 1)
+                            SetCachedVertexColor(slot.Icon, 1, 1, 1)
                         end
                     elseif lacking == true then
-                        slot.Icon:SetVertexColor(0.5, 0.5, 1)
+                        SetCachedVertexColor(slot.Icon, 0.5, 0.5, 1)
                     elseif slot.keyboardSlot then
-                        slot.Icon:SetVertexColor(0.4, 0.4, 0.4)
+                        SetCachedVertexColor(slot.Icon, 0.4, 0.4, 0.4)
                     end
                 end
             end
@@ -1331,34 +1557,48 @@ function Display:UpdateSlot(slot, source, bar, active, buttonIndex)
     end
     CopyGlyph(slot.Prompt, source.ButtonIcon)
     BindingPrompt(slot, buttonIndex)
-    if source.Count then slot.Count:SetText(source.Count:GetText()) else slot.Count:SetText("") end
     if source.Count then
+        local countText = source.Count:GetText()
+        if not Readable(countText) then
+            slot._cgpCountText = nil
+            slot.Count:SetText(countText)
+        elseif slot._cgpCountText ~= countText then
+            slot._cgpCountText = countText
+            slot.Count:SetText(countText)
+        end
         local countShown = source.Count:IsShown()
-        slot.Count:SetShown(not Readable(countShown) or countShown == true)
+        local showCount = (not Readable(countShown) or countShown == true) and true or false
+        if slot._cgpCountShown ~= showCount then
+            slot._cgpCountShown = showCount
+            slot.Count:SetShown(showCount)
+        end
+    elseif slot._cgpCountText ~= "" then
+        slot._cgpCountText = ""
+        slot.Count:SetText("")
     end
     local checked = source.CheckedTexture or (source.GetCheckedTexture and source:GetCheckedTexture())
     local shown = checked and checked:IsShown()
-    slot.Checked:SetShown(Readable(shown) and shown == true)
-    slot.Pushed:SetShown((slot.inputButton and slot.inputButton:GetAttribute("cgppressed") == true) or self.pressed[source] == true
+    SetSlotShown(slot.Checked, Readable(shown) and shown == true)
+    SetSlotShown(slot.Pushed, (slot.inputButton and slot.inputButton:GetAttribute("cgppressed") == true) or self.pressed[source] == true
         or (source.GetButtonState and source:GetButtonState() == "PUSHED") or false)
-    slot.Glow:SetShown((active and Addon.db.highlightActive) or slot.bindingHighlight == true)
+    SetSlotShown(slot.Glow, ((active and Addon.db.highlightActive) or slot.bindingHighlight == true) and true or false)
     if slot.FlyoutArrow then
-        local isFlyout = (source.Arrow and RegionShown(source.Arrow)) or false
-        if not isFlyout and action and Readable(action) then
-            local ok, kind = pcall(GetActionInfo, action)
-            isFlyout = ok and kind == "flyout"
-        end
-        slot.FlyoutArrow:SetShown(isFlyout)
+        local isFlyout = (source.Arrow and RegionShown(source.Arrow)) or actionFlyout
+        SetSlotShown(slot.FlyoutArrow, isFlyout)
         if isFlyout and SetClampedTextureRotation then
             local open = (source.IsPopupOpen and source:IsPopupOpen()) or false
-            SetClampedTextureRotation(slot.FlyoutArrow, open and 180 or 0)
+            local rot = open and 180 or 0
+            if slot._cgpFlyoutRot ~= rot then
+                slot._cgpFlyoutRot = rot
+                SetClampedTextureRotation(slot.FlyoutArrow, rot)
+            end
         end
     end
     -- Contextual bars can add a second icon (e.g. a mark over a target portrait).
     if source.IconOverlay and source.IconOverlay:IsShown() then
         if not slot.Overlay then slot.Overlay = Texture(slot.Labels, "ARTWORK"); slot.Overlay:SetAllPoints(slot.Icon) end
         CopyTexture(slot.Overlay, source.IconOverlay)
-    elseif slot.Overlay then slot.Overlay:Hide() end
+    elseif slot.Overlay then HideTexture(slot.Overlay) end
     -- An extra, cosmetic copy: a failure here must not switch the classic bars off.
     pcall(self.MirrorForeignText, self, slot, source)
 end
@@ -1374,19 +1614,25 @@ function Display:PlacePrompt(slot)
     slot.Prompt:SetPoint("TOPRIGHT", 4 * promptScale, 4 * promptScale - drop)
 end
 
-local updateSelected, updateStandard = {}, {}
+local updateSelected, updateStandard, updateAnchors, suppressKeep, singleNative = {}, {}, {}, {}, {}
 local SHOULDER_KEYS = { "LeftShoulderIcon", "RightShoulderIcon" }
 local OVERRIDE_BAR_KEYS = { "FriendlyTargetingActionBar", "HostileTargetingActionBar", "ShortcutsActionBar" }
+local COMPACT_SPARE_FIRSTS = { 21, 33 }
 
 function Display:Update(unit)
     if self.slotBySource then wipe(self.slotBySource) else self.slotBySource = {} end
-    for i, key in ipairs(SHOULDER_KEYS) do
+    for i = 1, 2 do
         local slot = self.slots[36 + i]
-        self:UpdateSlot(slot, nil)
-        CopyTexture(slot.Icon, unit[key])
+        if not slot._cgpShoulderInit then
+            self:UpdateSlot(slot, nil)
+            slot._cgpShoulderInit = true
+        elseif not slot:IsShown() then
+            slot:Show()
+        end
+        CopyTexture(slot.Icon, unit[SHOULDER_KEYS[i]])
         BindingGlyphs(slot, i == 1 and "GAMEPADLEFTTARGETMODIFIER" or "GAMEPADRIGHTTARGETMODIFIER")
         local highlight = i == 1 and unit.LeftShoulderHighlight or unit.RightShoulderHighlight
-        slot.Glow:SetShown(Addon.db.highlightActive and highlight and highlight:IsShown() or false)
+        SetSlotShown(slot.Glow, (Addon.db.highlightActive and highlight and highlight:IsShown()) and true or false)
     end
     local base = unit.actionBars
     local page = unit:GetCurrentPage()
@@ -1394,14 +1640,19 @@ function Display:Update(unit)
     if page <= Constants.GamepadActionBarConstants.NUM_STANDARD_PAGES_PER_GAMEPAD_ACTION_BAR_PAGE_UNIT then
         selected[1], selected[2], selected[3], selected[4] = base.topBar, base.leftBar, base.rightBar, base.bottomBar
     end
-    local anchors = { unit.TopCenteredAnchor, unit.LeftCenteredAnchor, unit.RightCenteredAnchor, unit.BottomCenteredAnchor }
-    for _, bar in ipairs({ base.possessBar, base.stanceBar }) do
+    updateAnchors[1] = unit.TopCenteredAnchor
+    updateAnchors[2] = unit.LeftCenteredAnchor
+    updateAnchors[3] = unit.RightCenteredAnchor
+    updateAnchors[4] = unit.BottomCenteredAnchor
+    for b = 1, 2 do
+        local bar = b == 1 and base.possessBar or base.stanceBar
         if bar and bar:IsShown() then
-            for i, anchor in ipairs(anchors) do if bar:GetParent() == anchor then selected[i] = bar end end
+            local parent = bar:GetParent()
+            for i = 1, 4 do if parent == updateAnchors[i] then selected[i] = bar end end
         end
     end
-    for _, key in ipairs(OVERRIDE_BAR_KEYS) do
-        local bar = unit[key]
+    for i = 1, #OVERRIDE_BAR_KEYS do
+        local bar = unit[OVERRIDE_BAR_KEYS[i]]
         if bar and bar:IsShown() then selected[1] = bar end
     end
     local activeBar = unit:GetActiveBar()
@@ -1437,7 +1688,7 @@ function Display:Update(unit)
                     self:UpdateSlot(slot, keyboard, nil, active, firstButton + j)
                 else
                     self:ShowPlaceholder(slot)
-                    slot.Glow:SetShown(active and Addon.db.highlightActive or false)
+                    SetSlotShown(slot.Glow, (active and Addon.db.highlightActive) and true or false)
                 end
                 CopyGlyph(slot.Prompt, bar.actionButtons[firstButton + j].ButtonIcon)
                 BindingPrompt(slot, firstButton + j)
@@ -1451,7 +1702,7 @@ function Display:Update(unit)
                 local flag = bar == unit.FriendlyTargetingActionBar and GamepadTargetingState.FRIENDLY or GamepadTargetingState.HOSTILE
                 local shoulder = GamepadMode.GetLeftTargetModifierFlag() == flag and 37 or 38
                 CopyTexture(slot.Modifiers[1], self.slots[shoulder].Prompt)
-                slot.Modifiers[2]:Hide()
+                HideTexture(slot.Modifiers[2])
             else
                 CopyGlyph(slot.Modifiers[1], (index == 2 or index == 4) and unit.LeftIcon or (index == 3 and unit.RightIcon or nil))
                 CopyGlyph(slot.Modifiers[2], index == 4 and unit.RightIcon or nil)
@@ -1468,7 +1719,8 @@ function Display:Update(unit)
     PaintRow(2, 13)
     PaintRow(3, 25)
     if compact then
-        for _, first in ipairs({ 21, 33 }) do
+        for k = 1, #COMPACT_SPARE_FIRSTS do
+            local first = COMPACT_SPARE_FIRSTS[k]
             for i = first, first + 3 do
                 self:UpdateSlot(self.slots[i], nil)
                 self.slots[i]:Hide()
@@ -1484,8 +1736,8 @@ function Display:Update(unit)
         slot.keyboardSlot = not compact
         if compact then slot:Hide() else self:ShowKeyboardSlot(slot) end
     end
-    for i, key in ipairs({ "LeftClassAction", "RightClassAction" }) do
-        local source = unit[key]
+    for i = 1, #CLASS_ACTION_KEYS do
+        local source = unit[CLASS_ACTION_KEYS[i]]
         local slot = self.slots[8 + i]
         local usable = source and source:IsShown() and source or nil
         self:UpdateSlot(slot, usable, nil, false)
@@ -1499,7 +1751,7 @@ function Display:Update(unit)
             local icons = prompt and prompt.InputIcons
             CopyGlyph(slot.Modifiers[1], icons and icons[1])
             CopyGlyph(slot.Prompt, icons and icons[2])
-            slot.Modifiers[2]:Hide()
+            HideTexture(slot.Modifiers[2])
         end
     end
     for i = 1, 36 do
@@ -1512,8 +1764,9 @@ end
 function Display:SuppressNative(frames)
     if not self.suppressed then Addon:Trace("Display:SuppressNative") end
     self.suppressed = self.suppressed or {}
-    local keep = {}
-    for _, frame in ipairs(frames) do
+    local keep = wipe(suppressKeep)
+    for i = 1, #frames do
+        local frame = frames[i]
         keep[frame] = true
         if self.suppressed[frame] == nil then self.suppressed[frame] = frame:GetAlpha() end
         local alpha = frame:GetAlpha()
@@ -1662,7 +1915,8 @@ function Display:Refresh(wanted)
         end
         self:SuppressNative(faded)
     else
-        self:SuppressNative({ native })
+        singleNative[1] = native
+        self:SuppressNative(singleNative)
     end
     self:SetLayer(editing)
     self.root:Show()

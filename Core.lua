@@ -7,6 +7,7 @@ local driver = CreateFrame("Frame")
 local ready, queued, lastMode, lastSaved, capturedBlock, lastObservedBlock
 local elapsedSinceRefresh = 0
 local lastRefreshAt = 0
+local lastTaintCheckAt = -100
 local firstTaintCaptured
 local function Poll(_, elapsed)
     elapsedSinceRefresh = elapsedSinceRefresh + elapsed
@@ -264,8 +265,14 @@ end
 
 function Addon:Refresh()
     if not ready then return end
-    lastRefreshAt = GetTime()
-    self:CheckNativeTaint("before Refresh")
+    local now = GetTime()
+    lastRefreshAt = now
+    elapsedSinceRefresh = 0
+    local checkTaint = not firstTaintCaptured and (self.db.debug or (now - lastTaintCheckAt) >= 2.0)
+    if checkTaint then
+        lastTaintCheckAt = now
+        self:CheckNativeTaint("before Refresh")
+    end
     local gamepad = self:IsGamepadMode()
     local changed = lastMode ~= nil and lastMode ~= gamepad
     lastMode = gamepad
@@ -279,9 +286,9 @@ function Addon:Refresh()
     end
     self.HUD:Refresh(wanted, changed, self.Display:IsEditing())
     local revision = self.Layout.revision
-    self:CheckNativeTaint("HUD:Refresh")
+    if checkTaint then self:CheckNativeTaint("HUD:Refresh") end
     local ok, visible = pcall(self.Display.Refresh, self.Display, wanted)
-    self:CheckNativeTaint("Display:Refresh")
+    if checkTaint then self:CheckNativeTaint("Display:Refresh") end
     if not ok then
         self.classicVisible = false
         self:Note("Display:Refresh", visible)
@@ -299,12 +306,12 @@ function Addon:Refresh()
         -- The legend steers clear of chat, so it is placed again once chat has settled.
         if self.HUD.legendWanted and not InCombatLockdown() then self.HUD:RefreshLegend(true) end
     end
-    self:CheckNativeTaint("HUD:RefreshChat")
+    if checkTaint then self:CheckNativeTaint("HUD:RefreshChat") end
     -- The Edit Mode selection box over the classic bars (EditMode.lua); a failure there must not touch the bars.
     local moverOk, moverError = pcall(self.Mover.Refresh, self.Mover)
     if not moverOk then self:Note("Mover:Refresh", moverError) end
     self.ItemDelete:Refresh()
-    self:CheckNativeTaint("ItemDelete:Refresh")
+    if checkTaint then self:CheckNativeTaint("ItemDelete:Refresh") end
     -- The wheels on R3 (Wheels.lua); a failure there must not touch the bars.
     local wheelsOk, wheelsError = pcall(self.Wheels.Refresh, self.Wheels, gamepad)
     if not wheelsOk then self:Note("Wheels:Refresh", wheelsError) end
@@ -417,6 +424,7 @@ local function Initialize()
         -- Settings visibility is already observed by the gamepad refresh timer.
         if InputDeviceIconSetManager and InputDeviceIconSetManager.UpdateActiveInputDeviceIconSet then
             hooksecurefunc(InputDeviceIconSetManager, "UpdateActiveInputDeviceIconSet", function()
+                if Addon.Display and Addon.Display.InvalidateBindingGlyphs then Addon.Display:InvalidateBindingGlyphs() end
                 Addon:QueueRefresh()
                 Addon.MenuHints:Refresh()
             end)
@@ -446,9 +454,10 @@ driver:SetScript("OnEvent", function(_, event, addon, action)
     if event == "UPDATE_BINDINGS" then
         Addon.Input.dirty = true
         if Addon.ButtonBindings then Addon.ButtonBindings:Invalidate() end
+        if Addon.Display and Addon.Display.InvalidateBindingGlyphs then Addon.Display:InvalidateBindingGlyphs() end
     end
     if event == "DISPLAY_SIZE_CHANGED" or event == "EDIT_MODE_LAYOUTS_UPDATED"
-        or event == "NEUTRAL_FACTION_SELECT_RESULT" or event == "PLAYER_REGEN_ENABLED" then
+        or event == "NEUTRAL_FACTION_SELECT_RESULT" then
         Addon.Layout.dirty = true
     end
     if event == "PLAYER_LOGIN" then Initialize() else Addon:QueueRefresh(true) end

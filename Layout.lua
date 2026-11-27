@@ -139,6 +139,15 @@ function Layout:UnhookFrom(frame)
     end
 end
 
+local function StatusBarSignature()
+    local m, s = MainStatusTrackingBarContainer, SecondaryStatusTrackingBarContainer
+    local ms = m and m:IsShown() and 1 or 0
+    local mh = ms == 1 and math.floor((m:GetHeight() or 0) + 0.5) or 0
+    local ss = s and s:IsShown() and 1 or 0
+    local sh = ss == 1 and math.floor((s:GetHeight() or 0) + 0.5) or 0
+    return ms, mh, ss, sh
+end
+
 local function ResizeStatus(frame, width, segments)
     frame:SetWidth(width)
     if frame.ResizeContainerBars then frame:ResizeContainerBars() end
@@ -317,6 +326,7 @@ function Layout:Prepare()
         end
     end
     self.compact, self.cutWidth = compact, cutWidth
+    self.statusMS, self.statusMH, self.statusSS, self.statusSH = StatusBarSignature()
     self.active, self.dirty = true, false
     self.revision = (self.revision or 0) + 1
     return true
@@ -339,7 +349,7 @@ function Layout:Restore(changedMode)
             Addon.Display:AnchorFramerate(false)
             self:BlockKeyRing(false)
         end
-        self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
+        self.originals, self.visibility, self.active, self.dirty, self.statusMS = {}, nil, false, true, nil
         Addon.Display.defaultStatusMoved = nil
         return
     end
@@ -361,7 +371,7 @@ function Layout:Restore(changedMode)
     end
     Addon.Display:AnchorFramerate(false)
     self:BlockKeyRing(false)
-    self.originals, self.visibility, self.active, self.dirty = {}, nil, false, true
+    self.originals, self.visibility, self.active, self.dirty, self.statusMS = {}, nil, false, true, nil
     Addon.Display.stockScales = nil
     Addon.Display.defaultStatusMoved = nil
 end
@@ -431,8 +441,17 @@ function Layout:Observe()
         end
     end
     if StatusTrackingBarManager then
-        hooksecurefunc(StatusTrackingBarManager, "UpdateBarsShown", Invalidate)
-        hooksecurefunc(StatusTrackingBarManager, "CheckForLayoutChange", Invalidate)
+        local function OnStatusBarsChanged()
+            if self.active and not self.dirty and self.statusMS ~= nil then
+                local ms, mh, ss, sh = StatusBarSignature()
+                if ms == self.statusMS and mh == self.statusMH and ss == self.statusSS and sh == self.statusSH then
+                    return
+                end
+            end
+            Invalidate()
+        end
+        hooksecurefunc(StatusTrackingBarManager, "UpdateBarsShown", OnStatusBarsChanged)
+        hooksecurefunc(StatusTrackingBarManager, "CheckForLayoutChange", OnStatusBarsChanged)
     end
 end
 

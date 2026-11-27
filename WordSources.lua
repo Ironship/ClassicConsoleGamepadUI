@@ -17,7 +17,7 @@ local DIGIT = Languages.DIGIT
 local LN2 = math.log(2)
 local byte = string.byte
 
-local BUDGET_MS = 3     -- reading time per frame
+local BUDGET_MS = 1     -- reading time per frame
 local TOP = 60          -- words kept per first key and first letter, for the short sequences
 local MIN_COUNT = 2     -- a word seen once in the quest texts is a name or a typo
 
@@ -224,7 +224,7 @@ local function ScanQuests(lexicon, tick, language, source)
                             counts[word] = (counts[word] or 0) + (byte(token) >= 97 and PACK + 1 or 1)
                         end
                         tokens = tokens + 1
-                        if tokens % 128 == 0 then tick() end
+                        if tokens % 48 == 0 then tick() end
                     end
                 end
             end
@@ -240,7 +240,7 @@ local function ScanQuests(lexicon, tick, language, source)
             lexicon:Add(word, (word:gsub("[a-z]", ASCII_DIGIT)), weight)
         end
         n = n + 1
-        if n % 100 == 0 then tick() end
+        if n % 48 == 0 then tick() end
     end
 end
 
@@ -263,7 +263,7 @@ local function ScanDictionary(lexicon, tick, language, source)
                 end
             end
             n = n + 1
-            if n % 128 == 0 then tick() end
+            if n % 48 == 0 then tick() end
         end
     end
 end

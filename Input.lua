@@ -1,6 +1,18 @@
 local _, Addon = ...
-local Input = { dirty = true, activeBarFrameLevel = 5, state = "idle" }
+local Input = { dirty = true, flyoutsDirty = true, activeBarFrameLevel = 5, state = "idle" }
 Addon.Input = Input
+
+local flyoutWatcher = CreateFrame("Frame")
+for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "SPELLS_CHANGED",
+    "SPELL_FLYOUT_UPDATE", "UPDATE_BONUS_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" }) do
+    pcall(flyoutWatcher.RegisterEvent, flyoutWatcher, event)
+end
+flyoutWatcher:SetScript("OnEvent", function()
+    Input.flyoutsDirty = true
+    if Addon.Display and Addon.Display.InvalidateFlyoutCache then
+        Addon.Display:InvalidateFlyoutCache()
+    end
+end)
 
 local SETUP = [[
     bars, anchors, sources, delegates, owners = newtable(), newtable(), newtable(), newtable(), newtable()
@@ -474,6 +486,7 @@ function Input:SetKeyboardPages()
         end
     end
     self.pagesSet = complete
+    self.flyoutsDirty = true
     self:SyncKeyboardFlyouts()
     return complete
 end
@@ -498,6 +511,7 @@ function Input:SyncKeyboardFlyouts()
             header:SetAttribute("kbdflyspell" .. i, single)
         end
     end
+    self.flyoutsDirty = false
 end
 
 function Input:HideKbdFlyout()
@@ -975,7 +989,7 @@ function Input:Refresh(wanted, native, unit, bars)
     end
     local header = self.header
     if not self.pagesSet then self:SetKeyboardPages()
-    else self:SyncKeyboardFlyouts() end
+    elseif self.flyoutsDirty then self:SyncKeyboardFlyouts() end
     if not wanted then
         self:HideKbdFlyout()
         if header:IsShown() then Addon:Trace("Input off") end

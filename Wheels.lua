@@ -182,9 +182,14 @@ watcher:SetScript("OnEvent", function(_, event, unit)
     if event == "PET_BAR_UPDATE" or event == "UNIT_PET" or event == "PET_UI_UPDATE" or event == "SPELLS_CHANGED" or event == "PLAYER_REGEN_ENABLED" then
         Wheels.petDirty = true
     end
-    if not InCombatLockdown() then
-        if Wheels.flyoutsDirty then Wheels:SyncFlyouts() end
-        if Wheels.petDirty then Wheels:SyncPet() end
+    if not InCombatLockdown() and not Wheels.syncQueued then
+        Wheels.syncQueued = true
+        C_Timer.After(0.1, function()
+            Wheels.syncQueued = nil
+            if InCombatLockdown() then return end
+            if Wheels.flyoutsDirty then Wheels:SyncFlyouts() end
+            if Wheels.petDirty then Wheels:SyncPet() end
+        end)
     end
 end)
 
@@ -2390,8 +2395,11 @@ function Wheels:UpdateDock(gamepad)
     -- asked for it, whenever a window to drag from is open.
     local around
     if (gamepad or self.previewing) and Addon.db.wheels == true and Addon.db.wheelsDock ~= false and not Addon.nativeView then
-        local sources, windows = DragWindows()
-        if Carrying() or self.previewing or (Addon.db.wheelsDockAlways == true and #sources > 0) then around = windows end
+        local carrying = Carrying()
+        if carrying or self.previewing or Addon.db.wheelsDockAlways == true then
+            local sources, windows = DragWindows()
+            if carrying or self.previewing or #sources > 0 then around = windows end
+        end
     end
     if not around then
         if self.dock and self.dock:IsShown() then self.dock:Hide() end

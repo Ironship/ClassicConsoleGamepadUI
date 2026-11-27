@@ -95,6 +95,7 @@ local function Install()
     Hook(Addon.Input, "Refresh", "    Input:Refresh")
     Hook(Addon.Mover, "Refresh", "  Mover:Refresh")
     Hook(Addon.ItemDelete, "Refresh", "  ItemDelete:Refresh")
+    Hook(Addon.Wheels, "Refresh", "  Wheels:Refresh")
     Hook(Addon.MenuHints, "Refresh", "  MenuHints:Refresh")
     -- The handler that runs on every frame (the game's own events cause the refreshes, Poll only counts time).
     local HUD = Addon.HUD
