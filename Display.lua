@@ -2,8 +2,9 @@ local _, Addon = ...
 local Display = {}
 Addon.Display = Display
 
+local issecret = issecretvalue
 local function Readable(value)
-    return not issecretvalue or not issecretvalue(value)
+    return not issecret or not issecret(value)
 end
 
 local function AllReadable(...)
@@ -75,36 +76,53 @@ local function CopyTexture(target, source)
     if not c then c = {}; target._cgpTex = c end
     if not source then
         if c.shown ~= false then
-            c.shown = false
+            c.shown, c.src = false, nil
             target:Hide()
         end
         return
     end
+    local sameSource = (c.src == source)
+    local texChanged = false
     local atlas = source.GetAtlas and source:GetAtlas()
     if Readable(atlas) and atlas then
         if c.atlas ~= atlas or c.tex ~= nil then
             c.atlas, c.tex = atlas, nil
             target:SetAtlas(atlas)
+            texChanged = true
         end
     else
         local tex = source:GetTexture()
         if not Readable(tex) then
             c.atlas, c.tex = nil, nil
             target:SetTexture(tex)
+            texChanged = true
         elseif c.tex ~= tex or c.atlas ~= nil then
             c.atlas, c.tex = nil, tex
             target:SetTexture(tex)
+            texChanged = true
         end
     end
-    local ulx, uly, llx, lly, urx, ury, lrx, lry = source:GetTexCoord()
-    if not (Readable(ulx) and Readable(uly) and Readable(llx) and Readable(lly)
-        and Readable(urx) and Readable(ury) and Readable(lrx) and Readable(lry)) then
-        c.ulx = nil
-        target:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry)
-    elseif c.ulx ~= ulx or c.uly ~= uly or c.llx ~= llx or c.lly ~= lly
-        or c.urx ~= urx or c.ury ~= ury or c.lrx ~= lrx or c.lry ~= lry then
-        c.ulx, c.uly, c.llx, c.lly, c.urx, c.ury, c.lrx, c.lry = ulx, uly, llx, lly, urx, ury, lrx, lry
-        target:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry)
+    if not sameSource or texChanged or c.ulx == nil then
+        local ulx, uly, llx, lly, urx, ury, lrx, lry = source:GetTexCoord()
+        if not (Readable(ulx) and Readable(uly) and Readable(llx) and Readable(lly)
+            and Readable(urx) and Readable(ury) and Readable(lrx) and Readable(lry)) then
+            c.ulx = nil
+            target:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry)
+        elseif c.ulx ~= ulx or c.uly ~= uly or c.llx ~= llx or c.lly ~= lly
+            or c.urx ~= urx or c.ury ~= ury or c.lrx ~= lrx or c.lry ~= lry then
+            c.ulx, c.uly, c.llx, c.lly, c.urx, c.ury, c.lrx, c.lry = ulx, uly, llx, lly, urx, ury, lrx, lry
+            target:SetTexCoord(ulx, uly, llx, lly, urx, ury, lrx, lry)
+        end
+        if target.SetBlendMode and source.GetBlendMode then
+            local blend = source:GetBlendMode()
+            if not Readable(blend) then
+                c.blend = nil
+                target:SetBlendMode(blend)
+            elseif c.blend ~= blend then
+                c.blend = blend
+                target:SetBlendMode(blend)
+            end
+        end
     end
     if target.SetVertexColor and source.GetVertexColor then
         local r, g, b, a = source:GetVertexColor()
@@ -124,16 +142,6 @@ local function CopyTexture(target, source)
         c.alpha = alpha
         target:SetAlpha(alpha)
     end
-    if target.SetBlendMode and source.GetBlendMode then
-        local blend = source:GetBlendMode()
-        if not Readable(blend) then
-            c.blend = nil
-            target:SetBlendMode(blend)
-        elseif c.blend ~= blend then
-            c.blend = blend
-            target:SetBlendMode(blend)
-        end
-    end
     if target.SetDesaturation and source.GetDesaturation then
         local desat = source:GetDesaturation()
         if not Readable(desat) then
@@ -144,6 +152,7 @@ local function CopyTexture(target, source)
             target:SetDesaturation(desat)
         end
     end
+    c.src = source
     if c.shown ~= true then
         c.shown = true
         target:Show()
@@ -160,6 +169,15 @@ local function CopyGlyph(target, prompt)
     for i = 1, #GLYPH_STATES do
         local candidate = prompt[GLYPH_STATES[i]]
         if candidate and candidate:IsShown() then source = candidate; break end
+    end
+    if not source then HideTexture(target); return end
+    local c = target._cgpTex
+    if c and c.src == source and c.shown == true and c.atlas ~= nil then
+        local atlas = source.GetAtlas and source:GetAtlas()
+        local alpha = source:GetAlpha()
+        if Readable(atlas) and atlas == c.atlas and Readable(alpha) and alpha == c.alpha then
+            return
+        end
     end
     CopyTexture(target, source)
 end
@@ -1238,8 +1256,8 @@ end
 -- Leaving it up makes every button, filled or not, look like it holds a second icon.
 local function PresentActionIcon(slot, icon)
     CopyTexture(slot.Icon, icon)
-    slot.SlotArt:Hide()
-    slot.Background:Hide()
+    if slot.SlotArt:IsShown() then slot.SlotArt:Hide() end
+    if slot.Background:IsShown() then slot.Background:Hide() end
     if not slot.iconAnchored then
         if slot.Mask then slot.Icon:RemoveMaskTexture(slot.Mask) end
         slot.Icon:ClearAllPoints()
@@ -1285,14 +1303,14 @@ end
 local function PresentEmptySlot(slot)
     ClearPortrait(slot)
     HideTexture(slot.Icon)
-    slot.SlotArt:Hide()
-    slot.Background:Show()
+    if slot.SlotArt:IsShown() then slot.SlotArt:Hide() end
+    if not slot.Background:IsShown() then slot.Background:Show() end
 end
 
 -- A stock empty slot plate, so the 12-slot main row has no gaps.
 function Display:ShowPlaceholder(slot)
     self:UpdateSlot(slot, nil)
-    slot.Background:Show()
+    if not slot.Background:IsShown() then slot.Background:Show() end
 end
 
 -- Extended layout: a main-row position without a native gamepad action (the second
@@ -1325,7 +1343,7 @@ local function IsForeignText(region, source)
     return region:GetName() == nil
 end
 
-local function CopyForeignText(mirror, region, slot)
+local function CopyForeignText(mirror, region, slot, now)
     local c = mirror._cgpText
     if not c then c = {}; mirror._cgpText = c end
     local text = region:GetText()
@@ -1334,6 +1352,19 @@ local function CopyForeignText(mirror, region, slot)
         if c.shown ~= false then
             c.shown = false
             mirror:Hide()
+        end
+        return
+    end
+    local rev = Display.layoutRevision
+    if c.shown == true and c.text == text and c.region == region and c.slot == slot
+        and c.rev == rev and c.styleAt and (now - c.styleAt) < 1.0 then
+        local r, g, b, a = region:GetTextColor()
+        if not (Readable(r) and Readable(g) and Readable(b) and Readable(a)) then
+            c.r = nil
+            mirror:SetTextColor(r, g, b, a)
+        elseif c.r ~= r or c.g ~= g or c.b ~= b or c.a ~= a then
+            c.r, c.g, c.b, c.a = r, g, b, a
+            mirror:SetTextColor(r, g, b, a)
         end
         return
     end
@@ -1391,6 +1422,7 @@ local function CopyForeignText(mirror, region, slot)
         c.text = text
         mirror:SetText(text)
     end
+    c.region, c.rev, c.styleAt = region, rev, now
     if c.shown ~= true then
         c.shown = true
         mirror:Show()
@@ -1400,6 +1432,7 @@ end
 -- The regions of the button being looked at, in one table that is reused. Asking for them used to make a closure and a
 -- table for every slot on every refresh.
 local regionList, regionCount = {}, 0
+local foreignRegionsCache = setmetatable({}, { __mode = "k" })
 
 local function RegionsOf(source) return source:GetRegions() end
 
@@ -1416,17 +1449,35 @@ function Display:MirrorForeignText(slot, source)
     if not mirrors then mirrors = {}; slot.Foreign = mirrors end
     local used = 0
     if source then
-        for i = 1, PackRegions(pcall(RegionsOf, source)) do
-            local region = regionList[i]
-            if region and IsForeignText(region, source) then
-                used = used + 1
-                local mirror = mirrors[used]
-                if not mirror then
-                    mirror = slot.Labels:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-                    mirrors[used] = mirror
+        local now = GetTime()
+        local entry = foreignRegionsCache[source]
+        if not entry or (now - entry.at) >= 2.0 then
+            local list = entry and entry.list or {}
+            local n = 0
+            for i = 1, PackRegions(pcall(RegionsOf, source)) do
+                local region = regionList[i]
+                if region and IsForeignText(region, source) then
+                    n = n + 1
+                    list[n] = region
                 end
-                CopyForeignText(mirror, region, slot)
             end
+            for i = n + 1, #list do list[i] = nil end
+            if not entry then
+                entry = { list = list, at = now }
+                foreignRegionsCache[source] = entry
+            else
+                entry.at = now
+            end
+        end
+        local list = entry.list
+        for i = 1, #list do
+            used = used + 1
+            local mirror = mirrors[used]
+            if not mirror then
+                mirror = slot.Labels:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+                mirrors[used] = mirror
+            end
+            CopyForeignText(mirror, list[i], slot, now)
         end
     end
     for i = used + 1, #mirrors do

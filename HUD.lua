@@ -539,46 +539,75 @@ local function LegendStyleDefault()
     return Addon.db.legendFrame ~= false and (Addon.db.legendShade or 1) >= 1
 end
 
--- Whether a shown child of the legend has not been scanned yet. The children come in as one list: asking the legend for them
--- again for every child (select(i, legend:GetChildren())) made this walk quadratic, and it runs on every frame.
-local function UnscannedChild(scanned, ...)
+-- Whether a shown child of the legend has not been scanned yet, and a bitmask of which children are currently shown.
+-- The children come in as one list: asking the legend for them again for every child made this walk quadratic, and it
+-- runs on every frame while the legend is styled. Only children with a nonzero width count as unscanned (matching
+-- ScanLegendArt), so a 0-width anchor child never triggers a full tree walk every frame.
+local function LegendChildState(scanned, ...)
+    local mask, unscanned, bit = 0, false, 1
     for i = 1, select("#", ...) do
         local child = select(i, ...)
-        if child:IsShown() and not scanned[child] then return true end
+        if child:IsShown() then
+            mask = mask + bit
+            if not scanned[child] and (child:GetWidth() or 0) > 0 then unscanned = true end
+        end
+        bit = bit + bit
     end
-    return false
+    return mask, unscanned
+end
+
+function HUD:SyncLegendWatcher()
+    local watcher = self.legendWatcher
+    if not watcher then return end
+    local need = self.legendStyled or (self.legendWanted and not self.legendDragging and GrowsUp(self:SavedLegendSpot()))
+    if need then
+        if not watcher:IsShown() then watcher:Show() end
+    elseif watcher:IsShown() then
+        watcher:Hide()
+    end
 end
 
 -- Puts the frame and shade options on the legend's art. A set of hints showing for the first time is scanned first.
-function HUD:ApplyLegendStyle()
+function HUD:ApplyLegendStyle(fromWatch)
     local styled = self.legendStyleWanted and not LegendStyleDefault()
     if not styled then
         if self.legendStyled then
             for region, info in pairs(self.legendArt or {}) do region:SetAlpha(info.alpha) end
             self.legendArt, self.legendScanned = nil, nil
+            self.legendChildMask, self.legendAppliedFrame, self.legendAppliedShade = nil, nil, nil
             Addon:Trace("HUD:ApplyLegendStyle restore")
         end
         self.legendStyled = false
+        self:SyncLegendWatcher()
         return
     end
     local legend = GamepadPersistentInputLegend
     if not legend then return end
+    local frameAlpha = Addon.db.legendFrame ~= false and 1 or 0
+    local shade = math.max(0, math.min(1, Addon.db.legendShade or 1))
     local fresh = not self.legendArt
+    local mask
     if not fresh then
         -- Every frame while styled: no table made here.
-        fresh = UnscannedChild(self.legendScanned, legend:GetChildren())
+        mask, fresh = LegendChildState(self.legendScanned, legend:GetChildren())
+        if fromWatch and not fresh and mask == self.legendChildMask
+            and self.legendAppliedFrame == frameAlpha and self.legendAppliedShade == shade then
+            return
+        end
     end
     if fresh then
         local ok, err = pcall(self.ScanLegendArt, self)
         if not ok then Addon:Note("HUD:ScanLegendArt", err) end
+        mask = LegendChildState(self.legendScanned, legend:GetChildren())
     end
-    local frameAlpha = Addon.db.legendFrame ~= false and 1 or 0
-    local shade = math.max(0, math.min(1, Addon.db.legendShade or 1))
     for region, info in pairs(self.legendArt or {}) do
         local target = info.alpha * (info.kind == "border" and frameAlpha or shade)
         if math.abs(region:GetAlpha() - target) > 0.001 then region:SetAlpha(target) end
     end
+    self.legendChildMask = mask
+    self.legendAppliedFrame, self.legendAppliedShade = frameAlpha, shade
     self.legendStyled = true
+    self:SyncLegendWatcher()
 end
 
 -- /cgp legend: every texture of the legend, with the kind given to it (border, shade or -), for when the options miss.
@@ -595,12 +624,13 @@ end
 -- brings it, before the screen is drawn), in combat too. Cheap: a handful of child rectangles per frame, and only then.
 function HUD:WatchLegend()
     local watcher = CreateFrame("Frame")
+    watcher:Hide()
     local function Watch()
         if self.legendWanted and not self.legendDragging and GrowsUp(self:SavedLegendSpot()) then
             self:RefreshLegend(true)
         end
         -- A new set of hints shows with the game's art: it gets the frame and shade options before it is drawn.
-        if self.legendStyled then self:ApplyLegendStyle() end
+        if self.legendStyled then self:ApplyLegendStyle(true) end
     end
     -- Kept for /cgp perf (Perf.lua), which swaps the handler for a timed one.
     self.legendWatcher, self.legendWatchHandler = watcher, Watch

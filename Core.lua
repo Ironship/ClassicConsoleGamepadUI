@@ -11,7 +11,7 @@ local lastTaintCheckAt = -100
 local firstTaintCaptured
 local function Poll(_, elapsed)
     elapsedSinceRefresh = elapsedSinceRefresh + elapsed
-    if elapsedSinceRefresh >= 0.10 then elapsedSinceRefresh = 0; Addon:Refresh() end
+    if elapsedSinceRefresh >= 0.25 then elapsedSinceRefresh = 0; Addon:Refresh() end
 end
 
 function Addon:IsGamepadMode()
@@ -327,7 +327,7 @@ end
 -- asks for a redraw of every slot. Those requests are served at most 20 times a second; the redraw they wait for shows the
 -- state of the newest report anyway. A forced request (layout, mode, settings, combat end) is never held back, and the
 -- pressed look of a slot is drawn at once by the click layer, not by this redraw.
-local REFRESH_GAP = 0.05
+local REFRESH_GAP = 0.08
 
 function Addon:QueueRefresh(force)
     if not ready or queued or (not force and not self:IsGamepadMode()) then return end
