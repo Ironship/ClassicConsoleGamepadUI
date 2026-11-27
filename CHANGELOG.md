@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.90
+
+- **Major CPU and stutter reduction across HUD, layout, and action-bar mirroring.** Fixes a per-frame `WalkLegend` tree walk in `HUD.lua` when `legendFrame = false` or `legendShade < 1` and tracks shown legend groups via a bitmask; stops forcing full layout rebuilds on every `PLAYER_REGEN_ENABLED` and filters `StatusTrackingBarManager` layout hooks by status-bar visibility/height; diffs `CopyTexture`, `CopyGlyph`, `CopyForeignText`, and `UpdateSlot` state with cached foreign `FontString` regions (`2s` TTL), cached `BindingGlyphs`, and cached `ActionIsFlyout`; gates `Input:SyncKeyboardFlyouts()` behind action/spell events; caches `HUD:RefreshChat` geometry checks (`1.0s` TTL); skips idle `Wheels:UpdateDock` window scans and coalesces wheel sync bursts; throttles non-debug `CheckNativeTaint` checks (`2.0s`); tunes fallback polling (`0.25s`) and burst coalescing (`0.08s`); lowers `WordSources` frame budget to `1 ms`; and adds `Wheels:Refresh` and `Display:MirrorForeignText` to `/cgp perf`.
+
 ## 0.1.0-alpha.89
 
 - **Spell flyouts no longer throw a Lua error when `C_Spell.IsActiveSpell` returns a secret boolean.** `Addon.FlyoutSpells` now checks `Readable(...)` before testing `isAct` or other flyout API return values, preventing repeated errors in `Wheels:SyncFlyouts()` and keeping flyout lookup working cleanly.

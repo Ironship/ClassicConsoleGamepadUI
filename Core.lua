@@ -1,6 +1,6 @@
 local name, Addon = ...
 -- Identify the loaded Lua independently of the client's TOC metadata.
-Addon.version = "0.1.0-alpha.89"
+Addon.version = "0.1.0-alpha.90"
 Addon.tocVersion = C_AddOns.GetAddOnMetadata(name, "Version")
 
 local driver = CreateFrame("Frame")
